@@ -19,11 +19,13 @@
 #ifndef LIBMOLECUBE_CONTROLLER_H
 #define LIBMOLECUBE_CONTROLLER_H
 
+#include "ctrl_iface.h"
+
 #include <nacs-utils/mem.h>
 
-namespace Molecube {
+#include <vector>
 
-using namespace NaCs;
+namespace Molecube {
 
 class Controller {
     volatile void *const m_addr;
@@ -102,6 +104,21 @@ class Controller {
     }
 public:
     Controller();
+    void runByteCode(uint64_t seq_len_ns, uint32_t ttl_mask, bool run_epilog,
+                     const uint8_t *code, size_t code_len,
+                     const std::function<void()> &seq_done);
+    std::pair<uint32_t,uint32_t> overwriteTTL(uint32_t hi, uint32_t lo, uint32_t norm);
+    uint32_t setTTL(uint32_t hi, uint32_t lo);
+
+    void overwriteDDS(DDS::Info *infos, size_t ninfo);
+    void setDDS(DDS::Info *infos, size_t ninfo);
+
+    std::vector<DDS::Info> getOverwriteDDS();
+    std::vector<DDS::Info> getDDS(uint8_t *nums, size_t nnum);
+    std::vector<DDS::Info> getDDS()
+    {
+        return getDDS(nullptr, 0);
+    }
 };
 
 }

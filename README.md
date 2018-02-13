@@ -61,6 +61,8 @@ zmq protocol.
 
 ### DDS
 
+TODO: reset?
+
 * `overwrite_dds`
 
     `[[[id: 1byte][val: 4bytes]] x n]`
@@ -82,6 +84,7 @@ zmq protocol.
 * `get_dds`
 
     See `get_overwrite_dds` except that values for all enabled DDS's are returned.
+    An optional list of 1 byte channel numbers can be included for filtering.
 
 ### DAC
 
