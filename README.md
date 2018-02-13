@@ -40,6 +40,15 @@ zmq protocol.
 
     Cancel one (or all) sequences.
 
+* `state_id`
+
+    No argument, return a incrementing 64bit ID.
+    The first bit of the id indicates if there's a sequence running,
+    i.e. values are constantly changing and the rest 63 bits is the number of changes.
+    requested after startup.
+
+    The caller can use this to avoid polling for update too frequently.
+
 ### TTL
 
 * `overwrite_ttl`
