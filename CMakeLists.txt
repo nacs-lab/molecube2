@@ -9,7 +9,12 @@ include(CMakeCMacros)
 include(GNUInstallDirs)
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(MCDEP REQUIRED nacs-utils>=2.1 libzmq>=4.0)
+option(DUMMY_BACKEND_ONLY "Only enable the dummy backend. Useful for compiling on x86." Off)
+set(MCDEP_PKGS nacs-utils>=2.1 libzmq>=4.0)
+if(NOT DUMMY_BACKEND_ONLY)
+  set(MCDEP_PKGS ${MCDEP_PKGS} nacs-kernel)
+endif()
+pkg_check_modules(MCDEP REQUIRED ${MCDEP_PKGS})
 
 # Remove rdynamic
 set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS)
