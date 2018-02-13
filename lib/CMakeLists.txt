@@ -3,6 +3,12 @@
 set(libmolecube_SRCS
   server.cpp)
 
+if(NOT DUMMY_BACKEND_ONLY)
+  set(libmolecube_SRCS
+    ${libmolecube_SRCS}
+    controller.cpp)
+endif()
+
 add_library(libmolecube SHARED ${libmolecube_SRCS})
 
 target_link_libraries(libmolecube ${MCDEP_LIBRARIES})
