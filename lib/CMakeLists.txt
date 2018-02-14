@@ -1,6 +1,7 @@
 #
 
 set(libmolecube_SRCS
+  dummy_controller.cpp
   server.cpp)
 
 if(NOT DUMMY_BACKEND_ONLY)

@@ -16,93 +16,20 @@
  *   see <http://www.gnu.org/licenses/>.                                 *
  *************************************************************************/
 
-#ifndef LIBMOLECUBE_CONTROLLER_H
-#define LIBMOLECUBE_CONTROLLER_H
+#ifndef LIBMOLECUBE_DUMMY_CONTROLLER_H
+#define LIBMOLECUBE_DUMMY_CONTROLLER_H
 
 #include "ctrl_iface.h"
-
-#include <nacs-utils/mem.h>
 
 #include <vector>
 
 namespace Molecube {
 
-class Controller {
-    Controller(const Controller&) = delete;
-    void operator=(const Controller&) = delete;
-    inline uint32_t read(uint32_t reg) const
-    {
-        return Mem::read<uint32_t>(m_addr, reg);
-    }
-    inline void write(uint32_t reg, uint32_t val) const
-    {
-        Mem::write<uint32_t>(m_addr, val, reg);
-    }
-
-    // Read
-    inline uint32_t getTTLHighMask() const
-    {
-        return read(0);
-    }
-    inline uint32_t getTTLLowMask() const
-    {
-        return read(1);
-    }
-    inline bool timingOK() const
-    {
-        return !(read(2) & 0x1);
-    }
-    inline bool isFinished() const
-    {
-        return read(2) & 0x4;
-    }
-    inline uint32_t numResults() const
-    {
-        return (read(2) >> 4) & 31;
-    }
-    inline uint32_t getCurTTL() const
-    {
-        return read(4);
-    }
-    inline uint32_t popResult() const
-    {
-        return read(31);
-    }
-
-    // Write
-    // TTL functions: pulse_io = (ttl_out | high_mask) & (~low_mask);
-    inline void setTTLHighMask(uint32_t high_mask) const
-    {
-        write(0, high_mask);
-    }
-    inline void setTTLLowMask(uint32_t low_mask) const
-    {
-        write(1, low_mask);
-    }
-    // release hold.  pulses can run
-    inline void releaseHold()
-    {
-        write(3, read(3) & ~0x80);
-    }
-    // set hold. pulses are stopped
-    inline void setHold()
-    {
-        write(3, read(3) | 0x80);
-    }
-    // toggle init. reset prior to new sequence
-    inline void toggleInit()
-    {
-        uint32_t r3 = read(3);
-        write(3, r3 | 0x00000100);
-        write(3, r3 & ~0x00000100);
-    }
-    inline void shortPulse(uint32_t ctrl, uint32_t op) const
-    {
-        write(31, op);
-        write(31, ctrl);
-    }
+class DummyController {
+    DummyController(const DummyController&) = delete;
+    void operator=(const DummyController&) = delete;
 public:
-    Controller();
+    DummyController();
     void runByteCode(uint64_t seq_len_ns, uint32_t ttl_mask, bool run_epilog,
                      const uint8_t *code, size_t code_len,
                      const std::function<void()> &seq_done);
@@ -119,7 +46,14 @@ public:
         return getDDS(nullptr, 0);
     }
 private:
-    volatile void *const m_addr;
+    static constexpr uint8_t NDDS = 22;
+    uint64_t m_cur_t;
+    uint32_t m_ttl = 0;
+    uint8_t m_clock = 255;
+    uint32_t m_dds_freqs[NDDS] = {0};
+    uint16_t m_dds_amps[NDDS] = {0};
+    uint16_t m_dds_phases[NDDS] = {0};
+    // TODO: DAC
 };
 
 }
