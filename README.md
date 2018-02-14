@@ -16,9 +16,6 @@ zmq protocol.
     `[version: 8bytes][bytecode: n]`
 
     This will be how the experiment talks to the backend.
-    Changes to the bytecode may be needed to specify if the standard epilogue,
-    which is only needed for experiment sequence and not for other test sequence,
-    should be included.
 
     Return value will be a boolean indicating if the run succeeded.
 
@@ -39,6 +36,15 @@ zmq protocol.
 * `cancel_seq`?
 
     Cancel one (or all) sequences.
+
+* `run_cmdlist`
+
+    `[version: 8bytes][cmd_list: n]`
+
+    This is similar to `run_seq` but will be using a uncompressed and simpler format which
+    will support all operations.
+
+    Return value will be a boolean indicating if the run succeeded.
 
 * `state_id`
 

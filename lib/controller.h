@@ -103,7 +103,7 @@ class Controller {
     }
 public:
     Controller();
-    void runByteCode(uint64_t seq_len_ns, uint32_t ttl_mask, bool run_epilog,
+    void runByteCode(uint64_t seq_len_ns, uint32_t ttl_mask,
                      const uint8_t *code, size_t code_len,
                      const std::function<void()> &seq_done);
     std::pair<uint32_t,uint32_t> overwriteTTL(uint32_t hi, uint32_t lo, uint32_t norm);
