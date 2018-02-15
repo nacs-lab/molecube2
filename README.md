@@ -23,6 +23,13 @@ zmq protocol.
     The reply will be sent right away indicating that the sequence is ready to start
     or has started.
 
+* `run_cmdlist`
+
+    `[version: 8bytes][cmd_list: n]`
+
+    This is similar to `run_seq` but uses an uncompressed and simpler format which
+    supports all operations.
+
 * `wait_seq`
 
     `[id: 8bytes]`
@@ -33,15 +40,6 @@ zmq protocol.
 * `cancel_seq`
 
     Cancel one (or all) sequences.
-
-* `run_cmdlist`
-
-    `[version: 8bytes][cmd_list: n]`
-
-    This is similar to `run_seq` but will be using a uncompressed and simpler format which
-    will support all operations.
-
-    Return value will be a boolean indicating if the run succeeded.
 
 * `state_id`
 
