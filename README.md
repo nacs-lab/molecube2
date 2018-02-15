@@ -17,23 +17,20 @@ zmq protocol.
 
     This will be how the experiment talks to the backend.
 
-    Return value will be a boolean indicating if the run succeeded.
+    Return positive 8 bytes ID that can be waited/operated on by `wait_seq` and `cancel_seq`.
+    Negative ID indicates error.
+    The ID will be optionally followed by a list of TTL and DDS overwrites if exists.
+    The reply will be sent right away indicating that the sequence is ready to start
+    or has started.
 
-* `run_seq_async`?
+* `wait_seq`
 
-    `[version: 8bytes][bytecode: n]`
-
-    This will be needed to support connecting multiple FPGA boxed together.
-    Can be added later. The request should be the same as `run_seq` but
-    the reply will be sent right after the sequence is ready to start.
-
-    An ID will be returned that can be waited/operated on by `wait_seq` and `cancel_seq`.
-
-* `wait_seq`?
+    `[id: 8bytes]`
 
     Wait for a sequence to finish.
+    Return 1 byte. `0` for success,
 
-* `cancel_seq`?
+* `cancel_seq`
 
     Cancel one (or all) sequences.
 
@@ -48,7 +45,7 @@ zmq protocol.
 
 * `state_id`
 
-    No argument, return a incrementing 64bit ID.
+    No argument, return an incrementing 64bit ID.
     The first bit of the id indicates if there's a sequence running,
     i.e. values are constantly changing and the rest 63 bits is the number of changes.
     requested after startup.
