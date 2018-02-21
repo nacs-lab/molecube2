@@ -19,8 +19,11 @@
 #ifndef LIBMOLECUBE_CTRL_IFACE_H
 #define LIBMOLECUBE_CTRL_IFACE_H
 
-#include <functional>
 #include <nacs-utils/utils.h>
+
+#include <functional>
+#include <vector>
+#include <mutex>
 
 namespace Molecube {
 
@@ -91,6 +94,8 @@ protected:
 
     /**
      * Try popping a command from the queue.
+     *
+     * A backend event will be generated if a non `NULL` result is returned.
      */
     ReqCmd *pop_cmd();
 
@@ -106,10 +111,40 @@ protected:
 
     /**
      * Finishing a sequence or command list
+     *
+     * This will always notify the frontend (by generating a backend event).
      */
     void reply_seq(ReqSeq *seq);
+
+    /**
+     * Generate a backend event.
+     * This notify the frontend that something it can read have changed.
+     * Not all changes will generate this event, only the ones that are not
+     * latency critical in the backend will.
+     * The frontend is expected to poll the backend periodically
+     * if it is waiting for something.
+     */
+    void backend_event();
 public:
+    CtrlIFace();
     virtual ~CtrlIFace() {}
+
+    int backend_fd() const
+    {
+        return m_bkend_evt;
+    }
+    void clear_backend_event();
+
+private:
+    // Sequence push/pop isn't performance critical so just use simple queues
+    // and a single lock.
+    // The controller thread always operate on the back and the frontend thread
+    // always operate on the front.
+    std::vector<ReqSeq*> m_seq_reqs{};
+    std::vector<ReqSeq*> m_seq_replies{};
+    std::mutex m_seq_lock{};
+
+    int m_bkend_evt;
 };
 
 }
