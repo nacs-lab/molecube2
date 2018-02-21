@@ -22,6 +22,7 @@
 #include <nacs-utils/utils.h>
 
 #include <functional>
+#include <type_traits>
 #include <vector>
 #include <mutex>
 
@@ -61,6 +62,55 @@ struct __attribute__((__packed__)) Info {
  * be done in the frontend thread.
  */
 class CtrlIFace {
+    // Wrapping an arbitrary pointer/object's lifetime
+    class Storage {
+        // C++20
+        template<typename T>
+        using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+        template<typename T>
+        struct Destructor {
+            static void deleter(void *p)
+            {
+                delete (T*)p;
+            }
+        };
+        void *ptr = nullptr;
+        void (*deleter)(void*) = nullptr;
+    public:
+        Storage() {}
+        Storage(Storage &&other)
+        {
+            std::swap(ptr, other.ptr);
+            std::swap(deleter, other.deleter);
+        }
+        template<typename T>
+        Storage(T *v)
+            : ptr((void*)v),
+              deleter(Destructor<T>::deleter)
+        {
+        }
+        template<typename T,
+                 class = std::enable_if_t<!std::is_lvalue_reference<T>::value &&
+                                          !std::is_same<remove_cvref_t<T>,Storage>::value &&
+                                          !std::is_pointer<T>::value>>
+        Storage(T &&v)
+            : Storage(new T(std::move(v)))
+        {
+        }
+        Storage(void *ptr, void (*deleter)(void*))
+            : ptr(ptr),
+              deleter(deleter)
+        {
+        }
+        Storage(const Storage &other) = delete;
+        ~Storage()
+        {
+            if (deleter && ptr) {
+                deleter(ptr);
+            }
+        }
+    };
+
 protected:
     enum ReqOP {
         TTL,
