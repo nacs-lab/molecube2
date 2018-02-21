@@ -1,6 +1,7 @@
 #
 
 set(libmolecube_SRCS
+  ctrl_iface.cpp
   dummy_controller.cpp
   server.cpp)
 

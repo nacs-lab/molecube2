@@ -42,6 +42,76 @@ struct __attribute__((__packed__)) Info {
 
 }
 
+/**
+ * This is the class that provides the FIFO for commands and sequences,
+ * as well as synchronization between the backend and frontend threads.
+ * This also implements coalition (and caching?) of read commands and
+ * therefore does not guarantee ordering of read and write commands.
+ *
+ * An implementation of the controller should inherit this and use the
+ * protected functions to recieve requested from the frontend on
+ * a controller thread.
+ * The public functions are provided for the frontend. The functions are all
+ * asynchronous and should be called from a single frontend thread.
+ *
+ * The controller thread is very latency sensitive so the allocation will mostly
+ * be done in the frontend thread.
+ */
+class CtrlIFace {
+protected:
+    enum ReqOP {
+        TTL,
+        DDSFreq,
+        DDSAmp,
+        DDSPhase,
+    };
+    struct ReqCmd {
+        uint8_t opcode: 4;
+        uint8_t has_res: 1;
+        uint8_t overwrite: 1;
+        uint32_t operand: 26;
+        uint32_t val;
+    };
+    struct ReqSeq {
+        uint64_t seq_len_ns;
+        uint32_t ttl_mask;
+        const uint8_t *code;
+        size_t code_len;
+        bool is_cmd;
+    };
+    /**
+     * These functions are for the controller implementation to use and
+     * is expected to be called from a controller thread.
+     */
+
+    /**
+     * Wait for a new request when there's no sequence running.
+     */
+    void wait();
+
+    /**
+     * Try popping a command from the queue.
+     */
+    ReqCmd *pop_cmd();
+
+    /**
+     * Try popping a sequence or command list from the queue.
+     */
+    ReqSeq *pop_seq();
+
+    /**
+     * Finishing a command
+     */
+    void reply_cmd(ReqCmd *cmd);
+
+    /**
+     * Finishing a sequence or command list
+     */
+    void reply_seq(ReqSeq *seq);
+public:
+    virtual ~CtrlIFace() {}
+};
+
 }
 
 #endif
