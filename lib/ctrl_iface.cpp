@@ -27,27 +27,27 @@ CtrlIFace::CtrlIFace()
 {
 }
 
-auto CtrlIFace::pop_seq() -> ReqSeq*
+auto CtrlIFace::get_seq() -> ReqSeq*
 {
-    ReqSeq *res;
-    {
-        std::lock_guard<std::mutex> locker(m_seq_lock);
-        if (m_seq_reqs.empty())
-            return nullptr;
-        res = m_seq_reqs.back();
-        m_seq_reqs.pop_back();
-    }
-    backend_event();
-    return res;
+    return m_seq_queue.get_filter();
 }
 
-void CtrlIFace::reply_seq(ReqSeq *seq)
+void CtrlIFace::finish_seq()
 {
-    {
-        std::lock_guard<std::mutex> locker(m_seq_lock);
-        m_seq_replies.push_back(seq);
-    }
+    m_seq_queue.forward_filter();
     backend_event();
+}
+
+uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
+                              const uint8_t *code, size_t code_len,
+                              std::function<void()> seq_start,
+                              std::function<void()> seq_end, AnyPtr storage)
+{
+    auto id = ++m_seq_cnt;
+    auto seq = m_seq_alloc.alloc(id, seq_len_ns, code, code_len, ttl_mask, is_cmd,
+                                 std::move(seq_start), std::move(seq_end), std::move(storage));
+    m_seq_queue.push(seq);
+    return id;
 }
 
 void CtrlIFace::backend_event()
@@ -55,9 +55,27 @@ void CtrlIFace::backend_event()
     writeEvent(m_bkend_evt);
 }
 
-void CtrlIFace::clear_backend_event()
+NACS_EXPORT() void CtrlIFace::run_frontend()
 {
     readEvent(m_bkend_evt);
+    while (auto seq = m_seq_queue.pop()) {
+        auto state = seq->state.load(std::memory_order_relaxed);
+        auto pstate = seq->processed_state;
+        if (state >= SeqStart && pstate < SeqStart)
+            seq->start_cb();
+        if (state >= SeqEnd && pstate < SeqEnd)
+            seq->end_cb();
+        m_seq_alloc.free(seq);
+    }
+    if (auto seq = m_seq_queue.peak().first) {
+        auto state = seq->state.load(std::memory_order_acquire);
+        auto pstate = seq->processed_state;
+        if (state >= SeqStart && pstate < SeqStart)
+            seq->start_cb();
+        if (state >= SeqEnd && pstate < SeqEnd)
+            seq->end_cb();
+        seq->processed_state = state;
+    }
 }
 
 }

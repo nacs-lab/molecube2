@@ -19,12 +19,15 @@
 #ifndef LIBMOLECUBE_CTRL_IFACE_H
 #define LIBMOLECUBE_CTRL_IFACE_H
 
+#include <nacs-utils/container.h>
+#include <nacs-utils/mem.h>
 #include <nacs-utils/utils.h>
 
+#include <atomic>
 #include <functional>
+#include <mutex>
 #include <type_traits>
 #include <vector>
-#include <mutex>
 
 namespace Molecube {
 
@@ -62,61 +65,17 @@ struct __attribute__((__packed__)) Info {
  * be done in the frontend thread.
  */
 class CtrlIFace {
-    // Wrapping an arbitrary pointer/object's lifetime
-    class Storage {
-        // C++20
-        template<typename T>
-        using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
-        template<typename T>
-        struct Destructor {
-            static void deleter(void *p)
-            {
-                delete (T*)p;
-            }
-        };
-        void *ptr = nullptr;
-        void (*deleter)(void*) = nullptr;
-    public:
-        Storage() {}
-        Storage(Storage &&other)
-        {
-            std::swap(ptr, other.ptr);
-            std::swap(deleter, other.deleter);
-        }
-        template<typename T>
-        Storage(T *v)
-            : ptr((void*)v),
-              deleter(Destructor<T>::deleter)
-        {
-        }
-        template<typename T,
-                 class = std::enable_if_t<!std::is_lvalue_reference<T>::value &&
-                                          !std::is_same<remove_cvref_t<T>,Storage>::value &&
-                                          !std::is_pointer<T>::value>>
-        Storage(T &&v)
-            : Storage(new T(std::move(v)))
-        {
-        }
-        Storage(void *ptr, void (*deleter)(void*))
-            : ptr(ptr),
-              deleter(deleter)
-        {
-        }
-        Storage(const Storage &other) = delete;
-        ~Storage()
-        {
-            if (deleter && ptr) {
-                deleter(ptr);
-            }
-        }
-    };
-
 protected:
     enum ReqOP {
         TTL,
         DDSFreq,
         DDSAmp,
         DDSPhase,
+    };
+    enum ReqSeqState {
+        SeqInit = 0,
+        SeqStart,
+        SeqEnd
     };
     struct ReqCmd {
         uint8_t opcode: 4;
@@ -126,11 +85,28 @@ protected:
         uint32_t val;
     };
     struct ReqSeq {
+        uint64_t id;
         uint64_t seq_len_ns;
-        uint32_t ttl_mask;
         const uint8_t *code;
         size_t code_len;
+        uint32_t ttl_mask;
         bool is_cmd;
+        std::atomic<ReqSeqState> state{SeqInit};
+        ReqSeq(uint64_t id, uint64_t seq_len_ns, const uint8_t *code, size_t code_len,
+               uint32_t ttl_mask, bool is_cmd, std::function<void()> start_cb,
+               std::function<void()> end_cb, AnyPtr storage)
+            : id(id), seq_len_ns(seq_len_ns), code(code), code_len(code_len),
+              ttl_mask(ttl_mask), is_cmd(is_cmd),
+              start_cb(std::move(start_cb)), end_cb(std::move(end_cb)),
+              storage(std::move(storage))
+        {
+        }
+    private:
+        friend class CtrlIFace;
+        ReqSeqState processed_state{SeqInit};
+        std::function<void()> start_cb;
+        std::function<void()> end_cb;
+        AnyPtr storage;
     };
     /**
      * These functions are for the controller implementation to use and
@@ -144,27 +120,25 @@ protected:
 
     /**
      * Try popping a command from the queue.
-     *
-     * A backend event will be generated if a non `NULL` result is returned.
      */
-    ReqCmd *pop_cmd();
+    ReqCmd *get_cmd();
 
     /**
      * Try popping a sequence or command list from the queue.
      */
-    ReqSeq *pop_seq();
+    ReqSeq *get_seq();
 
     /**
      * Finishing a command
      */
-    void reply_cmd(ReqCmd *cmd);
+    void finish_cmd();
 
     /**
      * Finishing a sequence or command list
      *
      * This will always notify the frontend (by generating a backend event).
      */
-    void reply_seq(ReqSeq *seq);
+    void finish_seq();
 
     /**
      * Generate a backend event.
@@ -179,20 +153,43 @@ public:
     CtrlIFace();
     virtual ~CtrlIFace() {}
 
+    /**
+     * Returns the backend event fd that the frontend can poll on.
+     */
     int backend_fd() const
     {
         return m_bkend_evt;
     }
-    void clear_backend_event();
+    /**
+     * Clear the backend event notifications and
+     * run the callbacks for all events.
+     */
+    void run_frontend();
+
+    template<typename... Args>
+    uint64_t run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
+                      const uint8_t *code, size_t code_len,
+                      std::function<void()> seq_start,
+                      std::function<void()> seq_end, Args&&... args)
+    {
+        return _run_code(is_cmd, seq_len_ns, ttl_mask, code, code_len,
+                         std::move(seq_start), std::move(seq_end),
+                         AnyPtr(std::forward<Args>(args)...));
+    }
 
 private:
-    // Sequence push/pop isn't performance critical so just use simple queues
-    // and a single lock.
-    // The controller thread always operate on the back and the frontend thread
-    // always operate on the front.
-    std::vector<ReqSeq*> m_seq_reqs{};
-    std::vector<ReqSeq*> m_seq_replies{};
-    std::mutex m_seq_lock{};
+    uint64_t _run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
+                       const uint8_t *code, size_t code_len,
+                       std::function<void()> seq_start,
+                       std::function<void()> seq_end, AnyPtr storage);
+
+    uint64_t m_seq_cnt = 0;
+
+    FilterQueue<ReqCmd> m_cmd_queue;
+    FilterQueue<ReqSeq> m_seq_queue;
+
+    SmallAllocator<ReqCmd,32> m_cmd_alloc;
+    SmallAllocator<ReqSeq,32> m_seq_alloc;
 
     int m_bkend_evt;
 };
