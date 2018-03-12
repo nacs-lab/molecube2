@@ -38,10 +38,12 @@ void CtrlIFace::finish_seq()
     backend_event();
 }
 
-uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
-                              const uint8_t *code, size_t code_len,
-                              std::function<void()> seq_start,
-                              std::function<void()> seq_end, AnyPtr storage)
+NACS_EXPORT() uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns,
+                                            uint32_t ttl_mask,
+                                            const uint8_t *code, size_t code_len,
+                                            std::function<void()> seq_start,
+                                            std::function<void()> seq_end,
+                                            AnyPtr storage)
 {
     auto id = ++m_seq_cnt;
     auto seq = m_seq_alloc.alloc(id, seq_len_ns, code, code_len, ttl_mask, is_cmd,
