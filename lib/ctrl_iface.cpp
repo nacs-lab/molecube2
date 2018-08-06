@@ -38,6 +38,16 @@ void CtrlIFace::finish_seq()
     backend_event();
 }
 
+auto CtrlIFace::get_cmd() -> ReqCmd*
+{
+    return m_cmd_queue.get_filter();
+}
+
+void CtrlIFace::finish_cmd()
+{
+    m_cmd_queue.forward_filter();
+}
+
 NACS_EXPORT() uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns,
                                             uint32_t ttl_mask,
                                             const uint8_t *code, size_t code_len,
