@@ -47,7 +47,6 @@ private:
     uint32_t m_dds_freqs[NDDS] = {0};
     uint16_t m_dds_amps[NDDS] = {0};
     uint16_t m_dds_phases[NDDS] = {0};
-    // TODO: DAC
 };
 
 }
