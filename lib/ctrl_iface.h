@@ -65,32 +65,71 @@ struct __attribute__((__packed__)) Info {
  * be done in the frontend thread.
  */
 class CtrlIFace {
+public:
+    class ReqSeqNotify {
+        // All the virtual functions are called with the request id.
+    public:
+        // Right before the sequence starts
+        virtual void start(uint64_t)
+        {}
+        // After all the commands are sent
+        virtual void flushed(uint64_t)
+        {}
+        // After the sequence finished
+        virtual void end(uint64_t)
+        {}
+    };
 protected:
+    /**
+     * There are two kinds of requests that can pass through this interface,
+     * 1. Stand alone commands.
+     *    These are used to change a single state including
+     *    setting/getting output values or overwrites. These are not timed.
+     *    They can happen concurrently with a currently running sequence.
+     * 2. Sequences.
+     *    These are timed sequences of operations.
+     *    A sequence can either be a "restricted" one that will be used to run
+     *    actual experiments (bytecode)
+     *    or a more "feature-full" one for testing (cmdlist).
+     *    Only one sequence can run at the same time.
+     */
+
+    // Opcode for stand alone commands.
     enum ReqOP {
         TTL,
         DDSFreq,
         DDSAmp,
         DDSPhase,
     };
+    struct ReqCmd {
+        uint8_t opcode: 4; // ReqOP
+        uint8_t has_res: 1;
+        uint8_t is_override: 1; // The value set/get is override
+        uint32_t operand: 26; // opcode specific encoding (e.g. channel number)
+        uint32_t val; // opcode specific encoding of value.
+    };
+
     enum ReqSeqState {
         SeqInit = 0,
         SeqStart,
+        SeqFlushed,
         SeqEnd
     };
-    struct ReqCmd {
-        uint8_t opcode: 4;
-        uint8_t has_res: 1;
-        uint8_t overwrite: 1;
-        uint32_t operand: 26;
-        uint32_t val;
-    };
     struct ReqSeq {
+        // Sequence ID
         uint64_t id;
+        // Sequence length in ns
         uint64_t seq_len_ns;
+        // Bytecode or cmdlist
         const uint8_t *code;
+        // Length of `code`
         size_t code_len;
+        // TTL's used in the sequence. Only these TTL's will be changed in the sequence.
         uint32_t ttl_mask;
+        // Whether this is a command list or not. (`false` for bytecode).
         bool is_cmd;
+        // This is set by the backend to signal change of state.
+        // Only `SeqEnd` event is guaranteed to have a accompanied event fd notification.
         std::atomic<ReqSeqState> state{SeqInit};
         ReqSeq(uint64_t id, uint64_t seq_len_ns, const uint8_t *code, size_t code_len,
                uint32_t ttl_mask, bool is_cmd, std::function<void()> start_cb,
@@ -103,9 +142,12 @@ protected:
         }
     private:
         friend class CtrlIFace;
+        // For keeping track of what callback has been invoked.
         ReqSeqState processed_state{SeqInit};
         std::function<void()> start_cb;
         std::function<void()> end_cb;
+        // For managing any memory associated with the request from the frontend.
+        // Most likely for the `code`.
         AnyPtr storage;
     };
     /**
