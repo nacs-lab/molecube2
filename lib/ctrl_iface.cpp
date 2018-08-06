@@ -149,14 +149,19 @@ NACS_EXPORT() void CtrlIFace::run_frontend()
             seq->processed_state = state;
         }
     };
+    // Get the current sequence first so that we know everything before
+    // it will be popped below and it is guaranteed that newly finished sequences
+    // won't have the callback executed after the ones for the current sequence
+    // in case it finishes right after we tried popping it here.
+    auto curseq = m_seq_queue.peak().first;
     while (auto seq = m_seq_queue.pop()) {
+        if (curseq && curseq == seq)
+            curseq = nullptr;
         run_callbacks(seq);
         m_seq_alloc.free(seq);
     }
-    // FIXME: this may not guarantee that the callbacks are executed in order in the case
-    // where a sequence just finished.
-    if (auto seq = m_seq_queue.peak().first)
-        run_callbacks(seq);
+    if (curseq)
+        run_callbacks(curseq);
     while (auto cmd = m_cmd_queue.pop()) {
         if (cmd->has_res)
             m_cmd_cache.set(ReqOP(cmd->opcode), cmd->operand,
