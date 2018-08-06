@@ -35,11 +35,11 @@ bool Controller::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
     if (!is_override)
         return false;
     if (operand == 0) {
-        setTTLLowMask(val);
+        set_ttl_lomask(val);
         return true;
     }
     else if (operand == 1) {
-        setTTLHighMask(val);
+        set_ttl_himask(val);
         return true;
     }
     return false;
@@ -49,7 +49,7 @@ bool Controller::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
                                 uint32_t &val)
 {
     if (op == Clock) {
-        val = getCurClock();
+        val = cur_clock();
         return false;
     }
     if (op != TTL)
@@ -57,15 +57,15 @@ bool Controller::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
     if (!is_override) {
         if (operand != 0)
             return false;
-        val = (getCurTTL() | getTTLHighMask()) & ~getTTLLowMask();
+        val = (cur_ttl() | ttl_himask()) & ~ttl_lomask();
         return true;
     }
     if (operand == 0) {
-        val = getTTLLowMask();
+        val = ttl_lomask();
         return true;
     }
     else if (operand == 1) {
-        val = getTTLHighMask();
+        val = ttl_himask();
         return true;
     }
     return false;
