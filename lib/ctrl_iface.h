@@ -24,8 +24,10 @@
 #include <nacs-utils/utils.h>
 
 #include <atomic>
-#include <mutex>
 #include <condition_variable>
+#include <functional>
+#include <map>
+#include <mutex>
 #include <type_traits>
 #include <vector>
 
@@ -108,6 +110,31 @@ protected:
         uint8_t is_override: 1; // The value set/get is override
         uint32_t operand: 26; // opcode specific encoding (e.g. channel number)
         uint32_t val; // opcode specific encoding of value.
+    };
+
+    struct CmdCache {
+        // Update the cache to the new value from the set command
+        void set(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
+        // Try to get the current cached value. If the cached value is not too old,
+        // call the `cb` and return `true`. If not, push the `cb` to the list of cbs.
+        // If the list is empty, return `false` signaling that a new query should be sent.
+        // If the list is not empty, return `true` since a query
+        // should have been queued already.
+        bool get(ReqOP op, uint32_t operand, bool is_override,
+                 std::function<void(uint32_t)> cb);
+
+    private:
+        struct CacheEntry {
+            uint64_t t = 0;
+            uint32_t val = 0;
+            std::vector<std::function<void(uint32_t)>> cbs{};
+        };
+        static uint32_t cache_key(ReqOP op, uint32_t operand, bool is_override)
+        {
+            assert(op != Clock || !is_override);
+            return uint32_t(op) << 27 | uint32_t(is_override) << 26 | operand;
+        }
+        std::map<uint32_t,CacheEntry> m_cache;
     };
 
     enum ReqSeqState {

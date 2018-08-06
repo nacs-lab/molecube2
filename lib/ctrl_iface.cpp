@@ -19,8 +19,37 @@
 #include "ctrl_iface.h"
 
 #include <nacs-utils/fd_utils.h>
+#include <nacs-utils/timer.h>
 
 namespace Molecube {
+
+void CtrlIFace::CmdCache::set(ReqOP op, uint32_t operand, bool is_override, uint32_t val)
+{
+    auto key = cache_key(op, operand, is_override);
+    auto t = getTime();
+    auto &entry = m_cache[key];
+    entry.t = t;
+    entry.val = val;
+    for (auto &cb: entry.cbs)
+        cb(val);
+    entry.cbs.clear();
+}
+
+bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override,
+                              std::function<void(uint32_t)> cb)
+{
+    auto key = cache_key(op, operand, is_override);
+    auto t = getTime();
+    auto &entry = m_cache[key];
+    if (t - entry.t <= 500000000) {
+        // < 0.5s
+        cb(entry.val);
+        return true;
+    }
+    auto was_empty = entry.cbs.empty();
+    entry.cbs.push_back(std::move(cb));
+    return !was_empty;
+}
 
 CtrlIFace::CtrlIFace()
     : m_bkend_evt(openEvent(0, EFD_NONBLOCK | EFD_CLOEXEC))
