@@ -41,13 +41,12 @@ void CtrlIFace::finish_seq()
 NACS_EXPORT() uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns,
                                             uint32_t ttl_mask,
                                             const uint8_t *code, size_t code_len,
-                                            std::function<void()> seq_start,
-                                            std::function<void()> seq_end,
+                                            std::unique_ptr<ReqSeqNotify> notify,
                                             AnyPtr storage)
 {
     auto id = ++m_seq_cnt;
     auto seq = m_seq_alloc.alloc(id, seq_len_ns, code, code_len, ttl_mask, is_cmd,
-                                 std::move(seq_start), std::move(seq_end), std::move(storage));
+                                 std::move(notify), std::move(storage));
     m_seq_queue.push(seq);
     return id;
 }
@@ -60,23 +59,25 @@ void CtrlIFace::backend_event()
 NACS_EXPORT() void CtrlIFace::run_frontend()
 {
     readEvent(m_bkend_evt);
-    while (auto seq = m_seq_queue.pop()) {
+    auto run_callbacks = [&] (auto seq) {
         auto state = seq->state.load(std::memory_order_relaxed);
         auto pstate = seq->processed_state;
         if (state >= SeqStart && pstate < SeqStart)
-            seq->start_cb();
+            seq->notify->start(seq->id);
+        if (state >= SeqFlushed && pstate < SeqFlushed)
+            seq->notify->flushed(seq->id);
         if (state >= SeqEnd && pstate < SeqEnd)
-            seq->end_cb();
+            seq->notify->end(seq->id);
+        if (pstate != state) {
+            seq->processed_state = state;
+        }
+    };
+    while (auto seq = m_seq_queue.pop()) {
+        run_callbacks(seq);
         m_seq_alloc.free(seq);
     }
     if (auto seq = m_seq_queue.peak().first) {
-        auto state = seq->state.load(std::memory_order_acquire);
-        auto pstate = seq->processed_state;
-        if (state >= SeqStart && pstate < SeqStart)
-            seq->start_cb();
-        if (state >= SeqEnd && pstate < SeqEnd)
-            seq->end_cb();
-        seq->processed_state = state;
+        run_callbacks(seq);
     }
 }
 

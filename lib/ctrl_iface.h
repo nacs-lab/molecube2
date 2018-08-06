@@ -24,7 +24,6 @@
 #include <nacs-utils/utils.h>
 
 #include <atomic>
-#include <functional>
 #include <mutex>
 #include <type_traits>
 #include <vector>
@@ -132,20 +131,18 @@ protected:
         // Only `SeqEnd` event is guaranteed to have a accompanied event fd notification.
         std::atomic<ReqSeqState> state{SeqInit};
         ReqSeq(uint64_t id, uint64_t seq_len_ns, const uint8_t *code, size_t code_len,
-               uint32_t ttl_mask, bool is_cmd, std::function<void()> start_cb,
-               std::function<void()> end_cb, AnyPtr storage)
+               uint32_t ttl_mask, bool is_cmd,
+               std::unique_ptr<ReqSeqNotify> _notify, AnyPtr storage)
             : id(id), seq_len_ns(seq_len_ns), code(code), code_len(code_len),
               ttl_mask(ttl_mask), is_cmd(is_cmd),
-              start_cb(std::move(start_cb)), end_cb(std::move(end_cb)),
-              storage(std::move(storage))
+              notify(std::move(_notify)), storage(std::move(storage))
         {
         }
     private:
         friend class CtrlIFace;
         // For keeping track of what callback has been invoked.
         ReqSeqState processed_state{SeqInit};
-        std::function<void()> start_cb;
-        std::function<void()> end_cb;
+        std::unique_ptr<ReqSeqNotify> notify;
         // For managing any memory associated with the request from the frontend.
         // Most likely for the `code`.
         AnyPtr storage;
@@ -211,19 +208,16 @@ public:
     template<typename... Args>
     uint64_t run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
                       const uint8_t *code, size_t code_len,
-                      std::function<void()> seq_start,
-                      std::function<void()> seq_end, Args&&... args)
+                      std::unique_ptr<ReqSeqNotify> notify, Args&&... args)
     {
         return _run_code(is_cmd, seq_len_ns, ttl_mask, code, code_len,
-                         std::move(seq_start), std::move(seq_end),
-                         AnyPtr(std::forward<Args>(args)...));
+                         std::move(notify), AnyPtr(std::forward<Args>(args)...));
     }
 
 private:
     uint64_t _run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
                        const uint8_t *code, size_t code_len,
-                       std::function<void()> seq_start,
-                       std::function<void()> seq_end, AnyPtr storage);
+                       std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
     uint64_t m_seq_cnt = 0;
 

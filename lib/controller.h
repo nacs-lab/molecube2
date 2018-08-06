@@ -24,6 +24,7 @@
 #include <nacs-utils/mem.h>
 
 #include <vector>
+#include <functional>
 
 namespace Molecube {
 

@@ -22,6 +22,7 @@
 #include "ctrl_iface.h"
 
 #include <vector>
+#include <functional>
 
 namespace Molecube {
 
