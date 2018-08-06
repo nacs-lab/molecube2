@@ -167,8 +167,10 @@ protected:
 
     /**
      * Wait for a new request when there's no sequence running.
+     *
+     * Return false if the backend should exit.
      */
-    void wait();
+    bool wait();
 
     /**
      * Try popping a command from the queue.
@@ -271,6 +273,8 @@ public:
     void set_clock(uint32_t val);
     void get_clock(std::function<void(uint32_t)> cb);
 
+    void quit();
+
 private:
     uint64_t _run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
                        const uint8_t *code, size_t code_len,
@@ -280,6 +284,8 @@ private:
     void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
     void send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
                       std::function<void(uint32_t)> cb);
+
+    bool m_quit{false};
 
     // To notify the backend of new requests from the frontend.
     std::mutex m_ftend_lck;

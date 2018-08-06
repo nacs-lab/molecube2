@@ -64,12 +64,13 @@ CtrlIFace::CtrlIFace()
 {
 }
 
-void CtrlIFace::wait()
+bool CtrlIFace::wait()
 {
     std::unique_lock<std::mutex> lk(m_ftend_lck);
     m_ftend_evt.wait(lk, [&] {
-            return m_seq_queue.get_filter() || m_cmd_queue.get_filter();
+            return m_quit || m_seq_queue.get_filter() || m_cmd_queue.get_filter();
         });
+    return m_quit;
 }
 
 auto CtrlIFace::get_seq() -> ReqSeq*
@@ -215,6 +216,17 @@ NACS_EXPORT() void CtrlIFace::set_clock(uint32_t val)
 NACS_EXPORT() void CtrlIFace::get_clock(std::function<void(uint32_t)> cb)
 {
     send_get_cmd(Clock, 0, false, std::move(cb));
+}
+
+NACS_EXPORT() void CtrlIFace::quit()
+{
+    {
+        // The lock here is overkill. However, the wait already needs a lock and we
+        // don't care about the performance here so just use the lock here...
+        std::lock_guard<std::mutex> lk(m_ftend_lck);
+        m_quit = true;
+    }
+    m_ftend_evt.notify_all();
 }
 
 NACS_EXPORT() void CtrlIFace::run_frontend()
