@@ -46,6 +46,14 @@ bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override,
         cb(entry.val);
         return true;
     }
+    // DDS overrides are only kept in software so no need to ask the backend.
+    if (is_override && op != TTL) {
+        // Initially off (-1) by default.
+        if (entry.t == 0)
+            entry.val = -1;
+        cb(entry.val);
+        return true;
+    }
     auto was_empty = entry.cbs.empty();
     entry.cbs.push_back(std::move(cb));
     return !was_empty;
