@@ -99,6 +99,7 @@ protected:
         DDSFreq,
         DDSAmp,
         DDSPhase,
+        Clock
     };
     struct ReqCmd {
         uint8_t opcode: 4; // ReqOP
