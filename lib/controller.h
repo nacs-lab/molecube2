@@ -114,7 +114,10 @@ private:
     bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
                         uint32_t &val) override;
 
+    static constexpr uint8_t NDDS = 22;
+
     volatile void *const m_addr;
+    DDSState m_dds_ovr[NDDS];
 };
 
 }

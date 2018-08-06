@@ -35,6 +35,22 @@ namespace Molecube {
 
 using namespace NaCs;
 
+struct DDSState {
+    DDSState()
+        : freq(0),
+          amp(0),
+          amp_enable(0),
+          phase_enable(0),
+          phase(0)
+    {
+    }
+    uint32_t freq; // 31 bits
+    uint16_t amp: 12;
+    uint16_t amp_enable: 1;
+    uint16_t phase_enable: 1;
+    uint16_t phase;
+};
+
 /**
  * This is the class that provides the FIFO for commands and sequences,
  * as well as synchronization between the backend and frontend threads.
