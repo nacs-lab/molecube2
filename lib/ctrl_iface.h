@@ -243,6 +243,38 @@ public:
                          std::move(notify), AnyPtr(std::forward<Args>(args)...));
     }
 
+    void set_ttl(int chn, bool val);
+    void set_ttl_all(uint32_t val);
+    void set_ttl_ovrhi(uint32_t val);
+    void set_ttl_ovrlo(uint32_t val);
+
+    void get_ttl(std::function<void(uint32_t)> cb);
+    void get_ttl_ovrhi(std::function<void(uint32_t)> cb);
+    void get_ttl_ovrlo(std::function<void(uint32_t)> cb);
+
+    ReqOP dds_to_op(DDS::Type typ)
+    {
+        switch (typ) {
+        case DDS::Freq:
+            return DDSFreq;
+        case DDS::Amp:
+            return DDSAmp;
+        case DDS::Phase:
+            return DDSPhase;
+        default:
+            return TTL;
+        }
+    }
+
+    void set_dds(DDS::Type typ, int chn, uint32_t val);
+    void set_dds_ovr(DDS::Type typ, int chn, uint32_t val);
+
+    void get_dds(DDS::Type typ, int chn, std::function<void(uint32_t)> cb);
+    void get_dds_ovr(DDS::Type typ, int chn, std::function<void(uint32_t)> cb);
+
+    void set_clock(uint32_t val);
+    void get_clock(std::function<void(uint32_t)> cb);
+
 private:
     uint64_t _run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
                        const uint8_t *code, size_t code_len,

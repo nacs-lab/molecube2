@@ -133,6 +133,87 @@ void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
                 operand & ((1 << 26) - 1), 0});
 }
 
+NACS_EXPORT() void CtrlIFace::set_ttl(int chn, bool val)
+{
+    send_set_cmd(TTL, uint32_t(chn), false, val);
+}
+
+NACS_EXPORT() void CtrlIFace::set_ttl_all(uint32_t val)
+{
+    send_set_cmd(TTL, uint32_t(-1), false, val);
+}
+
+NACS_EXPORT() void CtrlIFace::set_ttl_ovrhi(uint32_t val)
+{
+    send_set_cmd(TTL, 1, true, val);
+}
+
+NACS_EXPORT() void CtrlIFace::set_ttl_ovrlo(uint32_t val)
+{
+    send_set_cmd(TTL, 0, true, val);
+}
+
+NACS_EXPORT() void CtrlIFace::get_ttl(std::function<void(uint32_t)> cb)
+{
+    send_get_cmd(TTL, 0, false, std::move(cb));
+}
+
+NACS_EXPORT() void CtrlIFace::get_ttl_ovrhi(std::function<void(uint32_t)> cb)
+{
+    send_get_cmd(TTL, 1, true, std::move(cb));
+}
+
+NACS_EXPORT() void CtrlIFace::get_ttl_ovrlo(std::function<void(uint32_t)> cb)
+{
+    send_get_cmd(TTL, 0, true, std::move(cb));
+}
+
+NACS_EXPORT() void CtrlIFace::set_dds(DDS::Type typ, int chn, uint32_t val)
+{
+    ReqOP op = dds_to_op(typ);
+    if (op == TTL)
+        return;
+    send_set_cmd(op, chn, false, val);
+}
+
+NACS_EXPORT() void CtrlIFace::set_dds_ovr(DDS::Type typ, int chn, uint32_t val)
+{
+    ReqOP op = dds_to_op(typ);
+    if (op == TTL)
+        return;
+    send_set_cmd(op, chn, true, val);
+}
+
+NACS_EXPORT() void CtrlIFace::get_dds(DDS::Type typ, int chn, std::function<void(uint32_t)> cb)
+{
+    ReqOP op = dds_to_op(typ);
+    if (op == TTL) {
+        cb(0);
+        return;
+    }
+    send_get_cmd(op, chn, false, std::move(cb));
+}
+
+NACS_EXPORT() void CtrlIFace::get_dds_ovr(DDS::Type typ, int chn, std::function<void(uint32_t)> cb)
+{
+    ReqOP op = dds_to_op(typ);
+    if (op == TTL) {
+        cb(0);
+        return;
+    }
+    send_get_cmd(op, chn, true, std::move(cb));
+}
+
+NACS_EXPORT() void CtrlIFace::set_clock(uint32_t val)
+{
+    send_set_cmd(Clock, 0, false, val);
+}
+
+NACS_EXPORT() void CtrlIFace::get_clock(std::function<void(uint32_t)> cb)
+{
+    send_get_cmd(Clock, 0, false, std::move(cb));
+}
+
 NACS_EXPORT() void CtrlIFace::run_frontend()
 {
     readEvent(m_bkend_evt);
