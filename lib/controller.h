@@ -27,7 +27,7 @@
 
 namespace Molecube {
 
-class Controller {
+class Controller : public CtrlIFace {
     Controller(const Controller&) = delete;
     void operator=(const Controller&) = delete;
     inline uint32_t read(uint32_t reg) const
@@ -103,18 +103,6 @@ class Controller {
     }
 public:
     Controller();
-    std::pair<uint32_t,uint32_t> overwriteTTL(uint32_t hi, uint32_t lo, uint32_t norm);
-    uint32_t setTTL(uint32_t hi, uint32_t lo);
-
-    void overwriteDDS(DDS::Info *infos, size_t ninfo);
-    void setDDS(DDS::Info *infos, size_t ninfo);
-
-    std::vector<DDS::Info> getOverwriteDDS();
-    std::vector<DDS::Info> getDDS(uint8_t *nums, size_t nnum);
-    std::vector<DDS::Info> getDDS()
-    {
-        return getDDS(nullptr, 0);
-    }
 private:
     volatile void *const m_addr;
 };
