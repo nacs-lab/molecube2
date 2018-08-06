@@ -153,8 +153,15 @@ NACS_EXPORT() void CtrlIFace::run_frontend()
         run_callbacks(seq);
         m_seq_alloc.free(seq);
     }
-    if (auto seq = m_seq_queue.peak().first) {
+    // FIXME: this may not guarantee that the callbacks are executed in order in the case
+    // where a sequence just finished.
+    if (auto seq = m_seq_queue.peak().first)
         run_callbacks(seq);
+    while (auto cmd = m_cmd_queue.pop()) {
+        if (cmd->has_res)
+            m_cmd_cache.set(ReqOP(cmd->opcode), cmd->operand,
+                            cmd->is_override, cmd->val);
+        m_cmd_alloc.free(cmd);
     }
 }
 
