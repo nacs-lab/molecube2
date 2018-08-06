@@ -38,6 +38,19 @@ class Controller : public CtrlIFace {
     {
         Mem::write<uint32_t>(m_addr, val, reg);
     }
+    struct Bits {
+        enum {
+            // Register 2
+            TimeOK = 0x1,
+            Finished = 0x4,
+            NumRes = 0x1f0,
+            // Register 3
+            Hold = 1 << 7,
+            Init = 1 << 8,
+            // Control
+            TimeCheck = 0x8000000
+        };
+    };
 
     // Read
     inline uint32_t ttl_himask() const
@@ -50,15 +63,15 @@ class Controller : public CtrlIFace {
     }
     inline bool timing_ok() const
     {
-        return !(read(2) & 0x1);
+        return !(read(2) & Bits::TimeOK);
     }
     inline bool is_finished() const
     {
-        return read(2) & 0x4;
+        return read(2) & Bits::Finished;
     }
     inline uint32_t num_results() const
     {
-        return (read(2) >> 4) & 31;
+        return (read(2) & Bits::NumRes) >> 4;
     }
     inline uint32_t cur_ttl() const
     {
@@ -86,24 +99,28 @@ class Controller : public CtrlIFace {
     // release hold.  pulses can run
     inline void release_hold()
     {
-        write(3, read(3) & ~0x80);
+        write(3, read(3) & ~Bits::Hold);
     }
     // set hold. pulses are stopped
     inline void set_hold()
     {
-        write(3, read(3) | 0x80);
+        write(3, read(3) | Bits::Hold);
     }
     // toggle init. reset prior to new sequence
     inline void toggle_init()
     {
         uint32_t r3 = read(3);
-        write(3, r3 | 0x00000100);
-        write(3, r3 & ~0x00000100);
+        write(3, r3 | Bits::Init);
+        write(3, r3 & ~Bits::Init);
     }
     inline void short_pulse(uint32_t ctrl, uint32_t op)
     {
         write(31, op);
         write(31, ctrl);
+    }
+    inline void checked_pulse(uint32_t ctrl, uint32_t op)
+    {
+        short_pulse(ctrl | Bits::TimeCheck, op);
     }
 public:
     Controller();
