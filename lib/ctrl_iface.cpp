@@ -176,39 +176,27 @@ NACS_EXPORT() void CtrlIFace::get_ttl_ovrlo(std::function<void(uint32_t)> cb)
     send_get_cmd(TTL, 0, true, std::move(cb));
 }
 
-NACS_EXPORT() void CtrlIFace::set_dds(DDS::Type typ, int chn, uint32_t val)
+NACS_EXPORT() void CtrlIFace::set_dds(ReqOP op, int chn, uint32_t val)
 {
-    ReqOP op = dds_to_op(typ);
-    if (op == TTL)
-        return;
+    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_set_cmd(op, chn, false, val);
 }
 
-NACS_EXPORT() void CtrlIFace::set_dds_ovr(DDS::Type typ, int chn, uint32_t val)
+NACS_EXPORT() void CtrlIFace::set_dds_ovr(ReqOP op, int chn, uint32_t val)
 {
-    ReqOP op = dds_to_op(typ);
-    if (op == TTL)
-        return;
+    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_set_cmd(op, chn, true, val);
 }
 
-NACS_EXPORT() void CtrlIFace::get_dds(DDS::Type typ, int chn, std::function<void(uint32_t)> cb)
+NACS_EXPORT() void CtrlIFace::get_dds(ReqOP op, int chn, std::function<void(uint32_t)> cb)
 {
-    ReqOP op = dds_to_op(typ);
-    if (op == TTL) {
-        cb(0);
-        return;
-    }
+    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_get_cmd(op, chn, false, std::move(cb));
 }
 
-NACS_EXPORT() void CtrlIFace::get_dds_ovr(DDS::Type typ, int chn, std::function<void(uint32_t)> cb)
+NACS_EXPORT() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, std::function<void(uint32_t)> cb)
 {
-    ReqOP op = dds_to_op(typ);
-    if (op == TTL) {
-        cb(0);
-        return;
-    }
+    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_get_cmd(op, chn, true, std::move(cb));
 }
 

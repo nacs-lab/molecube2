@@ -35,22 +35,6 @@ namespace Molecube {
 
 using namespace NaCs;
 
-namespace DDS {
-
-enum Type : uint8_t {
-    Freq,
-    Amp,
-    Phase
-};
-
-struct __attribute__((__packed__)) Info {
-    uint8_t typ: 2;
-    uint8_t id: 6;
-    uint32_t val;
-};
-
-}
-
 /**
  * This is the class that provides the FIFO for commands and sequences,
  * as well as synchronization between the backend and frontend threads.
@@ -81,6 +65,14 @@ public:
         virtual void end(uint64_t)
         {}
     };
+    // Opcode for stand alone commands.
+    enum ReqOP {
+        TTL,
+        DDSFreq,
+        DDSAmp,
+        DDSPhase,
+        Clock
+    };
 protected:
     /**
      * There are two kinds of requests that can pass through this interface,
@@ -96,14 +88,6 @@ protected:
      *    Only one sequence can run at the same time.
      */
 
-    // Opcode for stand alone commands.
-    enum ReqOP {
-        TTL,
-        DDSFreq,
-        DDSAmp,
-        DDSPhase,
-        Clock
-    };
     struct ReqCmd {
         uint8_t opcode: 4; // ReqOP
         uint8_t has_res: 1;
@@ -252,25 +236,11 @@ public:
     void get_ttl_ovrhi(std::function<void(uint32_t)> cb);
     void get_ttl_ovrlo(std::function<void(uint32_t)> cb);
 
-    ReqOP dds_to_op(DDS::Type typ)
-    {
-        switch (typ) {
-        case DDS::Freq:
-            return DDSFreq;
-        case DDS::Amp:
-            return DDSAmp;
-        case DDS::Phase:
-            return DDSPhase;
-        default:
-            return TTL;
-        }
-    }
+    void set_dds(ReqOP op, int chn, uint32_t val);
+    void set_dds_ovr(ReqOP op, int chn, uint32_t val);
 
-    void set_dds(DDS::Type typ, int chn, uint32_t val);
-    void set_dds_ovr(DDS::Type typ, int chn, uint32_t val);
-
-    void get_dds(DDS::Type typ, int chn, std::function<void(uint32_t)> cb);
-    void get_dds_ovr(DDS::Type typ, int chn, std::function<void(uint32_t)> cb);
+    void get_dds(ReqOP op, int chn, std::function<void(uint32_t)> cb);
+    void get_dds_ovr(ReqOP op, int chn, std::function<void(uint32_t)> cb);
 
     void set_clock(uint32_t val);
     void get_clock(std::function<void(uint32_t)> cb);
