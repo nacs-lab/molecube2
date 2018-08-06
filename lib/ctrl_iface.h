@@ -219,11 +219,14 @@ private:
                        const uint8_t *code, size_t code_len,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
+    // Sequence ID counter
     uint64_t m_seq_cnt = 0;
 
+    // The queues that send the commands/sequences to the backend (filter) and back.
     FilterQueue<ReqCmd> m_cmd_queue;
     FilterQueue<ReqSeq> m_seq_queue;
 
+    // Cached allocator for efficient allocations
     SmallAllocator<ReqCmd,32> m_cmd_alloc;
     SmallAllocator<ReqSeq,32> m_seq_alloc;
 
