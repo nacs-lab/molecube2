@@ -135,6 +135,7 @@ private:
 
     volatile void *const m_addr;
     DDSState m_dds_ovr[NDDS];
+    uint16_t m_dds_phase[NDDS];
 };
 
 }
