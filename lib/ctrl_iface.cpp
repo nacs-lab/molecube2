@@ -127,14 +127,21 @@ void CtrlIFace::send_cmd(const ReqCmd &_cmd)
 
 void CtrlIFace::send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val)
 {
-    send_cmd(ReqCmd{uint8_t(op & 0xf), 0, uint8_t(is_override),
-                operand & ((1 << 26) - 1), val});
+    if (!concurrent_set(op, operand, is_override, val))
+        send_cmd(ReqCmd{uint8_t(op & 0xf), 0, uint8_t(is_override),
+                    operand & ((1 << 26) - 1), val});
     m_cmd_cache.set(op, operand, is_override, val);
 }
 
 void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
                              std::function<void(uint32_t)> cb)
 {
+    uint32_t val = 0;
+    if (concurrent_get(op, operand, is_override, val)) {
+        m_cmd_cache.set(op, operand, is_override, val);
+        cb(val);
+        return;
+    }
     if (m_cmd_cache.get(op, operand, is_override, std::move(cb)))
         return;
     send_cmd(ReqCmd{uint8_t(op & 0xf), 1, uint8_t(is_override),

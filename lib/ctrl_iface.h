@@ -201,6 +201,32 @@ protected:
      * if it is waiting for something.
      */
     void backend_event();
+
+    /**
+     * Try to concurrently set/get values without sending a command in the queue.
+     * The backend should implement this for commands
+     * that doesn't need to be synchronized to reduce queue pressure.
+     *
+     * Both function return true if the set/get is completed.
+     */
+    virtual bool concurrent_set(ReqOP op, uint32_t operand,
+                                bool is_override, uint32_t val)
+    {
+        (void)op;
+        (void)operand;
+        (void)is_override;
+        (void)val;
+        return false;
+    }
+    virtual bool concurrent_get(ReqOP op, uint32_t operand,
+                                bool is_override, uint32_t &val)
+    {
+        (void)op;
+        (void)operand;
+        (void)is_override;
+        (void)val;
+        return false;
+    }
 public:
     CtrlIFace();
     virtual ~CtrlIFace() {}
