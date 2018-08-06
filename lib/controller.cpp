@@ -48,9 +48,10 @@ bool Controller::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
 bool Controller::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
                                 uint32_t &val)
 {
-    // TODO: clock
-    if (op == Clock)
+    if (op == Clock) {
+        val = getCurClock();
         return false;
+    }
     if (op != TTL)
         return false;
     if (!is_override) {

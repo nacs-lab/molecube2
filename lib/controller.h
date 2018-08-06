@@ -64,6 +64,10 @@ class Controller : public CtrlIFace {
     {
         return read(4);
     }
+    inline uint8_t getCurClock() const
+    {
+        return (uint8_t)read(5);
+    }
     inline uint32_t popResult() const
     {
         return read(31);
