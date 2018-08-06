@@ -27,4 +27,51 @@ DummyController::DummyController()
 {
 }
 
+bool DummyController::concurrent_set(ReqOP op, uint32_t operand,
+                                     bool is_override, uint32_t val)
+{
+    // Match the implementation in Controller.
+    if (op != TTL)
+        return false;
+    if (!is_override)
+        return false;
+    if (operand == 0) {
+        m_ttl_ovrlo.store(val, std::memory_order_relaxed);
+        return true;
+    }
+    else if (operand == 1) {
+        m_ttl_ovrhi.store(val, std::memory_order_relaxed);
+        return true;
+    }
+    return false;
+}
+
+bool DummyController::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
+                                     uint32_t &val)
+{
+    if (op == Clock) {
+        val = m_clock.load(std::memory_order_relaxed);
+        return false;
+    }
+    if (op != TTL)
+        return false;
+    if (!is_override) {
+        if (operand != 0)
+            return false;
+        val = (m_ttl.load(std::memory_order_relaxed) |
+               m_ttl_ovrhi.load(std::memory_order_relaxed)) &
+            ~m_ttl_ovrlo.load(std::memory_order_relaxed);
+        return true;
+    }
+    if (operand == 0) {
+        val = m_ttl_ovrlo.load(std::memory_order_relaxed);
+        return true;
+    }
+    else if (operand == 1) {
+        val = m_ttl_ovrhi.load(std::memory_order_relaxed);
+        return true;
+    }
+    return false;
+}
+
 }

@@ -103,7 +103,13 @@ class Controller : public CtrlIFace {
     }
 public:
     Controller();
+
 private:
+    bool concurrent_set(ReqOP op, uint32_t operand, bool is_override,
+                        uint32_t val) override;
+    bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
+                        uint32_t &val) override;
+
     volatile void *const m_addr;
 };
 

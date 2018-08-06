@@ -21,6 +21,7 @@
 
 #include "ctrl_iface.h"
 
+#include <atomic>
 #include <vector>
 
 namespace Molecube {
@@ -30,11 +31,19 @@ class DummyController : public CtrlIFace {
     void operator=(const DummyController&) = delete;
 public:
     DummyController();
+
 private:
+    bool concurrent_set(ReqOP op, uint32_t operand, bool is_override,
+                        uint32_t val) override;
+    bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
+                        uint32_t &val) override;
+
     static constexpr uint8_t NDDS = 22;
     uint64_t m_cur_t;
-    uint32_t m_ttl = 0;
-    uint8_t m_clock = 255;
+    std::atomic<uint32_t> m_ttl{0};
+    std::atomic<uint32_t> m_ttl_ovrlo{0};
+    std::atomic<uint32_t> m_ttl_ovrhi{0};
+    std::atomic<uint8_t> m_clock{255};
     uint32_t m_dds_freqs[NDDS] = {0};
     uint16_t m_dds_amps[NDDS] = {0};
     uint16_t m_dds_phases[NDDS] = {0};
