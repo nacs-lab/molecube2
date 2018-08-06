@@ -27,6 +27,14 @@ CtrlIFace::CtrlIFace()
 {
 }
 
+void CtrlIFace::wait()
+{
+    std::unique_lock<std::mutex> lk(m_ftend_lck);
+    m_ftend_evt.wait(lk, [&] {
+            return m_seq_queue.get_filter() || m_cmd_queue.get_filter();
+        });
+}
+
 auto CtrlIFace::get_seq() -> ReqSeq*
 {
     return m_seq_queue.get_filter();
@@ -57,7 +65,11 @@ NACS_EXPORT() uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns,
     auto id = ++m_seq_cnt;
     auto seq = m_seq_alloc.alloc(id, seq_len_ns, code, code_len, ttl_mask, is_cmd,
                                  std::move(notify), std::move(storage));
-    m_seq_queue.push(seq);
+    {
+        std::lock_guard<std::mutex> lk(m_ftend_lck);
+        m_seq_queue.push(seq);
+    }
+    m_ftend_evt.notify_all();
     return id;
 }
 

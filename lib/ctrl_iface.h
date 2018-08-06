@@ -25,6 +25,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <condition_variable>
 #include <type_traits>
 #include <vector>
 
@@ -220,6 +221,10 @@ private:
                        const uint8_t *code, size_t code_len,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
+    // To notify the backend of new requests from the frontend.
+    std::mutex m_ftend_lck;
+    std::condition_variable m_ftend_evt;
+
     // Sequence ID counter
     uint64_t m_seq_cnt = 0;
 
@@ -231,6 +236,8 @@ private:
     SmallAllocator<ReqCmd,32> m_cmd_alloc;
     SmallAllocator<ReqSeq,32> m_seq_alloc;
 
+    // Use an event fd for notification from the backend to the frontend
+    // since this can be polled in the main loop.
     int m_bkend_evt;
 };
 
