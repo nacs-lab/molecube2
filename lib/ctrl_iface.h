@@ -248,6 +248,11 @@ private:
                        const uint8_t *code, size_t code_len,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
+    void send_cmd(const ReqCmd &cmd);
+    void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
+    void send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
+                      std::function<void(uint32_t)> cb);
+
     // To notify the backend of new requests from the frontend.
     std::mutex m_ftend_lck;
     std::condition_variable m_ftend_evt;
@@ -262,6 +267,8 @@ private:
     // Cached allocator for efficient allocations
     SmallAllocator<ReqCmd,32> m_cmd_alloc;
     SmallAllocator<ReqSeq,32> m_seq_alloc;
+
+    CmdCache m_cmd_cache;
 
     // Use an event fd for notification from the backend to the frontend
     // since this can be polled in the main loop.

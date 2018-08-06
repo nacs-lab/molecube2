@@ -107,6 +107,32 @@ void CtrlIFace::backend_event()
     writeEvent(m_bkend_evt);
 }
 
+void CtrlIFace::send_cmd(const ReqCmd &_cmd)
+{
+    auto cmd = m_cmd_alloc.alloc(_cmd);
+    {
+        std::lock_guard<std::mutex> lk(m_ftend_lck);
+        m_cmd_queue.push(cmd);
+    }
+    m_ftend_evt.notify_all();
+}
+
+void CtrlIFace::send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val)
+{
+    send_cmd(ReqCmd{uint8_t(op & 0xf), 0, uint8_t(is_override),
+                operand & ((1 << 26) - 1), val});
+    m_cmd_cache.set(op, operand, is_override, val);
+}
+
+void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
+                             std::function<void(uint32_t)> cb)
+{
+    if (m_cmd_cache.get(op, operand, is_override, std::move(cb)))
+        return;
+    send_cmd(ReqCmd{uint8_t(op & 0xf), 1, uint8_t(is_override),
+                operand & ((1 << 26) - 1), 0});
+}
+
 NACS_EXPORT() void CtrlIFace::run_frontend()
 {
     readEvent(m_bkend_evt);
