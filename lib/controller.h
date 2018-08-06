@@ -24,7 +24,6 @@
 #include <nacs-utils/mem.h>
 
 #include <vector>
-#include <functional>
 
 namespace Molecube {
 
@@ -104,12 +103,6 @@ class Controller {
     }
 public:
     Controller();
-    uint64_t runByteCode(uint64_t seq_len_ns, uint32_t ttl_mask,
-                         const uint8_t *code, size_t code_len,
-                         std::function<void()> seq_done);
-    uint64_t runCmdList(uint64_t seq_len_ns, uint32_t ttl_mask,
-                        const uint8_t *code, size_t code_len,
-                        std::function<void()> seq_done);
     std::pair<uint32_t,uint32_t> overwriteTTL(uint32_t hi, uint32_t lo, uint32_t norm);
     uint32_t setTTL(uint32_t hi, uint32_t lo);
 
