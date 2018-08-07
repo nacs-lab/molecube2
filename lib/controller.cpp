@@ -26,6 +26,73 @@
 
 namespace Molecube {
 
+class Controller::Runner {
+public:
+    Runner(Controller &ctrl, uint32_t ttlmask)
+        : m_ctrl(ctrl),
+          m_ttlmask(ttlmask)
+    {
+        m_ttl = ctrl.cur_ttl();
+        m_preserve_ttl = (~ttlmask) & m_ttl;
+    }
+    void ttl1(uint8_t chn, bool val, uint64_t t)
+    {
+        ttl(setBit(m_ttl, chn, val), t);
+    }
+    void ttl(uint32_t ttl, uint64_t t)
+    {
+        ttl = ttl | m_preserve_ttl;
+        if (t <= 1000) {
+            // 10us
+            m_ctrl.short_pulse<true>((uint32_t)t, ttl);
+        }
+        else {
+            m_ctrl.short_pulse<true>(100, ttl);
+            wait(t - 100);
+        }
+        m_ttl = ttl;
+    }
+    void dds_freq(uint8_t chn, uint32_t freq)
+    {
+        m_ctrl.dds_set_freq_pulse<true>(chn, freq);
+    }
+    void dds_amp(uint8_t chn, uint16_t amp)
+    {
+        m_ctrl.dds_set_amp_pulse<true>(chn, amp);
+    }
+    void dds_phase(uint8_t chn, uint16_t phase)
+    {
+        m_ctrl.m_dds_phase[chn] = phase;
+        m_ctrl.dds_set_phase_pulse<true>(chn, phase);
+    }
+    void dds_detphase(uint8_t chn, uint16_t detphase)
+    {
+        dds_phase(chn, uint16_t(m_ctrl.m_dds_phase[chn] + detphase));
+    }
+    void dds_reset(uint8_t chn)
+    {
+        m_ctrl.dds_reset_pulse<true>(chn);
+    }
+    void dac(uint8_t chn, uint16_t V)
+    {
+        m_ctrl.dac_pulse<true>(chn, V);
+    }
+    void wait(uint64_t t)
+    {
+        // TODO
+    }
+    void clock(uint8_t period)
+    {
+        m_ctrl.clock_pulse<true>(period);
+    }
+
+private:
+    Controller &m_ctrl;
+    uint32_t m_ttlmask;
+    uint32_t m_ttl;
+    uint32_t m_preserve_ttl;
+};
+
 Controller::Controller()
     : m_addr(Kernel::mapPulseCtrl())
 {
