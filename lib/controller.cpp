@@ -20,6 +20,8 @@
 
 #include <nacs-kernel/devctl.h>
 
+#include <chrono>
+
 namespace Molecube {
 
 Controller::Controller()
@@ -69,6 +71,82 @@ bool Controller::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
         return true;
     }
     return false;
+}
+
+bool Controller::try_get_result(uint32_t &res)
+{
+    if (!num_results())
+        return false;
+    res = pop_result();
+    return true;
+}
+
+uint32_t Controller::get_result()
+{
+    // Used in cases where we don't care about the performance
+    // of the calling thread too much.
+    uint32_t res;
+    while (!try_get_result(res))
+        std::this_thread::yield();
+    return res;
+}
+
+void Controller::init_dds(int chn)
+{
+    using namespace std::literals;
+
+    dds_reset_pulse<false>(chn);
+
+    // calibrate internal timing.  required at power-up
+    dds_set_2bytes_pulse<false>(chn, 0x0e, 0x0105);
+    std::this_thread::sleep_for(1ms);
+    // finish cal. disble sync_out
+    dds_set_2bytes_pulse<false>(chn, 0x0e, 0x0405);
+
+    // enable programmable modulus and profile 0, enable SYNC_CLK output
+    // dds_set_2bytes_pulse<false>(chn, 0x05, 0x8d0b);
+
+    // disable programmable modulus, enable profile 0,
+    // enable SYNC_CLK output
+    // dds_set_2bytes_pulse<false>(chn, 0x05, 0x8009);
+
+    // disable ramp & programmable modulus, enable profile 0,
+    // disable SYNC_CLK output
+    // dds_set_2bytes_pulse<false>(chn, 0x05, 0x8001);
+
+    // disable SYNC_CLK output
+    dds_set_2bytes_pulse<false>(chn, 0x04, 0x0100);
+
+    // enable ramp, enable programmable modulus, disable profile mode
+    // dds_set_2bytes_pulse<false>(chn, 0x06, 0x0009);
+
+    // disable ramp, disable programmable modulus, enable profile mode
+    dds_set_2bytes_pulse<false>(chn, 0x06, 0x0080);
+
+    // enable amplitude control (OSK)
+    dds_set_2bytes_pulse<false>(chn, 0x0, 0x0308);
+
+    // zero-out all other memory
+    for (unsigned addr = 0x10;addr <= 0x6a;addr += 2)
+        dds_set_2bytes_pulse<false>(chn, addr, 0x0);
+
+    dds_set_4bytes_pulse<false>(chn, 0x64, magic_bytes);
+}
+
+bool Controller::check_dds(int chn)
+{
+    if (!m_dds_pending_reset[chn]) {
+        // Check if magic bytes have been set (profile 7, FTW) which is
+        // otherwise not used.  If already set, the board has been initialized
+        // and doesn't need another init.  This avoids reboot-induced glitches.
+        dds_get_4bytes_pulse<false>(chn, 0x64);
+        if (get_result() == magic_bytes) {
+            return false;
+        }
+    }
+    init_dds(chn);
+    m_dds_pending_reset[chn] = false;
+    return true;
 }
 
 }

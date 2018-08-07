@@ -254,12 +254,21 @@ private:
                         uint32_t val) override;
     bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
                         uint32_t &val) override;
+    bool try_get_result(uint32_t &res);
+    uint32_t get_result();
+
+    void init_dds(int chn);
+    bool check_dds(int chn);
 
     static constexpr uint8_t NDDS = 22;
+    static constexpr uint32_t magic_bytes = 0xf00f0000;
 
     volatile void *const m_addr;
     DDSState m_dds_ovr[NDDS];
-    uint16_t m_dds_phase[NDDS];
+    uint16_t m_dds_phase[NDDS] = {0};
+    // Reinitialize is a complicated sequence and is rarely needed
+    // so only do that after the sequence finishes.
+    bool m_dds_pending_reset[NDDS] = {false};
 };
 
 }
