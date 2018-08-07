@@ -293,6 +293,8 @@ public:
 
     void quit();
 
+    virtual std::vector<int> get_active_dds() = 0;
+
 private:
     uint64_t _run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
                        const uint8_t *code, size_t code_len,

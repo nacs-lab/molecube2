@@ -37,6 +37,7 @@ private:
                         uint32_t val) override;
     bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
                         uint32_t &val) override;
+    std::vector<int> get_active_dds() override;
 
     static constexpr uint8_t NDDS = 22;
     uint64_t m_cur_t;

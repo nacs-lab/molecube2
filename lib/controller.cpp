@@ -19,14 +19,32 @@
 #include "controller.h"
 
 #include <nacs-kernel/devctl.h>
+#include <nacs-utils/timer.h>
 
 #include <chrono>
+#include <iostream>
 
 namespace Molecube {
 
 Controller::Controller()
     : m_addr(Kernel::mapPulseCtrl())
 {
+    for (size_t i = 0; i < NDDS; i++) {
+        if (!dds_exists(i)) {
+            m_dds_exist[i] = false;
+            continue;
+        }
+        m_dds_exist[i] = true;
+        if (check_dds(i)) {
+            std::cerr << "DDS " << i << " initialized" << std::endl;
+        }
+        else {
+            dds_reset_pulse<false>(i);
+        }
+        dump_dds(std::cerr, i);
+    }
+    clear_error_pulse();
+    m_dds_check_time = getTime();
 }
 
 bool Controller::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
@@ -178,6 +196,17 @@ void Controller::dump_dds(std::ostream &stm, int chn)
         }
     }
     stm << "*******************************" << std::endl;
+}
+
+std::vector<int> Controller::get_active_dds()
+{
+    std::vector<int> res;
+    for (size_t i = 0; i < NDDS; i++) {
+        if (m_dds_exist[i]) {
+            res.push_back(i);
+        }
+    }
+    return res;
 }
 
 }

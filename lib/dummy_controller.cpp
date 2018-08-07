@@ -74,4 +74,12 @@ bool DummyController::concurrent_get(ReqOP op, uint32_t operand, bool is_overrid
     return false;
 }
 
+std::vector<int> DummyController::get_active_dds()
+{
+    std::vector<int> res(NDDS);
+    for (size_t i = 0; i < NDDS; i++)
+        res[i] = i;
+    return res;
+}
+
 }

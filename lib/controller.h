@@ -179,10 +179,9 @@ class Controller : public CtrlIFace {
         short_pulse<checked>(Bits::Wait | t, 0);
     }
     // clear timing check (clear failures)
-    template<bool checked>
     inline void clear_error_pulse()
     {
-        short_pulse<checked>(Bits::ClearErr, 0);
+        short_pulse<false>(Bits::ClearErr, 0);
     }
     template<bool checked>
     inline void dds_set_freq_pulse(int i, uint32_t ftw)
@@ -245,6 +244,8 @@ private:
                         uint32_t val) override;
     bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
                         uint32_t &val) override;
+    std::vector<int> get_active_dds() override;
+
     bool try_get_result(uint32_t &res);
     uint32_t get_result();
 
@@ -262,6 +263,8 @@ private:
     // Reinitialize is a complicated sequence and is rarely needed
     // so only do that after the sequence finishes.
     bool m_dds_pending_reset[NDDS] = {false};
+    bool m_dds_exist[NDDS] = {false};
+    uint64_t m_dds_check_time;
 };
 
 }
