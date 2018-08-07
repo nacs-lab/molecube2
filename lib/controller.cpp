@@ -149,4 +149,35 @@ bool Controller::check_dds(int chn)
     return true;
 }
 
+bool Controller::dds_exists(int chn)
+{
+    dds_set_2bytes_pulse<false>(chn, 0x68, 0);
+    dds_get_2bytes_pulse<false>(chn, 0x68);
+    dds_set_2bytes_pulse<false>(chn, 0x68, 1);
+    dds_get_2bytes_pulse<false>(chn, 0x68);
+    auto res0 = get_result();
+    auto res1 = get_result();
+    return res0 == 0 && res1 == 1;
+}
+
+void Controller::dump_dds(std::ostream &stm, int chn)
+{
+    stm << "*******************************" << std::endl;
+
+    for (unsigned addr = 0; addr + 3 <= 0x7f; addr += 4) {
+        dds_get_2bytes_pulse<false>(chn, addr);
+        dds_get_2bytes_pulse<false>(chn, addr + 2);
+        uint32_t u0 = get_result();
+        uint32_t u2 = get_result();
+        uint32_t u = ((u2 & 0xffff) << 16) | (u0 & 0xffff);
+
+        if (u) {
+            stm << "AD9914 board = " << chn << ", addr = 0x"
+                << std::hex << addr + 3 << "..." << addr
+                << " = 0x" << u << std::endl;
+        }
+    }
+    stm << "*******************************" << std::endl;
+}
+
 }

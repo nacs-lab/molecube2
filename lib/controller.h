@@ -24,6 +24,7 @@
 #include <nacs-utils/mem.h>
 
 #include <vector>
+#include <ostream>
 
 namespace Molecube {
 
@@ -236,16 +237,6 @@ class Controller : public CtrlIFace {
     {
         dds_get_4bytes_pulse<checked>(i, 0x2c);
     }
-
-    // Composite pulses
-    template<bool checked=false>
-    inline void dds_exists_pulse(int i)
-    {
-        dds_set_2bytes_pulse<checked>(i, 0x68, 0);
-        dds_get_2bytes_pulse<checked>(i, 0x68);
-        dds_set_2bytes_pulse<checked>(i, 0x68, 1);
-        dds_get_2bytes_pulse<checked>(i, 0x68);
-    }
 public:
     Controller();
 
@@ -259,6 +250,8 @@ private:
 
     void init_dds(int chn);
     bool check_dds(int chn);
+    bool dds_exists(int chn);
+    void dump_dds(std::ostream &stm, int chn);
 
     static constexpr uint8_t NDDS = 22;
     static constexpr uint32_t magic_bytes = 0xf00f0000;
