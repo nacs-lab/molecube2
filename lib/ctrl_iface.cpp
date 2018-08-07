@@ -208,6 +208,11 @@ NACS_EXPORT() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, std::function<void(
     send_get_cmd(op, chn, true, std::move(cb));
 }
 
+NACS_EXPORT() void CtrlIFace::reset_dds(int chn)
+{
+    send_cmd(ReqCmd{DDSReset, 0, 0, uint32_t(chn & ((1 << 26) - 1)), 0});
+}
+
 NACS_EXPORT() void CtrlIFace::set_clock(uint32_t val)
 {
     send_set_cmd(Clock, 0, false, val);

@@ -87,6 +87,7 @@ public:
         DDSFreq,
         DDSAmp,
         DDSPhase,
+        DDSReset,
         Clock
     };
 protected:
@@ -285,6 +286,7 @@ public:
 
     void get_dds(ReqOP op, int chn, std::function<void(uint32_t)> cb);
     void get_dds_ovr(ReqOP op, int chn, std::function<void(uint32_t)> cb);
+    void reset_dds(int chn);
 
     void set_clock(uint32_t val);
     void get_clock(std::function<void(uint32_t)> cb);
