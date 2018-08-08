@@ -54,23 +54,42 @@ public:
     }
     void dds_freq(uint8_t chn, uint32_t freq)
     {
+        if (unlikely(m_ctrl.m_dds_ovr[chn].freq != uint32_t(-1))) {
+            wait(50);
+            return;
+        }
         m_ctrl.dds_set_freq_pulse<true>(chn, freq);
     }
     void dds_amp(uint8_t chn, uint16_t amp)
     {
+        if (unlikely(m_ctrl.m_dds_ovr[chn].amp_enable)) {
+            wait(50);
+            return;
+        }
         m_ctrl.dds_set_amp_pulse<true>(chn, amp);
     }
     void dds_phase(uint8_t chn, uint16_t phase)
     {
+        if (unlikely(m_ctrl.m_dds_ovr[chn].phase_enable)) {
+            wait(50);
+            return;
+        }
         m_ctrl.m_dds_phase[chn] = phase;
         m_ctrl.dds_set_phase_pulse<true>(chn, phase);
     }
     void dds_detphase(uint8_t chn, uint16_t detphase)
     {
+        if (unlikely(m_ctrl.m_dds_ovr[chn].phase_enable)) {
+            wait(50);
+            return;
+        }
         dds_phase(chn, uint16_t(m_ctrl.m_dds_phase[chn] + detphase));
     }
     void dds_reset(uint8_t chn)
     {
+        m_ctrl.m_dds_ovr[chn].phase_enable = 0;
+        m_ctrl.m_dds_ovr[chn].amp_enable = 0;
+        m_ctrl.m_dds_ovr[chn].freq = -1;
         m_ctrl.dds_reset_pulse<true>(chn);
     }
     void dac(uint8_t chn, uint16_t V)

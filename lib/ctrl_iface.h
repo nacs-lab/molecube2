@@ -37,7 +37,7 @@ using namespace NaCs;
 
 struct DDSState {
     DDSState()
-        : freq(0),
+        : freq(-1),
           amp(0),
           amp_enable(0),
           phase_enable(0),
