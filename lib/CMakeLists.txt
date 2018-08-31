@@ -3,6 +3,7 @@
 set(libmolecube_SRCS
   ctrl_iface.cpp
   dummy_controller.cpp
+  pulser.cpp
   server.cpp)
 
 if(NOT DUMMY_BACKEND_ONLY)

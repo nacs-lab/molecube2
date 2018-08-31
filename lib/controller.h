@@ -25,7 +25,6 @@
 #include <nacs-utils/mem.h>
 
 #include <vector>
-#include <ostream>
 
 namespace Molecube {
 
@@ -46,13 +45,7 @@ private:
                         uint32_t &val) override;
     std::vector<int> get_active_dds() override;
 
-    bool try_get_result(uint32_t &res);
-    uint32_t get_result();
-
-    void init_dds(int chn);
     bool check_dds(int chn);
-    bool dds_exists(int chn);
-    void dump_dds(std::ostream &stm, int chn);
 
     static constexpr uint8_t NDDS = 22;
     static constexpr uint32_t magic_bytes = 0xf00f0000;

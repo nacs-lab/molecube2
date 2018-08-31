@@ -21,9 +21,18 @@
 
 #include <nacs-utils/mem.h>
 
+#include <assert.h>
+
+#include <ostream>
+
 namespace Molecube {
 
-struct Pulser {
+using namespace NaCs;
+
+/**
+ * This class contains the stateless functions to communicate with the FPGA
+ */
+class Pulser {
     Pulser(const Pulser&) = delete;
     void operator=(const Pulser&) = delete;
     inline uint32_t read(uint32_t reg) const
@@ -54,6 +63,7 @@ struct Pulser {
         };
     };
 
+public:
     // Read
     inline uint32_t ttl_himask() const
     {
@@ -231,11 +241,19 @@ struct Pulser {
     {
         dds_get_4bytes_pulse<checked>(i, 0x2c);
     }
-public:
     Pulser(volatile void *const addr)
         : m_addr(addr)
     {}
+
+    bool try_get_result(uint32_t &res);
+    uint32_t get_result();
+
+    void init_dds(int chn);
+    bool dds_exists(int chn);
+    void dump_dds(std::ostream &stm, int chn);
+
 private:
+    static constexpr uint32_t magic_bytes = 0xf00f0000;
     volatile void *const m_addr;
 };
 
