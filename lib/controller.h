@@ -28,7 +28,7 @@
 
 namespace Molecube {
 
-class Controller : public CtrlIFace, Pulser {
+class Controller : public CtrlIFace {
     Controller(const Controller&) = delete;
     void operator=(const Controller&) = delete;
 
@@ -48,8 +48,8 @@ private:
     bool check_dds(int chn);
 
     static constexpr uint8_t NDDS = 22;
-    static constexpr uint32_t magic_bytes = 0xf00f0000;
 
+    Pulser m_p;
     DDSState m_dds_ovr[NDDS];
     uint16_t m_dds_phase[NDDS] = {0};
     // Reinitialize is a complicated sequence and is rarely needed

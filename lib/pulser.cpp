@@ -45,50 +45,50 @@ void Pulser::init_dds(int chn)
 {
     using namespace std::literals;
 
-    dds_reset_pulse<false>(chn);
+    dds_reset<false>(chn);
 
     // calibrate internal timing.  required at power-up
-    dds_set_2bytes_pulse<false>(chn, 0x0e, 0x0105);
+    dds_set_2bytes<false>(chn, 0x0e, 0x0105);
     std::this_thread::sleep_for(1ms);
     // finish cal. disble sync_out
-    dds_set_2bytes_pulse<false>(chn, 0x0e, 0x0405);
+    dds_set_2bytes<false>(chn, 0x0e, 0x0405);
 
     // enable programmable modulus and profile 0, enable SYNC_CLK output
-    // dds_set_2bytes_pulse<false>(chn, 0x05, 0x8d0b);
+    // dds_set_2bytes<false>(chn, 0x05, 0x8d0b);
 
     // disable programmable modulus, enable profile 0,
     // enable SYNC_CLK output
-    // dds_set_2bytes_pulse<false>(chn, 0x05, 0x8009);
+    // dds_set_2bytes<false>(chn, 0x05, 0x8009);
 
     // disable ramp & programmable modulus, enable profile 0,
     // disable SYNC_CLK output
-    // dds_set_2bytes_pulse<false>(chn, 0x05, 0x8001);
+    // dds_set_2bytes<false>(chn, 0x05, 0x8001);
 
     // disable SYNC_CLK output
-    dds_set_2bytes_pulse<false>(chn, 0x04, 0x0100);
+    dds_set_2bytes<false>(chn, 0x04, 0x0100);
 
     // enable ramp, enable programmable modulus, disable profile mode
-    // dds_set_2bytes_pulse<false>(chn, 0x06, 0x0009);
+    // dds_set_2bytes<false>(chn, 0x06, 0x0009);
 
     // disable ramp, disable programmable modulus, enable profile mode
-    dds_set_2bytes_pulse<false>(chn, 0x06, 0x0080);
+    dds_set_2bytes<false>(chn, 0x06, 0x0080);
 
     // enable amplitude control (OSK)
-    dds_set_2bytes_pulse<false>(chn, 0x0, 0x0308);
+    dds_set_2bytes<false>(chn, 0x0, 0x0308);
 
     // zero-out all other memory
     for (unsigned addr = 0x10;addr <= 0x6a;addr += 2)
-        dds_set_2bytes_pulse<false>(chn, addr, 0x0);
+        dds_set_2bytes<false>(chn, addr, 0x0);
 
-    dds_set_4bytes_pulse<false>(chn, 0x64, magic_bytes);
+    dds_set_4bytes<false>(chn, 0x64, magic_bytes);
 }
 
 bool Pulser::dds_exists(int chn)
 {
-    dds_set_2bytes_pulse<false>(chn, 0x68, 0);
-    dds_get_2bytes_pulse<false>(chn, 0x68);
-    dds_set_2bytes_pulse<false>(chn, 0x68, 1);
-    dds_get_2bytes_pulse<false>(chn, 0x68);
+    dds_set_2bytes<false>(chn, 0x68, 0);
+    dds_get_2bytes<false>(chn, 0x68);
+    dds_set_2bytes<false>(chn, 0x68, 1);
+    dds_get_2bytes<false>(chn, 0x68);
     auto res0 = get_result();
     auto res1 = get_result();
     return res0 == 0 && res1 == 1;
@@ -99,8 +99,8 @@ void Pulser::dump_dds(std::ostream &stm, int chn)
     stm << "*******************************" << std::endl;
 
     for (unsigned addr = 0; addr + 3 <= 0x7f; addr += 4) {
-        dds_get_2bytes_pulse<false>(chn, addr);
-        dds_get_2bytes_pulse<false>(chn, addr + 2);
+        dds_get_2bytes<false>(chn, addr);
+        dds_get_2bytes<false>(chn, addr + 2);
         uint32_t u0 = get_result();
         uint32_t u2 = get_result();
         uint32_t u = ((u2 & 0xffff) << 16) | (u0 & 0xffff);
@@ -112,6 +112,21 @@ void Pulser::dump_dds(std::ostream &stm, int chn)
         }
     }
     stm << "*******************************" << std::endl;
+}
+
+bool Pulser::check_dds(int chn, bool force)
+{
+    if (!force) {
+        // Check if magic bytes have been set (profile 7, FTW) which is
+        // otherwise not used.  If already set, the board has been initialized
+        // and doesn't need another init.  This avoids reboot-induced glitches.
+        dds_get_4bytes<false>(chn, 0x64);
+        if (get_result() == magic_bytes) {
+            return false;
+        }
+    }
+    init_dds(chn);
+    return true;
 }
 
 }

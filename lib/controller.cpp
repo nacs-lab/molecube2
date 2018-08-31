@@ -32,7 +32,7 @@ public:
         : m_ctrl(ctrl),
           m_ttlmask(ttlmask)
     {
-        m_ttl = ctrl.cur_ttl();
+        m_ttl = ctrl.m_p.cur_ttl();
         m_preserve_ttl = (~ttlmask) & m_ttl;
     }
     void ttl1(uint8_t chn, bool val, uint64_t t)
@@ -44,10 +44,10 @@ public:
         ttl = ttl | m_preserve_ttl;
         if (t <= 1000) {
             // 10us
-            m_ctrl.short_pulse<true>((uint32_t)t, ttl);
+            m_ctrl.m_p.ttl<true>(ttl, (uint32_t)t);
         }
         else {
-            m_ctrl.short_pulse<true>(100, ttl);
+            m_ctrl.m_p.ttl<true>(ttl, 100);
             wait(t - 100);
         }
         m_ttl = ttl;
@@ -58,7 +58,7 @@ public:
             wait(50);
             return;
         }
-        m_ctrl.dds_set_freq_pulse<true>(chn, freq);
+        m_ctrl.m_p.dds_set_freq<true>(chn, freq);
     }
     void dds_amp(uint8_t chn, uint16_t amp)
     {
@@ -66,7 +66,7 @@ public:
             wait(50);
             return;
         }
-        m_ctrl.dds_set_amp_pulse<true>(chn, amp);
+        m_ctrl.m_p.dds_set_amp<true>(chn, amp);
     }
     void dds_phase(uint8_t chn, uint16_t phase)
     {
@@ -75,7 +75,7 @@ public:
             return;
         }
         m_ctrl.m_dds_phase[chn] = phase;
-        m_ctrl.dds_set_phase_pulse<true>(chn, phase);
+        m_ctrl.m_p.dds_set_phase<true>(chn, phase);
     }
     void dds_detphase(uint8_t chn, uint16_t detphase)
     {
@@ -90,11 +90,11 @@ public:
         m_ctrl.m_dds_ovr[chn].phase_enable = 0;
         m_ctrl.m_dds_ovr[chn].amp_enable = 0;
         m_ctrl.m_dds_ovr[chn].freq = -1;
-        m_ctrl.dds_reset_pulse<true>(chn);
+        m_ctrl.m_p.dds_reset<true>(chn);
     }
     void dac(uint8_t chn, uint16_t V)
     {
-        m_ctrl.dac_pulse<true>(chn, V);
+        m_ctrl.m_p.dac<true>(chn, V);
     }
     void wait(uint64_t t)
     {
@@ -102,7 +102,7 @@ public:
     }
     void clock(uint8_t period)
     {
-        m_ctrl.clock_pulse<true>(period);
+        m_ctrl.m_p.clock<true>(period);
     }
 
 private:
@@ -113,10 +113,10 @@ private:
 };
 
 Controller::Controller()
-    : Pulser(Kernel::mapPulseCtrl())
+    : m_p(Kernel::mapPulseCtrl())
 {
     for (size_t i = 0; i < NDDS; i++) {
-        if (!dds_exists(i)) {
+        if (!m_p.dds_exists(i)) {
             m_dds_exist[i] = false;
             continue;
         }
@@ -125,11 +125,11 @@ Controller::Controller()
             std::cerr << "DDS " << i << " initialized" << std::endl;
         }
         else {
-            dds_reset_pulse<false>(i);
+            m_p.dds_reset<false>(i);
         }
-        dump_dds(std::cerr, i);
+        m_p.dump_dds(std::cerr, i);
     }
-    clear_error_pulse();
+    m_p.clear_error();
     m_dds_check_time = getTime();
 }
 
@@ -141,11 +141,11 @@ bool Controller::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
     if (!is_override)
         return false;
     if (operand == 0) {
-        set_ttl_lomask(val);
+        m_p.set_ttl_lomask(val);
         return true;
     }
     else if (operand == 1) {
-        set_ttl_himask(val);
+        m_p.set_ttl_himask(val);
         return true;
     }
     return false;
@@ -155,7 +155,7 @@ bool Controller::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
                                 uint32_t &val)
 {
     if (op == Clock) {
-        val = cur_clock();
+        val = m_p.cur_clock();
         return false;
     }
     if (op != TTL)
@@ -163,15 +163,15 @@ bool Controller::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
     if (!is_override) {
         if (operand != 0)
             return false;
-        val = (cur_ttl() | ttl_himask()) & ~ttl_lomask();
+        val = (m_p.cur_ttl() | m_p.ttl_himask()) & ~m_p.ttl_lomask();
         return true;
     }
     if (operand == 0) {
-        val = ttl_lomask();
+        val = m_p.ttl_lomask();
         return true;
     }
     else if (operand == 1) {
-        val = ttl_himask();
+        val = m_p.ttl_himask();
         return true;
     }
     return false;
@@ -179,18 +179,9 @@ bool Controller::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
 
 bool Controller::check_dds(int chn)
 {
-    if (!m_dds_pending_reset[chn]) {
-        // Check if magic bytes have been set (profile 7, FTW) which is
-        // otherwise not used.  If already set, the board has been initialized
-        // and doesn't need another init.  This avoids reboot-induced glitches.
-        dds_get_4bytes_pulse<false>(chn, 0x64);
-        if (get_result() == magic_bytes) {
-            return false;
-        }
-    }
-    init_dds(chn);
+    auto res = m_p.check_dds(chn, m_dds_pending_reset[chn]);
     m_dds_pending_reset[chn] = false;
-    return true;
+    return res;
 }
 
 std::vector<int> Controller::get_active_dds()

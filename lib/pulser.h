@@ -128,7 +128,7 @@ public:
 
     // Pulses
     template<bool checked>
-    inline void short_pulse(uint32_t ctrl, uint32_t op)
+    inline void pulse(uint32_t ctrl, uint32_t op)
     {
         if (checked)
             ctrl = ctrl | Bits::TimeCheck;
@@ -136,110 +136,110 @@ public:
         write(31, ctrl);
     }
     template<bool checked>
-    inline void ttl_pulse(uint32_t ttl, uint32_t t)
+    inline void ttl(uint32_t ttl, uint32_t t)
     {
         assert(t < (1 << 24));
-        short_pulse<checked>(t, ttl);
+        pulse<checked>(t, ttl);
     }
     template<bool checked>
-    inline void clock_pulse(uint8_t div)
+    inline void clock(uint8_t div)
     {
-        short_pulse<checked>(Bits::ClockOut, div & 0xff);
+        pulse<checked>(Bits::ClockOut, div & 0xff);
     }
     template<bool checked>
-    inline void spi_pulse(uint8_t clk_div, uint8_t spi_id, uint32_t data)
+    inline void spi(uint8_t clk_div, uint8_t spi_id, uint32_t data)
     {
         uint32_t opcode = ((uint32_t(spi_id & 3) << 11) | clk_div);
-        short_pulse<checked>(opcode | Bits::SPI, data);
+        pulse<checked>(opcode | Bits::SPI, data);
     }
     template<bool checked>
-    inline void dac_pulse(uint8_t dac, uint16_t V)
+    inline void dac(uint8_t dac, uint16_t V)
     {
-        spi_pulse<checked>(0, 0, ((dac & 3) << 16) | V);
+        spi<checked>(0, 0, ((dac & 3) << 16) | V);
     }
     template<bool checked>
-    inline void dds_pulse(uint32_t ctrl, uint32_t op)
+    inline void dds(uint32_t ctrl, uint32_t op)
     {
-        short_pulse<checked>(Bits::DDS | ctrl, op);
+        pulse<checked>(Bits::DDS | ctrl, op);
     }
     // set bytes at addr + 1 and addr
     template<bool checked>
-    inline void dds_set_2bytes_pulse(int i, uint32_t addr, uint32_t data)
+    inline void dds_set_2bytes(int i, uint32_t addr, uint32_t data)
     {
         // put addr in bits 15...9 (maps to DDS opcode_reg[14:9])?
         // put data in bits 15...0 (maps to DDS operand_reg[15:0])?
-        dds_pulse<checked>(0x2 | (i << 4) | (((addr + 1) & 0x7f) << 9), data & 0xffff);
+        dds<checked>(0x2 | (i << 4) | (((addr + 1) & 0x7f) << 9), data & 0xffff);
     }
     // set bytes addr + 3 ... addr
     template<bool checked>
-    inline void dds_set_4bytes_pulse(int i, uint32_t addr, uint32_t data)
+    inline void dds_set_4bytes(int i, uint32_t addr, uint32_t data)
     {
         // put addr in bits 15...9 (maps to DDS opcode_reg[14:9])?
-        dds_pulse<checked>(0xf | (i << 4) | (((addr + 1) & 0x7f) << 9), data);
+        dds<checked>(0xf | (i << 4) | (((addr + 1) & 0x7f) << 9), data);
     }
     template<bool checked>
-    inline void wait_pulse(uint32_t t)
+    inline void wait(uint32_t t)
     {
         assert(t < (1 << 24));
-        short_pulse<checked>(Bits::Wait | t, 0);
+        pulse<checked>(Bits::Wait | t, 0);
     }
     // clear timing check (clear failures)
-    inline void clear_error_pulse()
+    inline void clear_error()
     {
-        short_pulse<false>(Bits::ClearErr, 0);
+        pulse<false>(Bits::ClearErr, 0);
     }
     template<bool checked>
-    inline void dds_set_freq_pulse(int i, uint32_t ftw)
+    inline void dds_set_freq(int i, uint32_t ftw)
     {
-        return dds_pulse<checked>(i << 4, ftw);
+        return dds<checked>(i << 4, ftw);
     }
     template<bool checked>
-    inline void dds_set_amp_pulse(int i, uint16_t amp)
+    inline void dds_set_amp(int i, uint16_t amp)
     {
-        return dds_set_2bytes_pulse<checked>(i, 0x32, amp);
+        return dds_set_2bytes<checked>(i, 0x32, amp);
     }
     template<bool checked>
-    inline void dds_set_phase_pulse(int i, uint16_t phase)
+    inline void dds_set_phase(int i, uint16_t phase)
     {
-        return dds_set_2bytes_pulse<checked>(i, 0x30, phase);
+        return dds_set_2bytes<checked>(i, 0x30, phase);
     }
     template<bool checked>
-    inline void dds_reset_pulse(int i)
+    inline void dds_reset(int i)
     {
-        return dds_pulse<checked>(0x4 | (i << 4), 0);
+        return dds<checked>(0x4 | (i << 4), 0);
     }
 
     // Pulses with results
     // clear timing check (clear failures)
     template<bool checked>
-    inline void loopback_pulse(uint32_t data)
+    inline void loopback(uint32_t data)
     {
-        short_pulse<checked>(Bits::LoopBack, data);
+        pulse<checked>(Bits::LoopBack, data);
     }
     template<bool checked>
-    inline void dds_get_2bytes_pulse(int i, uint32_t addr)
+    inline void dds_get_2bytes(int i, uint32_t addr)
     {
-        dds_pulse<checked>(0x3 | (i << 4) | ((addr + 1) << 9), 0);
+        dds<checked>(0x3 | (i << 4) | ((addr + 1) << 9), 0);
     }
     template<bool checked>
-    inline void dds_get_4bytes_pulse(int i, uint32_t addr)
+    inline void dds_get_4bytes(int i, uint32_t addr)
     {
-        dds_pulse<checked>(0xe | (i << 4) | ((addr + 1) << 9), 0);
+        dds<checked>(0xe | (i << 4) | ((addr + 1) << 9), 0);
     }
     template<bool checked>
-    inline void dds_get_phase_pulse(int i)
+    inline void dds_get_phase(int i)
     {
-        dds_get_2bytes_pulse<checked>(i, 0x30);
+        dds_get_2bytes<checked>(i, 0x30);
     }
     template<bool checked>
-    inline void dds_get_amp_pulse(int i)
+    inline void dds_get_amp(int i)
     {
-        dds_get_2bytes_pulse<checked>(i, 0x32);
+        dds_get_2bytes<checked>(i, 0x32);
     }
     template<bool checked>
-    inline void dds_get_freq_pulse(int i)
+    inline void dds_get_freq(int i)
     {
-        dds_get_4bytes_pulse<checked>(i, 0x2c);
+        dds_get_4bytes<checked>(i, 0x2c);
     }
     Pulser(volatile void *const addr)
         : m_addr(addr)
@@ -249,6 +249,7 @@ public:
     uint32_t get_result();
 
     void init_dds(int chn);
+    bool check_dds(int chn, bool force);
     bool dds_exists(int chn);
     void dump_dds(std::ostream &stm, int chn);
 
