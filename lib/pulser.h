@@ -35,6 +35,7 @@ using namespace NaCs;
 class Pulser {
     Pulser(const Pulser&) = delete;
     void operator=(const Pulser&) = delete;
+    // Read and write pulse controller registers.
     inline uint32_t read(uint32_t reg) const
     {
         return Mem::read<uint32_t>(m_addr, reg);
@@ -245,12 +246,22 @@ public:
         : m_addr(addr)
     {}
 
+    // Read a result if one is available. Return whether a result is returned in `res`.
     bool try_get_result(uint32_t &res);
+    // Wait for a result to be available and return it.
     uint32_t get_result();
 
+    // Initialize a dds channel. Including initializing the right mode,
+    // clearing unused registers and setting the magic bytes which we'll check later.
     void init_dds(int chn);
+    // Check if the DDS is in good shape.
+    // If the magic bytes isn't set or if `force` is `true`,
+    // (re)initialize the DDS channel. Returns whether a initialization is done.
     bool check_dds(int chn, bool force);
+    // Check if the DDS exists
+    // (by flip/flopping a register and see if the DDS responses correctly)
     bool dds_exists(int chn);
+    // Print all the non-zero word (4-bytes) in the DDS memory.
     void dump_dds(std::ostream &stm, int chn);
 
 private:

@@ -99,13 +99,8 @@ void Pulser::dump_dds(std::ostream &stm, int chn)
     stm << "*******************************" << std::endl;
 
     for (unsigned addr = 0; addr + 3 <= 0x7f; addr += 4) {
-        dds_get_2bytes<false>(chn, addr);
-        dds_get_2bytes<false>(chn, addr + 2);
-        uint32_t u0 = get_result();
-        uint32_t u2 = get_result();
-        uint32_t u = ((u2 & 0xffff) << 16) | (u0 & 0xffff);
-
-        if (u) {
+        dds_get_4bytes<false>(chn, addr);
+        if (uint32_t u = get_result()) {
             stm << "AD9914 board = " << chn << ", addr = 0x"
                 << std::hex << addr + 3 << "..." << addr
                 << " = 0x" << u << std::endl;
