@@ -78,7 +78,7 @@ std::vector<int> DummyController::get_active_dds()
 {
     std::vector<int> res(NDDS);
     for (size_t i = 0; i < NDDS; i++)
-        res[i] = i;
+        res[i] = int(i);
     return res;
 }
 
