@@ -18,7 +18,6 @@
 
 #include "controller.h"
 
-#include <nacs-kernel/devctl.h>
 #include <nacs-utils/timer.h>
 
 #include <chrono>
@@ -113,9 +112,9 @@ private:
 };
 
 Controller::Controller()
-    : m_p(Kernel::mapPulseCtrl())
+    : m_p(Pulser::address())
 {
-    for (size_t i = 0; i < NDDS; i++) {
+    for (int i = 0; i < NDDS; i++) {
         if (!m_p.dds_exists(i)) {
             m_dds_exist[i] = false;
             continue;
@@ -187,7 +186,7 @@ bool Controller::check_dds(int chn)
 std::vector<int> Controller::get_active_dds()
 {
     std::vector<int> res;
-    for (size_t i = 0; i < NDDS; i++) {
+    for (int i = 0; i < NDDS; i++) {
         if (m_dds_exist[i]) {
             res.push_back(i);
         }

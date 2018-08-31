@@ -264,6 +264,8 @@ public:
     // Print all the non-zero word (4-bytes) in the DDS memory.
     void dump_dds(std::ostream &stm, int chn);
 
+    static void *address();
+
 private:
     static constexpr uint32_t magic_bytes = 0xf00f0000;
     volatile void *const m_addr;

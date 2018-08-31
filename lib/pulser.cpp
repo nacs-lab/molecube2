@@ -21,7 +21,26 @@
 #include <chrono>
 #include <thread>
 
+#if __has_include(<nacs-kernel/devctl.h>)
+#  include <nacs-kernel/devctl.h>
+#  define NACS_KERNEL_ENABLED 1
+#else
+#  define NACS_KERNEL_ENABLED 0
+#endif
+
 namespace Molecube {
+
+#if NACS_KERNEL_ENABLED
+NACS_PROTECTED() void *Pulser::address()
+{
+    return Kernel::mapPulseCtrl();
+}
+#else
+NACS_PROTECTED() void *Pulser::address()
+{
+    return nullptr;
+}
+#endif
 
 NACS_PROTECTED() bool Pulser::try_get_result(uint32_t &res)
 {

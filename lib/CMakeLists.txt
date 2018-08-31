@@ -1,16 +1,11 @@
 #
 
 set(libmolecube_SRCS
+  controller.cpp
   ctrl_iface.cpp
   dummy_controller.cpp
   pulser.cpp
   server.cpp)
-
-if(NOT DUMMY_BACKEND_ONLY)
-  set(libmolecube_SRCS
-    ${libmolecube_SRCS}
-    controller.cpp)
-endif()
 
 add_library(libmolecube SHARED ${libmolecube_SRCS})
 
