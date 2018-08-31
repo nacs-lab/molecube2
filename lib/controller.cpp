@@ -113,7 +113,7 @@ private:
 };
 
 Controller::Controller()
-    : m_addr(Kernel::mapPulseCtrl())
+    : Pulser(Kernel::mapPulseCtrl())
 {
     for (size_t i = 0; i < NDDS; i++) {
         if (!dds_exists(i)) {
