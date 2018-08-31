@@ -94,7 +94,7 @@ void CtrlIFace::finish_cmd()
     m_cmd_queue.forward_filter();
 }
 
-NACS_EXPORT() uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns,
+NACS_PROTECTED() uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns,
                                             uint32_t ttl_mask,
                                             const uint8_t *code, size_t code_len,
                                             std::unique_ptr<ReqSeqNotify> notify,
@@ -149,81 +149,81 @@ void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
                 operand & ((1 << 26) - 1), 0});
 }
 
-NACS_EXPORT() void CtrlIFace::set_ttl(int chn, bool val)
+NACS_PROTECTED() void CtrlIFace::set_ttl(int chn, bool val)
 {
     send_set_cmd(TTL, uint32_t(chn), false, val);
 }
 
-NACS_EXPORT() void CtrlIFace::set_ttl_all(uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_ttl_all(uint32_t val)
 {
     send_set_cmd(TTL, uint32_t(-1), false, val);
 }
 
-NACS_EXPORT() void CtrlIFace::set_ttl_ovrhi(uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_ttl_ovrhi(uint32_t val)
 {
     send_set_cmd(TTL, 1, true, val);
 }
 
-NACS_EXPORT() void CtrlIFace::set_ttl_ovrlo(uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_ttl_ovrlo(uint32_t val)
 {
     send_set_cmd(TTL, 0, true, val);
 }
 
-NACS_EXPORT() void CtrlIFace::get_ttl(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_ttl(std::function<void(uint32_t)> cb)
 {
     send_get_cmd(TTL, 0, false, std::move(cb));
 }
 
-NACS_EXPORT() void CtrlIFace::get_ttl_ovrhi(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_ttl_ovrhi(std::function<void(uint32_t)> cb)
 {
     send_get_cmd(TTL, 1, true, std::move(cb));
 }
 
-NACS_EXPORT() void CtrlIFace::get_ttl_ovrlo(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_ttl_ovrlo(std::function<void(uint32_t)> cb)
 {
     send_get_cmd(TTL, 0, true, std::move(cb));
 }
 
-NACS_EXPORT() void CtrlIFace::set_dds(ReqOP op, int chn, uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_dds(ReqOP op, int chn, uint32_t val)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_set_cmd(op, chn, false, val);
 }
 
-NACS_EXPORT() void CtrlIFace::set_dds_ovr(ReqOP op, int chn, uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_dds_ovr(ReqOP op, int chn, uint32_t val)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_set_cmd(op, chn, true, val);
 }
 
-NACS_EXPORT() void CtrlIFace::get_dds(ReqOP op, int chn, std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_dds(ReqOP op, int chn, std::function<void(uint32_t)> cb)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_get_cmd(op, chn, false, std::move(cb));
 }
 
-NACS_EXPORT() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, std::function<void(uint32_t)> cb)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_get_cmd(op, chn, true, std::move(cb));
 }
 
-NACS_EXPORT() void CtrlIFace::reset_dds(int chn)
+NACS_PROTECTED() void CtrlIFace::reset_dds(int chn)
 {
     send_cmd(ReqCmd{DDSReset, 0, 0, uint32_t(chn & ((1 << 26) - 1)), 0});
 }
 
-NACS_EXPORT() void CtrlIFace::set_clock(uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_clock(uint32_t val)
 {
     send_set_cmd(Clock, 0, false, val);
 }
 
-NACS_EXPORT() void CtrlIFace::get_clock(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_clock(std::function<void(uint32_t)> cb)
 {
     send_get_cmd(Clock, 0, false, std::move(cb));
 }
 
-NACS_EXPORT() void CtrlIFace::quit()
+NACS_PROTECTED() void CtrlIFace::quit()
 {
     {
         // The lock here is overkill. However, the wait already needs a lock and we
@@ -234,7 +234,7 @@ NACS_EXPORT() void CtrlIFace::quit()
     m_ftend_evt.notify_all();
 }
 
-NACS_EXPORT() void CtrlIFace::run_frontend()
+NACS_PROTECTED() void CtrlIFace::run_frontend()
 {
     readEvent(m_bkend_evt);
     auto run_callbacks = [&] (auto seq) {

@@ -23,7 +23,7 @@
 
 namespace Molecube {
 
-bool Pulser::try_get_result(uint32_t &res)
+NACS_PROTECTED() bool Pulser::try_get_result(uint32_t &res)
 {
     if (!num_results())
         return false;
@@ -31,7 +31,7 @@ bool Pulser::try_get_result(uint32_t &res)
     return true;
 }
 
-uint32_t Pulser::get_result()
+NACS_PROTECTED() uint32_t Pulser::get_result()
 {
     // Used in cases where we don't care about the performance
     // of the calling thread too much.
@@ -41,7 +41,7 @@ uint32_t Pulser::get_result()
     return res;
 }
 
-void Pulser::init_dds(int chn)
+NACS_PROTECTED() void Pulser::init_dds(int chn)
 {
     using namespace std::literals;
 
@@ -83,7 +83,7 @@ void Pulser::init_dds(int chn)
     dds_set_4bytes<false>(chn, 0x64, magic_bytes);
 }
 
-bool Pulser::dds_exists(int chn)
+NACS_PROTECTED() bool Pulser::dds_exists(int chn)
 {
     dds_set_2bytes<false>(chn, 0x68, 0);
     dds_get_2bytes<false>(chn, 0x68);
@@ -94,7 +94,7 @@ bool Pulser::dds_exists(int chn)
     return res0 == 0 && res1 == 1;
 }
 
-void Pulser::dump_dds(std::ostream &stm, int chn)
+NACS_PROTECTED() void Pulser::dump_dds(std::ostream &stm, int chn)
 {
     stm << "*******************************" << std::endl;
 
@@ -109,7 +109,7 @@ void Pulser::dump_dds(std::ostream &stm, int chn)
     stm << "*******************************" << std::endl;
 }
 
-bool Pulser::check_dds(int chn, bool force)
+NACS_PROTECTED() bool Pulser::check_dds(int chn, bool force)
 {
     if (!force) {
         // Check if magic bytes have been set (profile 7, FTW) which is
