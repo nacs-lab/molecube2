@@ -63,6 +63,51 @@ class Pulser {
             TimeCheck = 0x8000000,
         };
     };
+    // Internal pulses
+    template<bool checked>
+    inline void pulse(uint32_t ctrl, uint32_t op)
+    {
+        if (checked)
+            ctrl = ctrl | Bits::TimeCheck;
+        write(31, op);
+        write(31, ctrl);
+    }
+    template<bool checked>
+    inline void spi(uint8_t clk_div, uint8_t spi_id, uint32_t data)
+    {
+        uint32_t opcode = ((uint32_t(spi_id & 3) << 11) | clk_div);
+        pulse<checked>(opcode | Bits::SPI, data);
+    }
+    template<bool checked>
+    inline void dds(uint32_t ctrl, uint32_t op)
+    {
+        pulse<checked>(Bits::DDS | ctrl, op);
+    }
+    // set bytes at addr + 1 and addr
+    template<bool checked>
+    inline void dds_set_2bytes(int i, uint32_t addr, uint32_t data)
+    {
+        // put addr in bits 15...9 (maps to DDS opcode_reg[14:9])?
+        // put data in bits 15...0 (maps to DDS operand_reg[15:0])?
+        dds<checked>(0x2 | (i << 4) | (((addr + 1) & 0x7f) << 9), data & 0xffff);
+    }
+    // set bytes addr + 3 ... addr
+    template<bool checked>
+    inline void dds_set_4bytes(int i, uint32_t addr, uint32_t data)
+    {
+        // put addr in bits 15...9 (maps to DDS opcode_reg[14:9])?
+        dds<checked>(0xf | (i << 4) | (((addr + 1) & 0x7f) << 9), data);
+    }
+    template<bool checked>
+    inline void dds_get_2bytes(int i, uint32_t addr)
+    {
+        dds<checked>(0x3 | (i << 4) | ((addr + 1) << 9), 0);
+    }
+    template<bool checked>
+    inline void dds_get_4bytes(int i, uint32_t addr)
+    {
+        dds<checked>(0xe | (i << 4) | ((addr + 1) << 9), 0);
+    }
 
 public:
     // Read
@@ -129,14 +174,6 @@ public:
 
     // Pulses
     template<bool checked>
-    inline void pulse(uint32_t ctrl, uint32_t op)
-    {
-        if (checked)
-            ctrl = ctrl | Bits::TimeCheck;
-        write(31, op);
-        write(31, ctrl);
-    }
-    template<bool checked>
     inline void ttl(uint32_t ttl, uint32_t t)
     {
         assert(t < (1 << 24));
@@ -148,35 +185,9 @@ public:
         pulse<checked>(Bits::ClockOut, div & 0xff);
     }
     template<bool checked>
-    inline void spi(uint8_t clk_div, uint8_t spi_id, uint32_t data)
-    {
-        uint32_t opcode = ((uint32_t(spi_id & 3) << 11) | clk_div);
-        pulse<checked>(opcode | Bits::SPI, data);
-    }
-    template<bool checked>
     inline void dac(uint8_t dac, uint16_t V)
     {
         spi<checked>(0, 0, ((dac & 3) << 16) | V);
-    }
-    template<bool checked>
-    inline void dds(uint32_t ctrl, uint32_t op)
-    {
-        pulse<checked>(Bits::DDS | ctrl, op);
-    }
-    // set bytes at addr + 1 and addr
-    template<bool checked>
-    inline void dds_set_2bytes(int i, uint32_t addr, uint32_t data)
-    {
-        // put addr in bits 15...9 (maps to DDS opcode_reg[14:9])?
-        // put data in bits 15...0 (maps to DDS operand_reg[15:0])?
-        dds<checked>(0x2 | (i << 4) | (((addr + 1) & 0x7f) << 9), data & 0xffff);
-    }
-    // set bytes addr + 3 ... addr
-    template<bool checked>
-    inline void dds_set_4bytes(int i, uint32_t addr, uint32_t data)
-    {
-        // put addr in bits 15...9 (maps to DDS opcode_reg[14:9])?
-        dds<checked>(0xf | (i << 4) | (((addr + 1) & 0x7f) << 9), data);
     }
     template<bool checked>
     inline void wait(uint32_t t)
@@ -216,16 +227,6 @@ public:
     inline void loopback(uint32_t data)
     {
         pulse<checked>(Bits::LoopBack, data);
-    }
-    template<bool checked>
-    inline void dds_get_2bytes(int i, uint32_t addr)
-    {
-        dds<checked>(0x3 | (i << 4) | ((addr + 1) << 9), 0);
-    }
-    template<bool checked>
-    inline void dds_get_4bytes(int i, uint32_t addr)
-    {
-        dds<checked>(0xe | (i << 4) | ((addr + 1) << 9), 0);
     }
     template<bool checked>
     inline void dds_get_phase(int i)
