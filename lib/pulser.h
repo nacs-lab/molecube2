@@ -63,6 +63,15 @@ class Pulser {
             TimeCheck = 0x8000000,
         };
     };
+    inline uint32_t pop_result() const
+    {
+        return read(31);
+    }
+    inline uint32_t num_results() const
+    {
+        return (read(2) & Bits::NumRes) >> 4;
+    }
+
     // Internal pulses
     template<bool checked>
     inline void pulse(uint32_t ctrl, uint32_t op)
@@ -127,10 +136,6 @@ public:
     {
         return read(2) & Bits::Finished;
     }
-    inline uint32_t num_results() const
-    {
-        return (read(2) & Bits::NumRes) >> 4;
-    }
     inline uint32_t cur_ttl() const
     {
         return read(4);
@@ -138,10 +143,6 @@ public:
     inline uint8_t cur_clock() const
     {
         return (uint8_t)read(5);
-    }
-    inline uint32_t pop_result() const
-    {
-        return read(31);
     }
 
     // Write
