@@ -92,6 +92,9 @@ class Pulser {
     {
         pulse<checked>(Bits::DDS | ctrl, op);
     }
+
+public:
+    // Public functions that are not exposed by the dummy pulser.
     // set bytes at addr + 1 and addr
     template<bool checked>
     inline void dds_set_2bytes(int i, uint32_t addr, uint32_t data)
@@ -118,7 +121,6 @@ class Pulser {
         dds<checked>(0xe | (i << 4) | ((addr + 1) << 9), 0);
     }
 
-public:
     // Read
     inline uint32_t ttl_himask() const
     {
