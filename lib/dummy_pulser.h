@@ -81,6 +81,10 @@ public:
     {
         return m_ttl_lo.load(std::memory_order_acquire);
     }
+    inline bool timing_ok() const
+    {
+        return m_timing_ok;
+    }
     inline bool is_finished() const
     {
         return m_cmds_empty.load(std::memory_order_acquire);
@@ -106,6 +110,16 @@ public:
     inline void set_ttl_lomask(uint32_t low_mask)
     {
         m_ttl_lo.store(low_mask, std::memory_order_release);
+    }
+    // release hold.  pulses can run
+    inline void release_hold()
+    {
+        m_hold = false;
+    }
+    // set hold. pulses are stopped
+    inline void set_hold()
+    {
+        m_hold = true;
     }
     void toggle_init();
 
@@ -212,16 +226,18 @@ private:
     std::atomic<uint32_t> m_ttl_lo{0};
     std::atomic<uint32_t> m_ttl{0};
     std::atomic<uint8_t> m_clock{255};
+    std::atomic<bool> m_cmds_empty{true};
+
+    std::mutex m_cmds_lock;
 
     // This isn't a very efficient implementation of fifo but we don't really care.
     // It has the same semantic as the hardware one and that's more important.
     std::queue<uint32_t> m_results;
     std::queue<Cmd> m_cmds;
-    std::atomic<bool> m_cmds_empty{true};
+    bool m_hold{false};
+    bool m_timing_ok{true};
 
     DDS m_dds[NDDS];
-
-    std::mutex m_cmds_lock;
 };
 
 }

@@ -99,15 +99,16 @@ NACS_PROTECTED() void DummyPulser::add_cmd(Cmd cmd)
 
 NACS_PROTECTED() void DummyPulser::toggle_init()
 {
-    // TODO timing_ok
-    if (!m_cmds_empty.load(std::memory_order_acquire)) {
+    if (!m_cmds_empty.load(std::memory_order_acquire))
         throw std::runtime_error("Command stream not empty during init.");
-    }
+    m_timing_ok = true;
 }
 
 NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex> &lock)
 {
     // TODO
+    // hold
+    // timing_ok
 }
 
 }
