@@ -24,6 +24,7 @@
 #include <assert.h>
 
 #include <atomic>
+#include <mutex>
 #include <ostream>
 #include <queue>
 
@@ -189,9 +190,20 @@ public:
     void dump_dds(std::ostream &stm, int chn);
 
 private:
+    // Push a result to the result queue. Check if there's overflow
     void add_result(uint32_t v);
+    // Add a command to the command queue.
+    // If the command FIFI is full, start executing and wait until it's not full anymore.
     void add_cmd(Cmd cmd);
-    void forward_time();
+    // Handle overdue commands in the command queue.
+    // If `block` is `true`, wait until at least one command is executed.
+    // Throw an error if `block` is `true` and the command queue is empty.
+    void forward_time(bool block=false)
+    {
+        std::unique_lock<std::mutex> lock(m_cmds_lock);
+        forward_time(block, lock);
+    }
+    void forward_time(bool block, std::unique_lock<std::mutex> &lock);
 
     static constexpr int NDDS = 22;
 
@@ -207,6 +219,8 @@ private:
     std::atomic<bool> m_cmds_empty{true};
 
     DDS m_dds[NDDS];
+
+    std::mutex m_cmds_lock;
 };
 
 }

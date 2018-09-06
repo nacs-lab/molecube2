@@ -90,10 +90,13 @@ NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
 
 NACS_PROTECTED() void DummyPulser::add_cmd(Cmd cmd)
 {
-    // TODO
+    std::unique_lock<std::mutex> lock(m_cmds_lock);
+    while (m_cmds.size() >= 4096)
+        forward_time(true, lock);
+    m_cmds.push(cmd);
 }
 
-NACS_PROTECTED() void DummyPulser::forward_time()
+NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex> &lock)
 {
     // TODO
 }
