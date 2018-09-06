@@ -24,4 +24,34 @@ NACS_PROTECTED() DummyPulser::DummyPulser()
 {
 }
 
+NACS_PROTECTED() void DummyPulser::init_dds(int chn)
+{
+    if (!dds_exists(chn))
+        return;
+    m_dds[chn].init = true;
+}
+
+NACS_PROTECTED() bool DummyPulser::check_dds(int chn, bool force)
+{
+    if (!dds_exists(chn))
+        return true;
+    if (force || !m_dds[chn].init) {
+        init_dds(chn);
+        return true;
+    }
+    return false;
+}
+
+NACS_PROTECTED() bool DummyPulser::dds_exists(int chn)
+{
+    return 0 <= chn && chn < NDDS;
+}
+
+NACS_PROTECTED() void DummyPulser::dump_dds(std::ostream &stm, int chn)
+{
+    stm << "*******************************" << std::endl;
+    stm << "Dummy DDS board: " << chn << std::endl;
+    stm << "*******************************" << std::endl;
+}
+
 }

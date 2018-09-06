@@ -22,6 +22,7 @@
 #include <nacs-utils/utils.h>
 
 #include <atomic>
+#include <ostream>
 
 namespace Molecube {
 
@@ -32,14 +33,19 @@ using namespace NaCs;
  * that provide the same API and can be used for testing.
  *
  * To simplify the implementation, functions that require access to the command or result
- * fifo's are assumed to be called only from a single thread.
+ * fifo's (include all DDS functions) are assumed to be called only from a single thread.
  * Hold/release/init/timing functions should also only be called from this thread.
  * Other functions (current ttl, clock) can be called from any threads.
  */
 class DummyPulser {
     DummyPulser(const DummyPulser&) = delete;
     void operator=(const DummyPulser&) = delete;
-
+    struct DDS {
+        bool init{false};
+        uint16_t amp{0};
+        uint16_t phase{0};
+        uint32_t freq{0};
+    };
 public:
     // Read
     inline uint32_t ttl_himask() const
@@ -62,9 +68,18 @@ public:
     }
     DummyPulser();
 
+    void init_dds(int chn);
+    bool check_dds(int chn, bool force);
+    bool dds_exists(int chn);
+    void dump_dds(std::ostream &stm, int chn);
+
 private:
+    static constexpr int NDDS = 22;
+
     std::atomic<uint32_t> m_ttl_hi{0};
     std::atomic<uint32_t> m_ttl_lo{0};
+
+    DDS m_dds[NDDS];
 };
 
 }
