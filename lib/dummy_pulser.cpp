@@ -85,4 +85,9 @@ NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
     m_results.push(v);
 }
 
+NACS_PROTECTED() void DummyPulser::add_cmd(Cmd cmd)
+{
+    // TODO
+}
+
 }

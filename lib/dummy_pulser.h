@@ -21,6 +21,8 @@
 
 #include <nacs-utils/utils.h>
 
+#include <assert.h>
+
 #include <atomic>
 #include <ostream>
 #include <queue>
@@ -80,7 +82,7 @@ public:
     }
     inline bool is_finished() const
     {
-        return m_cmds.empty();
+        return m_cmds_empty.load(std::memory_order_acquire);
     }
     inline uint32_t cur_ttl() const
     {
@@ -106,6 +108,78 @@ public:
     {
         m_ttl_lo.store(low_mask, std::memory_order_release);
     }
+
+    // Pulses
+    template<bool checked>
+    inline void ttl(uint32_t ttl, uint32_t t)
+    {
+        assert(t < (1 << 24));
+        add_cmd(Cmd{OP::TTL, checked, t, ttl});
+    }
+    template<bool checked>
+    inline void clock(uint8_t div)
+    {
+        add_cmd(Cmd{OP::Clock, checked, div, 0});
+    }
+    template<bool checked>
+    inline void dac(uint8_t dac, uint16_t V)
+    {
+        add_cmd(Cmd{OP::DAC, checked, dac, V});
+    }
+    template<bool checked>
+    inline void wait(uint32_t t)
+    {
+        assert(t < (1 << 24));
+        add_cmd(Cmd{OP::Wait, checked, t, 0});
+    }
+    // clear timing check (clear failures)
+    inline void clear_error()
+    {
+        add_cmd(Cmd{OP::ClearErr, false, 0, 0});
+    }
+    template<bool checked>
+    inline void dds_set_freq(int i, uint32_t ftw)
+    {
+        add_cmd(Cmd{OP::ClearErr, false, 0, 0});
+    }
+    template<bool checked>
+    inline void dds_set_amp(int i, uint16_t amp)
+    {
+        add_cmd(Cmd{OP::DDSSetAmp, checked, i, amp});
+    }
+    template<bool checked>
+    inline void dds_set_phase(int i, uint16_t phase)
+    {
+        add_cmd(Cmd{OP::DDSSetPhase, checked, i, phase});
+    }
+    template<bool checked>
+    inline void dds_reset(int i)
+    {
+        add_cmd(Cmd{OP::DDSReset, checked, i, 0});
+    }
+
+    // Pulses with results
+    // clear timing check (clear failures)
+    template<bool checked>
+    inline void loopback(uint32_t data)
+    {
+        add_cmd(Cmd{OP::LoopBack, checked, data, 0});
+    }
+    template<bool checked>
+    inline void dds_get_phase(int i)
+    {
+        add_cmd(Cmd{OP::DDSGetPhase, checked, i, 0});
+    }
+    template<bool checked>
+    inline void dds_get_amp(int i)
+    {
+        add_cmd(Cmd{OP::DDSGetAmp, checked, i, 0});
+    }
+    template<bool checked>
+    inline void dds_get_freq(int i)
+    {
+        add_cmd(Cmd{OP::DDSGetFreq, checked, i, 0});
+    }
     DummyPulser();
 
     bool try_get_result(uint32_t &res);
@@ -118,6 +192,7 @@ public:
 
 private:
     void add_result(uint32_t v);
+    void add_cmd(Cmd cmd);
 
     static constexpr int NDDS = 22;
 
