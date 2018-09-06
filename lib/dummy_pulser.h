@@ -86,16 +86,14 @@ public:
     }
     inline uint32_t cur_ttl() const
     {
-        if (!m_cmds_empty.load(std::memory_order_acquire)) {
-            // TODO
-        }
+        if (!m_cmds_empty.load(std::memory_order_acquire))
+            const_cast<DummyPulser*>(this)->forward_time();
         return m_ttl.load(std::memory_order_acquire);
     }
     inline uint8_t cur_clock() const
     {
-        if (!m_cmds_empty.load(std::memory_order_acquire)) {
-            // TODO
-        }
+        if (!m_cmds_empty.load(std::memory_order_acquire))
+            const_cast<DummyPulser*>(this)->forward_time();
         return m_clock.load(std::memory_order_acquire);
     }
 
@@ -193,6 +191,7 @@ public:
 private:
     void add_result(uint32_t v);
     void add_cmd(Cmd cmd);
+    void forward_time();
 
     static constexpr int NDDS = 22;
 

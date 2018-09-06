@@ -59,22 +59,25 @@ NACS_PROTECTED() void DummyPulser::dump_dds(std::ostream &stm, int chn)
 
 NACS_PROTECTED() bool DummyPulser::try_get_result(uint32_t &res)
 {
-    if (!m_results.empty()) {
-        res = m_results.front();
-        m_results.pop();
-        return true;
+    if (m_results.empty()) {
+        forward_time();
+        if (m_results.empty()) {
+            return false;
+        }
     }
-    if (m_cmds.empty())
-        throw std::underflow_error("No result queued.");
-    // TODO
-    return false;
+    res = m_results.front();
+    m_results.pop();
+    return true;
 }
 
 NACS_PROTECTED() uint32_t DummyPulser::get_result()
 {
     uint32_t res;
-    while (!try_get_result(res))
+    while (!try_get_result(res)) {
+        if (m_cmds.empty())
+            throw std::underflow_error("No result queued.");
         std::this_thread::yield();
+    }
     return res;
 }
 
@@ -86,6 +89,11 @@ NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
 }
 
 NACS_PROTECTED() void DummyPulser::add_cmd(Cmd cmd)
+{
+    // TODO
+}
+
+NACS_PROTECTED() void DummyPulser::forward_time()
 {
     // TODO
 }
