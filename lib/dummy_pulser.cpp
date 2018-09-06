@@ -118,7 +118,7 @@ NACS_PROTECTED() void DummyPulser::toggle_init()
 {
     if (!m_cmds_empty.load(std::memory_order_acquire))
         throw std::runtime_error("Command stream not empty during init.");
-    m_timing_ok = true;
+    m_timing_ok.store(true, std::memory_order_release);
 }
 
 NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex> &lock)
@@ -126,6 +126,54 @@ NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std
     // TODO
     // hold
     // timing_ok
+}
+
+NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
+{
+    switch (cmd.op) {
+    case OP::TTL:
+        m_ttl.store(cmd.v2, std::memory_order_release);
+        return cmd.v1;
+    case OP::Clock:
+        m_clock.store(uint8_t(cmd.v1), std::memory_order_release);
+        return 5;
+    case OP::DAC:
+        return 45;
+    case OP::Wait:
+        return cmd.v1;
+    case OP::ClearErr:
+        m_timing_ok.store(true, std::memory_order_release);
+        return 5;
+    case OP::DDSSetFreq:
+        m_dds[cmd.v1].freq = cmd.v2;
+        return 50;
+    case OP::DDSSetAmp:
+        m_dds[cmd.v1].amp = uint16_t(cmd.v2);
+        return 50;
+    case OP::DDSSetPhase:
+        m_dds[cmd.v1].phase = uint16_t(cmd.v2);
+        return 50;
+    case OP::DDSReset:
+        m_dds[cmd.v1].init = false;
+        m_dds[cmd.v1].amp = 0;
+        m_dds[cmd.v1].phase = 0;
+        m_dds[cmd.v1].freq = 0;
+        return 50;
+    case OP::LoopBack:
+        add_result(cmd.v1);
+        return 5;
+    case OP::DDSGetFreq:
+        add_result(m_dds[cmd.v1].freq);
+        return 50;
+    case OP::DDSGetAmp:
+        add_result(m_dds[cmd.v1].amp);
+        return 50;
+    case OP::DDSGetPhase:
+        add_result(m_dds[cmd.v1].phase);
+        return 50;
+    default:
+        throw std::runtime_error("Invalid command.");
+    }
 }
 
 }

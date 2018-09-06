@@ -86,7 +86,7 @@ public:
     }
     inline bool timing_ok() const
     {
-        return m_timing_ok;
+        return m_timing_ok.load(std::memory_order_acquire);
     }
     inline bool is_finished() const
     {
@@ -149,21 +149,25 @@ public:
     template<bool checked>
     inline void dds_set_freq(int i, uint32_t ftw)
     {
+        assert(i < NDDS);
         add_cmd(OP::DDSSetFreq, checked, i, ftw);
     }
     template<bool checked>
     inline void dds_set_amp(int i, uint16_t amp)
     {
+        assert(i < NDDS);
         add_cmd(OP::DDSSetAmp, checked, i, amp);
     }
     template<bool checked>
     inline void dds_set_phase(int i, uint16_t phase)
     {
+        assert(i < NDDS);
         add_cmd(OP::DDSSetPhase, checked, i, phase);
     }
     template<bool checked>
     inline void dds_reset(int i)
     {
+        assert(i < NDDS);
         add_cmd(OP::DDSReset, checked, i);
     }
 
@@ -177,16 +181,19 @@ public:
     template<bool checked>
     inline void dds_get_phase(int i)
     {
+        assert(i < NDDS);
         add_cmd(OP::DDSGetPhase, checked, i);
     }
     template<bool checked>
     inline void dds_get_amp(int i)
     {
+        assert(i < NDDS);
         add_cmd(OP::DDSGetAmp, checked, i);
     }
     template<bool checked>
     inline void dds_get_freq(int i)
     {
+        assert(i < NDDS);
         add_cmd(OP::DDSGetFreq, checked, i);
     }
     DummyPulser();
@@ -214,6 +221,9 @@ private:
         forward_time(block, lock);
     }
     void forward_time(bool block, std::unique_lock<std::mutex> &lock);
+    // Run the command (apply the side-effects) and return the time
+    // it takes to execute the command in FPGA time step (10ns per step).
+    uint32_t run_cmd(const Cmd &cmd);
 
     static constexpr int NDDS = 22;
 
@@ -222,6 +232,7 @@ private:
     std::atomic<uint32_t> m_ttl{0};
     std::atomic<uint8_t> m_clock{255};
     std::atomic<bool> m_cmds_empty{true};
+    std::atomic<bool> m_timing_ok{true};
 
     std::mutex m_cmds_lock;
 
@@ -230,7 +241,6 @@ private:
     std::queue<uint32_t> m_results;
     std::queue<Cmd> m_cmds;
     bool m_hold{false};
-    bool m_timing_ok{true};
 
     DDS m_dds[NDDS];
 
