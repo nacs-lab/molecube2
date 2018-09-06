@@ -108,6 +108,9 @@ public:
     }
     DummyPulser();
 
+    bool try_get_result(uint32_t &res);
+    uint32_t get_result();
+
     void init_dds(int chn);
     bool check_dds(int chn, bool force);
     bool dds_exists(int chn);

@@ -19,6 +19,7 @@
 #include "dummy_pulser.h"
 
 #include <stdexcept>
+#include <thread>
 
 namespace Molecube {
 
@@ -56,10 +57,31 @@ NACS_PROTECTED() void DummyPulser::dump_dds(std::ostream &stm, int chn)
     stm << "*******************************" << std::endl;
 }
 
+NACS_PROTECTED() bool DummyPulser::try_get_result(uint32_t &res)
+{
+    if (!m_results.empty()) {
+        res = m_results.front();
+        m_results.pop();
+        return true;
+    }
+    if (m_cmds.empty())
+        throw std::underflow_error("No result queued.");
+    // TODO
+    return false;
+}
+
+NACS_PROTECTED() uint32_t DummyPulser::get_result()
+{
+    uint32_t res;
+    while (!try_get_result(res))
+        std::this_thread::yield();
+    return res;
+}
+
 NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
 {
     if (m_results.size() >= 32)
-        throw std::length_error("Result number overflow.");
+        throw std::overflow_error("Result number overflow.");
     m_results.push(v);
 }
 
