@@ -43,6 +43,7 @@ using namespace NaCs;
  * Other functions (current ttl, clock) can be called from any threads.
  */
 class DummyPulser {
+    using time_point_t = decltype(std::chrono::steady_clock::now());
     DummyPulser(const DummyPulser&) = delete;
     void operator=(const DummyPulser&) = delete;
     struct DDS {
@@ -69,7 +70,7 @@ class DummyPulser {
     struct Cmd {
         OP op;
         bool timing;
-        decltype(std::chrono::steady_clock::now()) t;
+        time_point_t t;
         uint32_t v1;
         uint32_t v2;
     };
@@ -113,16 +114,8 @@ public:
     {
         m_ttl_lo.store(low_mask, std::memory_order_release);
     }
-    // release hold.  pulses can run
-    inline void release_hold()
-    {
-        m_hold = false;
-    }
-    // set hold. pulses are stopped
-    inline void set_hold()
-    {
-        m_hold = true;
-    }
+    void release_hold();
+    void set_hold();
     void toggle_init();
 
     // Pulses
@@ -240,6 +233,8 @@ private:
     bool m_timing_ok{true};
 
     DDS m_dds[NDDS];
+
+    time_point_t m_release_time{std::chrono::steady_clock::now()};
 };
 
 }

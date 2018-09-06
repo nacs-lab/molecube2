@@ -98,6 +98,22 @@ NACS_PROTECTED() void DummyPulser::add_cmd(OP op, bool timing, uint32_t v1, uint
     m_cmds_empty.store(false, std::memory_order_release);
 }
 
+NACS_PROTECTED() void DummyPulser::release_hold()
+{
+    // Protecting access to `m_release_time` and `m_hold`
+    std::unique_lock<std::mutex> lock(m_cmds_lock);
+    m_hold = false;
+    m_release_time = std::chrono::steady_clock::now();
+}
+
+NACS_PROTECTED() void DummyPulser::set_hold()
+{
+    // Protecting access to `m_hold`
+    std::unique_lock<std::mutex> lock(m_cmds_lock);
+    forward_time(false, lock);
+    m_hold = true;
+}
+
 NACS_PROTECTED() void DummyPulser::toggle_init()
 {
     if (!m_cmds_empty.load(std::memory_order_acquire))
