@@ -24,6 +24,7 @@
 #include <assert.h>
 
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <ostream>
 #include <queue>
@@ -68,6 +69,7 @@ class DummyPulser {
     struct Cmd {
         OP op;
         bool timing;
+        decltype(std::chrono::steady_clock::now()) t;
         uint32_t v1;
         uint32_t v2;
     };
@@ -128,48 +130,48 @@ public:
     inline void ttl(uint32_t ttl, uint32_t t)
     {
         assert(t < (1 << 24));
-        add_cmd(Cmd{OP::TTL, checked, t, ttl});
+        add_cmd(OP::TTL, checked, t, ttl);
     }
     template<bool checked>
     inline void clock(uint8_t div)
     {
-        add_cmd(Cmd{OP::Clock, checked, div, 0});
+        add_cmd(OP::Clock, checked, div);
     }
     template<bool checked>
     inline void dac(uint8_t dac, uint16_t V)
     {
-        add_cmd(Cmd{OP::DAC, checked, dac, V});
+        add_cmd(OP::DAC, checked, dac, V);
     }
     template<bool checked>
     inline void wait(uint32_t t)
     {
         assert(t < (1 << 24));
-        add_cmd(Cmd{OP::Wait, checked, t, 0});
+        add_cmd(OP::Wait, checked, t);
     }
     // clear timing check (clear failures)
     inline void clear_error()
     {
-        add_cmd(Cmd{OP::ClearErr, false, 0, 0});
+        add_cmd(OP::ClearErr, false);
     }
     template<bool checked>
     inline void dds_set_freq(int i, uint32_t ftw)
     {
-        add_cmd(Cmd{OP::ClearErr, false, 0, 0});
+        add_cmd(OP::DDSSetFreq, checked, i, ftw);
     }
     template<bool checked>
     inline void dds_set_amp(int i, uint16_t amp)
     {
-        add_cmd(Cmd{OP::DDSSetAmp, checked, i, amp});
+        add_cmd(OP::DDSSetAmp, checked, i, amp);
     }
     template<bool checked>
     inline void dds_set_phase(int i, uint16_t phase)
     {
-        add_cmd(Cmd{OP::DDSSetPhase, checked, i, phase});
+        add_cmd(OP::DDSSetPhase, checked, i, phase);
     }
     template<bool checked>
     inline void dds_reset(int i)
     {
-        add_cmd(Cmd{OP::DDSReset, checked, i, 0});
+        add_cmd(OP::DDSReset, checked, i);
     }
 
     // Pulses with results
@@ -177,22 +179,22 @@ public:
     template<bool checked>
     inline void loopback(uint32_t data)
     {
-        add_cmd(Cmd{OP::LoopBack, checked, data, 0});
+        add_cmd(OP::LoopBack, checked, data);
     }
     template<bool checked>
     inline void dds_get_phase(int i)
     {
-        add_cmd(Cmd{OP::DDSGetPhase, checked, i, 0});
+        add_cmd(OP::DDSGetPhase, checked, i);
     }
     template<bool checked>
     inline void dds_get_amp(int i)
     {
-        add_cmd(Cmd{OP::DDSGetAmp, checked, i, 0});
+        add_cmd(OP::DDSGetAmp, checked, i);
     }
     template<bool checked>
     inline void dds_get_freq(int i)
     {
-        add_cmd(Cmd{OP::DDSGetFreq, checked, i, 0});
+        add_cmd(OP::DDSGetFreq, checked, i);
     }
     DummyPulser();
 
@@ -209,7 +211,7 @@ private:
     void add_result(uint32_t v);
     // Add a command to the command queue.
     // If the command FIFI is full, start executing and wait until it's not full anymore.
-    void add_cmd(Cmd cmd);
+    void add_cmd(OP op, bool timing, uint32_t v1=0, uint32_t v2=0);
     // Handle overdue commands in the command queue.
     // If `block` is `true`, wait until at least one command is executed.
     // Throw an error if `block` is `true` and the command queue is empty.
