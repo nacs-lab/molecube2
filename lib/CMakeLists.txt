@@ -4,6 +4,7 @@ set(libmolecube_SRCS
   controller.cpp
   ctrl_iface.cpp
   dummy_controller.cpp
+  dummy_pulser.cpp
   pulser.cpp
   server.cpp)
 
