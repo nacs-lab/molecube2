@@ -18,6 +18,8 @@
 
 #include "dummy_pulser.h"
 
+#include <stdexcept>
+
 namespace Molecube {
 
 NACS_PROTECTED() DummyPulser::DummyPulser()
@@ -52,6 +54,13 @@ NACS_PROTECTED() void DummyPulser::dump_dds(std::ostream &stm, int chn)
     stm << "*******************************" << std::endl;
     stm << "Dummy DDS board: " << chn << std::endl;
     stm << "*******************************" << std::endl;
+}
+
+NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
+{
+    if (m_results.size() >= 32)
+        throw std::length_error("Result number overflow.");
+    m_results.push(v);
 }
 
 }

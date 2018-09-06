@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <ostream>
+#include <queue>
 
 namespace Molecube {
 
@@ -46,25 +47,64 @@ class DummyPulser {
         uint16_t phase{0};
         uint32_t freq{0};
     };
+    enum class OP : uint8_t {
+        TTL,
+        Clock,
+        DAC,
+        Wait,
+        ClearErr,
+        DDSSetFreq,
+        DDSSetAmp,
+        DDSSetPhase,
+        DDSReset,
+        LoopBack,
+        DDSGetFreq,
+        DDSGetAmp,
+        DDSGetPhase,
+    };
+    struct Cmd {
+        OP op;
+        bool timing;
+        uint32_t v1;
+        uint32_t v2;
+    };
 public:
     // Read
     inline uint32_t ttl_himask() const
     {
-        return m_ttl_hi.load();
+        return m_ttl_hi.load(std::memory_order_acquire);
     }
     inline uint32_t ttl_lomask() const
     {
-        return m_ttl_lo.load();
+        return m_ttl_lo.load(std::memory_order_acquire);
+    }
+    inline bool is_finished() const
+    {
+        return m_cmds.empty();
+    }
+    inline uint32_t cur_ttl() const
+    {
+        if (!m_cmds_empty.load(std::memory_order_acquire)) {
+            // TODO
+        }
+        return m_ttl.load(std::memory_order_acquire);
+    }
+    inline uint8_t cur_clock() const
+    {
+        if (!m_cmds_empty.load(std::memory_order_acquire)) {
+            // TODO
+        }
+        return m_clock.load(std::memory_order_acquire);
     }
 
     // Write
     inline void set_ttl_himask(uint32_t high_mask)
     {
-        m_ttl_hi.store(high_mask);
+        m_ttl_hi.store(high_mask, std::memory_order_release);
     }
     inline void set_ttl_lomask(uint32_t low_mask)
     {
-        m_ttl_lo.store(low_mask);
+        m_ttl_lo.store(low_mask, std::memory_order_release);
     }
     DummyPulser();
 
@@ -74,10 +114,20 @@ public:
     void dump_dds(std::ostream &stm, int chn);
 
 private:
+    void add_result(uint32_t v);
+
     static constexpr int NDDS = 22;
 
     std::atomic<uint32_t> m_ttl_hi{0};
     std::atomic<uint32_t> m_ttl_lo{0};
+    std::atomic<uint32_t> m_ttl{0};
+    std::atomic<uint8_t> m_clock{255};
+
+    // This isn't a very efficient implementation of fifo but we don't really care.
+    // It has the same semantic as the hardware one and that's more important.
+    std::queue<uint32_t> m_results;
+    std::queue<Cmd> m_cmds;
+    std::atomic<bool> m_cmds_empty{true};
 
     DDS m_dds[NDDS];
 };
