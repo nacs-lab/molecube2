@@ -206,22 +206,22 @@ public:
     template<bool checked>
     inline void dds_set_freq(int i, uint32_t ftw)
     {
-        return dds<checked>(i << 4, ftw);
+        dds<checked>(i << 4, ftw);
     }
     template<bool checked>
     inline void dds_set_amp(int i, uint16_t amp)
     {
-        return dds_set_2bytes<checked>(i, 0x32, amp);
+        dds_set_2bytes<checked>(i, 0x32, amp);
     }
     template<bool checked>
     inline void dds_set_phase(int i, uint16_t phase)
     {
-        return dds_set_2bytes<checked>(i, 0x30, phase);
+        dds_set_2bytes<checked>(i, 0x30, phase);
     }
     template<bool checked>
     inline void dds_reset(int i)
     {
-        return dds<checked>(0x4 | (i << 4), 0);
+        dds<checked>(0x4 | (i << 4), 0);
     }
 
     // Pulses with results
