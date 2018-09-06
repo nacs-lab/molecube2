@@ -94,6 +94,15 @@ NACS_PROTECTED() void DummyPulser::add_cmd(Cmd cmd)
     while (m_cmds.size() >= 4096)
         forward_time(true, lock);
     m_cmds.push(cmd);
+    m_cmds_empty.store(false, std::memory_order_release);
+}
+
+NACS_PROTECTED() void DummyPulser::toggle_init()
+{
+    // TODO timing_ok
+    if (!m_cmds_empty.load(std::memory_order_acquire)) {
+        throw std::runtime_error("Command stream not empty during init.");
+    }
 }
 
 NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex> &lock)

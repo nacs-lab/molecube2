@@ -107,6 +107,7 @@ public:
     {
         m_ttl_lo.store(low_mask, std::memory_order_release);
     }
+    void toggle_init();
 
     // Pulses
     template<bool checked>
