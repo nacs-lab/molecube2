@@ -217,7 +217,7 @@ private:
     // Push a result to the result queue. Check if there's overflow
     void add_result(uint32_t v);
     // Add a command to the command queue.
-    // If the command FIFI is full, start executing and wait until it's not full anymore.
+    // If the command queue is full, start executing and wait until it's not full anymore.
     void add_cmd(OP op, bool timing, uint32_t v1=0, uint32_t v2=0);
     // Handle overdue commands in the command queue.
     // If `block` is `true`, wait until at least one command is executed.

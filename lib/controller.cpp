@@ -203,7 +203,7 @@ std::vector<int> Controller<Pulser>::get_active_dds()
 template class Controller<Pulser>;
 template class Controller<DummyPulser>;
 
-std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy)
+NACS_PROTECTED() std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy)
 {
     if (!dummy) {
         if (auto addr = Molecube::Pulser::address())
