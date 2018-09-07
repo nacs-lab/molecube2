@@ -92,8 +92,13 @@ NACS_PROTECTED() void DummyPulser::add_cmd(OP op, bool timing, uint32_t v1, uint
 {
     Cmd cmd{op, timing, std::chrono::steady_clock::now(), v1, v2};
     std::unique_lock<std::mutex> lock(m_cmds_lock);
-    while (m_cmds.size() >= 4096)
+    while (m_cmds.size() >= 4096) {
+        if (m_hold) {
+            m_hold = false;
+            m_release_time = std::chrono::steady_clock::now();
+        }
         forward_time(true, lock);
+    }
     m_cmds.push(cmd);
     m_cmds_empty.store(false, std::memory_order_release);
 }
@@ -102,6 +107,8 @@ NACS_PROTECTED() void DummyPulser::release_hold()
 {
     // Protecting access to `m_release_time` and `m_hold`
     std::unique_lock<std::mutex> lock(m_cmds_lock);
+    if (!m_hold)
+        return;
     m_hold = false;
     m_release_time = std::chrono::steady_clock::now();
 }
@@ -110,6 +117,8 @@ NACS_PROTECTED() void DummyPulser::set_hold()
 {
     // Protecting access to `m_hold`
     std::unique_lock<std::mutex> lock(m_cmds_lock);
+    if (m_hold)
+        return;
     forward_time(false, lock);
     m_hold = true;
 }
