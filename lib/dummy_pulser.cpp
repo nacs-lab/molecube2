@@ -218,4 +218,23 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
     }
 }
 
+#define _NACS_PROTECTED NACS_PROTECTED() // Somehow the () really messes up emacs indent...
+
+_NACS_PROTECTED
+DummyPulser::DummyPulser(DummyPulser &&o)
+    : m_ttl_hi(o.m_ttl_hi.load(std::memory_order_relaxed)),
+      m_ttl_lo(o.m_ttl_lo.load(std::memory_order_relaxed)),
+      m_ttl(o.m_ttl.load(std::memory_order_relaxed)),
+      m_clock(o.m_clock.load(std::memory_order_relaxed)),
+      m_cmds_empty(o.m_cmds_empty.load(std::memory_order_relaxed)),
+      m_timing_ok(o.m_timing_ok.load(std::memory_order_relaxed)),
+      m_timing_check(o.m_timing_check.load(std::memory_order_relaxed)),
+      m_results(std::move(o.m_results)),
+      m_cmds(std::move(o.m_cmds)),
+      m_hold(o.m_hold),
+      m_dds(o.m_dds),
+      m_release_time(o.m_release_time)
+{
+}
+
 }

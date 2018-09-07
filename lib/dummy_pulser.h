@@ -203,6 +203,7 @@ public:
         add_cmd(OP::DDSGetFreq, checked, i);
     }
     DummyPulser();
+    DummyPulser(DummyPulser &&other);
 
     bool try_get_result(uint32_t &res);
     uint32_t get_result();
