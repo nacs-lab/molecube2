@@ -25,7 +25,8 @@
 
 namespace Molecube {
 
-class Controller::Runner {
+template<typename Pulser>
+class Controller<Pulser>::Runner {
 public:
     Runner(Controller &ctrl, uint32_t ttlmask)
         : m_ctrl(ctrl),
@@ -43,10 +44,10 @@ public:
         ttl = ttl | m_preserve_ttl;
         if (t <= 1000) {
             // 10us
-            m_ctrl.m_p.ttl<true>(ttl, (uint32_t)t);
+            m_ctrl.m_p.template ttl<true>(ttl, (uint32_t)t);
         }
         else {
-            m_ctrl.m_p.ttl<true>(ttl, 100);
+            m_ctrl.m_p.template ttl<true>(ttl, 100);
             wait(t - 100);
         }
         m_ttl = ttl;
@@ -57,7 +58,7 @@ public:
             wait(50);
             return;
         }
-        m_ctrl.m_p.dds_set_freq<true>(chn, freq);
+        m_ctrl.m_p.template dds_set_freq<true>(chn, freq);
     }
     void dds_amp(uint8_t chn, uint16_t amp)
     {
@@ -65,7 +66,7 @@ public:
             wait(50);
             return;
         }
-        m_ctrl.m_p.dds_set_amp<true>(chn, amp);
+        m_ctrl.m_p.template dds_set_amp<true>(chn, amp);
     }
     void dds_phase(uint8_t chn, uint16_t phase)
     {
@@ -74,7 +75,7 @@ public:
             return;
         }
         m_ctrl.m_dds_phase[chn] = phase;
-        m_ctrl.m_p.dds_set_phase<true>(chn, phase);
+        m_ctrl.m_p.template dds_set_phase<true>(chn, phase);
     }
     void dds_detphase(uint8_t chn, uint16_t detphase)
     {
@@ -89,11 +90,11 @@ public:
         m_ctrl.m_dds_ovr[chn].phase_enable = 0;
         m_ctrl.m_dds_ovr[chn].amp_enable = 0;
         m_ctrl.m_dds_ovr[chn].freq = -1;
-        m_ctrl.m_p.dds_reset<true>(chn);
+        m_ctrl.m_p.template dds_reset<true>(chn);
     }
     void dac(uint8_t chn, uint16_t V)
     {
-        m_ctrl.m_p.dac<true>(chn, V);
+        m_ctrl.m_p.template dac<true>(chn, V);
     }
     void wait(uint64_t t)
     {
@@ -101,7 +102,7 @@ public:
     }
     void clock(uint8_t period)
     {
-        m_ctrl.m_p.clock<true>(period);
+        m_ctrl.m_p.template clock<true>(period);
     }
 
 private:
@@ -111,8 +112,9 @@ private:
     uint32_t m_preserve_ttl;
 };
 
-Controller::Controller()
-    : m_p(Pulser::address())
+template<typename Pulser>
+Controller<Pulser>::Controller(Pulser &&p)
+    : m_p(std::move(p))
 {
     for (int i = 0; i < NDDS; i++) {
         if (!m_p.dds_exists(i)) {
@@ -124,7 +126,7 @@ Controller::Controller()
             std::cerr << "DDS " << i << " initialized" << std::endl;
         }
         else {
-            m_p.dds_reset<false>(i);
+            m_p.template dds_reset<false>(i);
         }
         m_p.dump_dds(std::cerr, i);
     }
@@ -132,8 +134,9 @@ Controller::Controller()
     m_dds_check_time = getTime();
 }
 
-bool Controller::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
-                                uint32_t val)
+template<typename Pulser>
+bool Controller<Pulser>::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
+                                        uint32_t val)
 {
     if (op != TTL)
         return false;
@@ -150,8 +153,9 @@ bool Controller::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
     return false;
 }
 
-bool Controller::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
-                                uint32_t &val)
+template<typename Pulser>
+bool Controller<Pulser>::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
+                                        uint32_t &val)
 {
     if (op == Clock) {
         val = m_p.cur_clock();
@@ -176,14 +180,16 @@ bool Controller::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
     return false;
 }
 
-bool Controller::check_dds(int chn)
+template<typename Pulser>
+bool Controller<Pulser>::check_dds(int chn)
 {
     auto res = m_p.check_dds(chn, m_dds_pending_reset[chn]);
     m_dds_pending_reset[chn] = false;
     return res;
 }
 
-std::vector<int> Controller::get_active_dds()
+template<typename Pulser>
+std::vector<int> Controller<Pulser>::get_active_dds()
 {
     std::vector<int> res;
     for (int i = 0; i < NDDS; i++) {
@@ -192,6 +198,19 @@ std::vector<int> Controller::get_active_dds()
         }
     }
     return res;
+}
+
+template class Controller<Pulser>;
+template class Controller<DummyPulser>;
+
+std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy)
+{
+    if (!dummy) {
+        if (auto addr = Molecube::Pulser::address())
+            return std::unique_ptr<CtrlIFace>(new Controller<Pulser>(Pulser(addr)));
+        fprintf(stderr, "Warning: failed to create real pulser, use dummy pulser instead.");
+    }
+    return std::unique_ptr<CtrlIFace>(new Controller<DummyPulser>(DummyPulser()));
 }
 
 }

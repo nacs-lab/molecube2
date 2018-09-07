@@ -21,6 +21,7 @@
 
 #include "ctrl_iface.h"
 #include "pulser.h"
+#include "dummy_pulser.h"
 
 #include <nacs-utils/mem.h>
 
@@ -28,12 +29,13 @@
 
 namespace Molecube {
 
+template<typename Pulser>
 class Controller : public CtrlIFace {
     Controller(const Controller&) = delete;
     void operator=(const Controller&) = delete;
 
 public:
-    Controller();
+    Controller(Pulser &&p);
 
 private:
     class Runner;
@@ -58,6 +60,9 @@ private:
     bool m_dds_exist[NDDS] = {false};
     uint64_t m_dds_check_time;
 };
+
+extern template class Controller<Pulser>;
+extern template class Controller<DummyPulser>;
 
 }
 
