@@ -59,9 +59,13 @@ int main()
     p.release_hold();
     assert(p.get_result() == 888);
     assert(p.cur_ttl() == 345);
-    p.ttl<false>(0, 10);
 
     assert(p.is_finished());
+
+    p.ttl<false>(0, 10);
+
+    while (!p.is_finished()) {
+    }
 
     // Test TTL pulse
     p.toggle_init();
@@ -77,6 +81,8 @@ int main()
     assert(p.cur_clock() == 255);
 
     // Timing error
+    p.wait<true>(1);
+    std::this_thread::sleep_for(10ms);
     p.wait<true>(1);
     std::this_thread::sleep_for(10ms);
     assert(!p.timing_ok());
