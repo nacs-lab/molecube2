@@ -30,10 +30,10 @@ class Controller<Pulser>::Runner {
 public:
     Runner(Controller &ctrl, uint32_t ttlmask)
         : m_ctrl(ctrl),
-          m_ttlmask(ttlmask)
+          m_ttlmask(ttlmask),
+          m_ttl(ctrl.m_p.cur_ttl()),
+          m_preserve_ttl((~ttlmask) & m_ttl)
     {
-        m_ttl = ctrl.m_p.cur_ttl();
-        m_preserve_ttl = (~ttlmask) & m_ttl;
     }
     void ttl1(uint8_t chn, bool val, uint64_t t)
     {
@@ -117,7 +117,7 @@ private:
     uint32_t m_ttlmask;
     uint32_t m_ttl;
     uint32_t m_preserve_ttl;
-    uint64_t m_t;
+    uint64_t m_t{0};
 };
 
 template<typename Pulser>
