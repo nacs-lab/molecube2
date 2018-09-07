@@ -128,13 +128,46 @@ NACS_PROTECTED() void DummyPulser::toggle_init()
     if (!m_cmds_empty.load(std::memory_order_acquire))
         throw std::runtime_error("Command stream not empty during init.");
     m_timing_ok.store(true, std::memory_order_release);
+    m_timing_check.store(false, std::memory_order_release);
 }
 
-NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex> &lock)
+NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)
 {
-    // TODO
-    // hold
-    // timing_ok
+    if (block && (m_cmds.empty() || m_hold))
+        throw std::runtime_error("Waiting for command queue without releasing hold.");
+    do {
+        if (run_past_cmds())
+            block = false;
+    } while (block);
+}
+
+NACS_INTERNAL bool DummyPulser::run_past_cmds()
+{
+    if (m_hold)
+        return false;
+    bool cmd_run = false;
+    auto cur_t = std::chrono::steady_clock::now();
+    while (!m_cmds.empty()) {
+        auto &cmd = m_cmds.front();
+        auto cmdt = cmd.t;
+        auto startt = m_release_time;
+        if (cmdt > startt) {
+            if (m_timing_check.load(std::memory_order_acquire))
+                m_timing_ok.store(false, std::memory_order_release);
+            startt = cmdt;
+            assert(cmdt <= cur_t);
+        }
+        else if (startt > cur_t) {
+            return cmd_run;
+        }
+        cmd_run = true;
+        m_timing_check.store(cmd.timing, std::memory_order_release);
+        auto steps = run_cmd(cmd);
+        m_release_time = startt + std::chrono::nanoseconds(steps * 10);
+        m_cmds.pop();
+    }
+    m_cmds_empty.store(true, std::memory_order_release);
+    return cmd_run;
 }
 
 NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)

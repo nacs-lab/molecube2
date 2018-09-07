@@ -224,6 +224,9 @@ private:
     // Run the command (apply the side-effects) and return the time
     // it takes to execute the command in FPGA time step (10ns per step).
     uint32_t run_cmd(const Cmd &cmd);
+    // Run the commands that should be executed before the current time.
+    // Return if any command is run
+    bool run_past_cmds();
 
     static constexpr int NDDS = 22;
 
@@ -233,6 +236,7 @@ private:
     std::atomic<uint8_t> m_clock{255};
     std::atomic<bool> m_cmds_empty{true};
     std::atomic<bool> m_timing_ok{true};
+    std::atomic<bool> m_timing_check{false};
 
     std::mutex m_cmds_lock;
 
