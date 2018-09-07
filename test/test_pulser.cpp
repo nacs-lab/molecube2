@@ -17,21 +17,16 @@
  *************************************************************************/
 
 #include "../lib/pulser.h"
+#include "../lib/dummy_pulser.h"
 
 #include <chrono>
 #include <stdio.h>
 #include <thread>
 
-int main()
+template<typename P>
+void test_pulser(P &p)
 {
     using namespace std::literals;
-
-    auto addr = Molecube::Pulser::address();
-    if (!addr) {
-        fprintf(stderr, "Pulse not enabled!\n");
-        return 0;
-    }
-    Molecube::Pulser p(addr);
 
     // Test TTL masks
     p.set_ttl_himask(0);
@@ -43,15 +38,15 @@ int main()
 
     // Test TTL pulse
     p.release_hold();
-    p.ttl<false>(0, 10);
-    p.loopback<false>(123);
+    p.template ttl<false>(0, 10);
+    p.template loopback<false>(123);
     assert(p.get_result() == 123);
     assert(p.cur_ttl() == 0);
 
     // Test hold and release
     p.set_hold();
-    p.ttl<false>(345, 10);
-    p.loopback<false>(888);
+    p.template ttl<false>(345, 10);
+    p.template loopback<false>(888);
     std::this_thread::sleep_for(10ms);
     uint32_t res0;
     assert(!p.try_get_result(res0));
@@ -62,7 +57,7 @@ int main()
 
     assert(p.is_finished());
 
-    p.ttl<false>(0, 10);
+    p.template ttl<false>(0, 10);
 
     while (!p.is_finished()) {
     }
@@ -71,25 +66,39 @@ int main()
     p.toggle_init();
     p.release_hold();
     assert(p.cur_clock() == 255);
-    p.clock<false>(128);
-    p.loopback<false>(222);
+    p.template clock<false>(128);
+    p.template loopback<false>(222);
     assert(p.get_result() == 222);
     assert(p.cur_clock() == 128);
-    p.clock<false>(255);
-    p.loopback<false>(1);
+    p.template clock<false>(255);
+    p.template loopback<false>(1);
     assert(p.get_result() == 1);
     assert(p.cur_clock() == 255);
 
     // Timing error
-    p.wait<true>(1);
+    p.template wait<true>(1);
     std::this_thread::sleep_for(10ms);
-    p.wait<true>(1);
+    p.template wait<true>(1);
     std::this_thread::sleep_for(10ms);
     assert(!p.timing_ok());
     p.clear_error();
-    p.loopback<false>(1);
+    p.template loopback<false>(1);
     assert(p.get_result() == 1);
     assert(p.timing_ok());
+}
+
+int main()
+{
+    if (auto addr = Molecube::Pulser::address()) {
+        Molecube::Pulser p(addr);
+        test_pulser(p);
+    }
+    else {
+        fprintf(stderr, "Pulse not enabled!\n");
+    }
+
+    Molecube::DummyPulser dp;
+    test_pulser(dp);
 
     return 0;
 }
