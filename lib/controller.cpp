@@ -45,9 +45,11 @@ public:
         if (t <= 1000) {
             // 10us
             m_ctrl.m_p.template ttl<true>(ttl, (uint32_t)t);
+            m_t += t;
         }
         else {
             m_ctrl.m_p.template ttl<true>(ttl, 100);
+            m_t += 100;
             wait(t - 100);
         }
         m_ttl = ttl;
@@ -59,6 +61,7 @@ public:
             return;
         }
         m_ctrl.m_p.template dds_set_freq<true>(chn, freq);
+        m_t += 50;
     }
     void dds_amp(uint8_t chn, uint16_t amp)
     {
@@ -67,6 +70,7 @@ public:
             return;
         }
         m_ctrl.m_p.template dds_set_amp<true>(chn, amp);
+        m_t += 50;
     }
     void dds_phase(uint8_t chn, uint16_t phase)
     {
@@ -76,6 +80,7 @@ public:
         }
         m_ctrl.m_dds_phase[chn] = phase;
         m_ctrl.m_p.template dds_set_phase<true>(chn, phase);
+        m_t += 50;
     }
     void dds_detphase(uint8_t chn, uint16_t detphase)
     {
@@ -91,10 +96,12 @@ public:
         m_ctrl.m_dds_ovr[chn].amp_enable = 0;
         m_ctrl.m_dds_ovr[chn].freq = -1;
         m_ctrl.m_p.template dds_reset<true>(chn);
+        m_t += 50;
     }
     void dac(uint8_t chn, uint16_t V)
     {
         m_ctrl.m_p.template dac<true>(chn, V);
+        m_t += 45;
     }
     void wait(uint64_t t)
     {
@@ -103,6 +110,7 @@ public:
     void clock(uint8_t period)
     {
         m_ctrl.m_p.template clock<true>(period);
+        m_t += 5;
     }
 
 private:
@@ -110,6 +118,7 @@ private:
     uint32_t m_ttlmask;
     uint32_t m_ttl;
     uint32_t m_preserve_ttl;
+    uint64_t m_t;
 };
 
 template<typename Pulser>
