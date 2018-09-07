@@ -41,18 +41,17 @@ public:
     }
     void ttl(uint32_t ttl, uint64_t t)
     {
-        ttl = ttl | m_preserve_ttl;
+        m_ttl = ttl | m_preserve_ttl;
         if (t <= 1000) {
             // 10us
-            m_ctrl.m_p.template ttl<true>(ttl, (uint32_t)t);
+            m_ctrl.m_p.template ttl<true>(m_ttl, (uint32_t)t);
             m_t += t;
         }
         else {
-            m_ctrl.m_p.template ttl<true>(ttl, 100);
+            m_ctrl.m_p.template ttl<true>(m_ttl, 100);
             m_t += 100;
             wait(t - 100);
         }
-        m_ttl = ttl;
     }
     void dds_freq(uint8_t chn, uint32_t freq)
     {
