@@ -249,6 +249,9 @@ public:
     Pulser(volatile void *const addr)
         : m_addr(addr)
     {}
+    Pulser(Pulser &&other)
+        : m_addr(other.m_addr)
+    {}
 
     // Read a result if one is available. Return whether a result is returned in `res`.
     bool try_get_result(uint32_t &res);
