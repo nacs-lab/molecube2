@@ -86,10 +86,16 @@ public:
     }
     inline bool timing_ok() const
     {
+        if (!m_timing_ok.load(std::memory_order_acquire))
+            return false;
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_timing_ok.load(std::memory_order_acquire);
     }
     inline bool is_finished() const
     {
+        if (m_cmds_empty.load(std::memory_order_acquire))
+            return true;
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_cmds_empty.load(std::memory_order_acquire);
     }
     inline uint32_t cur_ttl() const
