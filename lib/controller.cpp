@@ -173,7 +173,7 @@ public:
             return {0, true};
         }
         if (auto cmd = m_ctrl.get_cmd()) {
-            auto res = send_request(cmd);
+            auto res = process_cmd(cmd);
             if (res.second)
                 m_cmd_waiting = cmd;
             return {res.first, true};
@@ -183,10 +183,12 @@ public:
 
     // Process a command.
     // Return the sequence time forwarded and if the command needs a result.
-    std::pair<uint32_t,bool> send_request(const Controller::ReqCmd *cmd)
+    std::pair<uint32_t,bool> process_cmd(const Controller::ReqCmd *cmd)
     {
-        switch (cmd->opcode) {
-        case Controller::TTL:
+        // Most of the states are kept in the controller and only the TTL ones is
+        // kept in the runner for the preserved TTL channels so we only need to
+        // do things differently for the TTL commands.
+        if (cmd->opcode == Controller::TTL) {
             // Should have been caught by concurrent_get/set.
             assert(!cmd->has_res && !cmd->is_override);
             if (cmd->operand == uint32_t((1 << 26) - 1)) {
@@ -204,126 +206,8 @@ public:
             }
             m_ctrl.m_p.template ttl<true>(m_ttl, 3);
             return {3, false};
-        case Controller::DDSFreq: {
-            bool is_override = cmd->is_override;
-            bool has_res = cmd->has_res;
-            int chn = cmd->operand;
-            uint32_t val = cmd->val;
-            assert(chn < 22);
-            auto &ovr = m_ctrl.m_dds_ovr[chn];
-            if (!is_override && !has_res)
-                is_override = true;
-            if (is_override) {
-                // Should be handled by the cache in ctrl_iface.
-                assert(!has_res);
-                if (val == ovr.freq) {
-                    return {0, false};
-                }
-                ovr.freq = val;
-                if (val == uint32_t(-1)) {
-                    return {0, false};
-                }
-                else {
-                    m_ctrl.m_p.template dds_set_freq<true>(chn, val);
-                    return {50, false};
-                }
-            }
-            if (!has_res) {
-                m_ctrl.m_p.template dds_set_freq<true>(chn, val);
-                return {50, false};
-            }
-            m_ctrl.m_p.template dds_get_freq<true>(chn);
-            return {50, true};
         }
-        case Controller::DDSAmp: {
-            bool is_override = cmd->is_override;
-            bool has_res = cmd->has_res;
-            int chn = cmd->operand;
-            uint16_t val = uint16_t(cmd->val);
-            assert(chn < 22);
-            auto &ovr = m_ctrl.m_dds_ovr[chn];
-            if (!is_override && !has_res)
-                is_override = true;
-            if (is_override) {
-                // Should be handled by the cache in ctrl_iface.
-                assert(!has_res);
-                if (val == ovr.amp) {
-                    return {0, false};
-                }
-                else if (val == uint16_t(-1)) {
-                    if (ovr.amp_enable)
-                        ovr.amp_enable = false;
-                    return {0, false};
-                }
-                else {
-                    ovr.amp = uint16_t(val & ((1 << 12) - 1));
-                    ovr.amp_enable = true;
-                    m_ctrl.m_p.template dds_set_amp<true>(chn, val);
-                    return {50, false};
-                }
-            }
-            if (!has_res) {
-                m_ctrl.m_p.template dds_set_amp<true>(chn, val);
-                return {50, false};
-            }
-            m_ctrl.m_p.template dds_get_amp<true>(chn);
-            return {50, true};
-        }
-        case Controller::DDSPhase: {
-            bool is_override = cmd->is_override;
-            bool has_res = cmd->has_res;
-            int chn = cmd->operand;
-            uint16_t val = uint16_t(cmd->val);
-            assert(chn < 22);
-            auto &ovr = m_ctrl.m_dds_ovr[chn];
-            if (!is_override && !has_res)
-                is_override = true;
-            if (is_override) {
-                // Should be handled by the cache in ctrl_iface.
-                assert(!has_res);
-                if (val == ovr.phase) {
-                    return {0, false};
-                }
-                else if (val == uint16_t(-1)) {
-                    if (ovr.phase_enable)
-                        ovr.phase_enable = false;
-                    return {0, false};
-                }
-                else {
-                    ovr.phase = val;
-                    ovr.phase_enable = true;
-                    m_ctrl.m_dds_phase[chn] = val;
-                    m_ctrl.m_p.template dds_set_phase<true>(chn, val);
-                    return {50, false};
-                }
-            }
-            if (!has_res) {
-                m_ctrl.m_dds_phase[chn] = val;
-                m_ctrl.m_p.template dds_set_phase<true>(chn, val);
-                return {50, false};
-            }
-            m_ctrl.m_p.template dds_get_phase<true>(chn);
-            return {50, true};
-        }
-        case Controller::DDSReset: {
-            assert(!cmd->is_override && !cmd->has_res && cmd->val == 0);
-            int chn = cmd->operand;
-            assert(chn < 22);
-            auto &ovr = m_ctrl.m_dds_ovr[chn];
-            ovr.phase_enable = 0;
-            ovr.amp_enable = 0;
-            ovr.freq = -1;
-            m_ctrl.m_dds_phase[chn] = 0;
-            m_ctrl.m_p.template dds_reset<true>(chn);
-            return {50, false};
-        }
-        case Controller::Clock:
-            assert(!cmd->is_override && !cmd->has_res && cmd->operand == 0);
-            m_ctrl.m_p.template clock<true>(uint8_t(cmd->val));
-            return {5, false};
-        default:
-            return {0, false};
-        }
+        return m_ctrl.process_cmd(cmd);
     }
 
 private:
@@ -426,6 +310,148 @@ std::vector<int> Controller<Pulser>::get_active_dds()
         }
     }
     return res;
+}
+
+template<typename Pulser>
+std::pair<uint32_t,bool> Controller<Pulser>::process_cmd(const Controller::ReqCmd *cmd)
+{
+    switch (cmd->opcode) {
+    case Controller::TTL: {
+        // Should have been caught by concurrent_get/set.
+        assert(!cmd->has_res && !cmd->is_override);
+        uint32_t ttl;
+        if (cmd->operand == uint32_t((1 << 26) - 1)) {
+            ttl = cmd->val;
+        }
+        else {
+            assert(cmd->operand < 32);
+            auto chn = uint8_t(cmd->operand);
+            bool val = cmd->val;
+            ttl = setBit(m_p.cur_ttl(), chn, val);
+        }
+        m_p.template ttl<true>(ttl, 3);
+        return {3, false};
+    }
+    case Controller::DDSFreq: {
+        bool is_override = cmd->is_override;
+        bool has_res = cmd->has_res;
+        int chn = cmd->operand;
+        uint32_t val = cmd->val;
+        assert(chn < 22);
+        auto &ovr = m_dds_ovr[chn];
+        if (!is_override && !has_res)
+            is_override = true;
+        if (is_override) {
+            // Should be handled by the cache in ctrl_iface.
+            assert(!has_res);
+            if (val == ovr.freq) {
+                return {0, false};
+            }
+            ovr.freq = val;
+            if (val == uint32_t(-1)) {
+                return {0, false};
+            }
+            else {
+                m_p.template dds_set_freq<true>(chn, val);
+                return {50, false};
+            }
+        }
+        if (!has_res) {
+            m_p.template dds_set_freq<true>(chn, val);
+            return {50, false};
+        }
+        m_p.template dds_get_freq<true>(chn);
+        return {50, true};
+    }
+    case Controller::DDSAmp: {
+        bool is_override = cmd->is_override;
+        bool has_res = cmd->has_res;
+        int chn = cmd->operand;
+        uint16_t val = uint16_t(cmd->val);
+        assert(chn < 22);
+        auto &ovr = m_dds_ovr[chn];
+        if (!is_override && !has_res)
+            is_override = true;
+        if (is_override) {
+            // Should be handled by the cache in ctrl_iface.
+            assert(!has_res);
+            if (val == ovr.amp) {
+                return {0, false};
+            }
+            else if (val == uint16_t(-1)) {
+                if (ovr.amp_enable)
+                    ovr.amp_enable = false;
+                return {0, false};
+            }
+            else {
+                ovr.amp = uint16_t(val & ((1 << 12) - 1));
+                ovr.amp_enable = true;
+                m_p.template dds_set_amp<true>(chn, val);
+                return {50, false};
+            }
+        }
+        if (!has_res) {
+            m_p.template dds_set_amp<true>(chn, val);
+            return {50, false};
+        }
+        m_p.template dds_get_amp<true>(chn);
+        return {50, true};
+    }
+    case Controller::DDSPhase: {
+        bool is_override = cmd->is_override;
+        bool has_res = cmd->has_res;
+        int chn = cmd->operand;
+        uint16_t val = uint16_t(cmd->val);
+        assert(chn < 22);
+        auto &ovr = m_dds_ovr[chn];
+        if (!is_override && !has_res)
+            is_override = true;
+        if (is_override) {
+            // Should be handled by the cache in ctrl_iface.
+            assert(!has_res);
+            if (val == ovr.phase) {
+                return {0, false};
+            }
+            else if (val == uint16_t(-1)) {
+                if (ovr.phase_enable)
+                    ovr.phase_enable = false;
+                return {0, false};
+            }
+            else {
+                ovr.phase = val;
+                ovr.phase_enable = true;
+                m_dds_phase[chn] = val;
+                m_p.template dds_set_phase<true>(chn, val);
+                return {50, false};
+            }
+        }
+        if (!has_res) {
+            m_dds_phase[chn] = val;
+            m_p.template dds_set_phase<true>(chn, val);
+            return {50, false};
+        }
+        m_p.template dds_get_phase<true>(chn);
+        return {50, true};
+    }
+    case Controller::DDSReset: {
+        assert(!cmd->is_override && !cmd->has_res && cmd->val == 0);
+        int chn = cmd->operand;
+        assert(chn < 22);
+        auto &ovr = m_dds_ovr[chn];
+        ovr.phase_enable = 0;
+        ovr.amp_enable = 0;
+        ovr.freq = -1;
+        m_dds_phase[chn] = 0;
+        m_p.template dds_reset<true>(chn);
+        return {50, false};
+    }
+    case Controller::Clock:
+        assert(!cmd->is_override && !cmd->has_res && cmd->operand == 0);
+        m_p.template clock<true>(uint8_t(cmd->val));
+        return {5, false};
+    default:
+        return {0, false};
+    }
 }
 
 template class Controller<Pulser>;

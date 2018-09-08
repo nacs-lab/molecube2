@@ -48,6 +48,7 @@ private:
     std::vector<int> get_active_dds() override;
 
     bool check_dds(int chn);
+    std::pair<uint32_t,bool> process_cmd(const Controller::ReqCmd *cmd);
 
     static constexpr uint8_t NDDS = 22;
 
