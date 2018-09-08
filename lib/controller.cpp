@@ -305,7 +305,18 @@ public:
             m_ctrl.m_p.template dds_get_phase<true>(chn);
             return {50, true};
         }
-        case Controller::DDSReset:
+        case Controller::DDSReset: {
+            assert(!cmd->is_override && !cmd->has_res && cmd->val == 0);
+            int chn = cmd->operand;
+            assert(chn < 22);
+            auto &ovr = m_ctrl.m_dds_ovr[chn];
+            ovr.phase_enable = 0;
+            ovr.amp_enable = 0;
+            ovr.freq = -1;
+            m_ctrl.m_dds_phase[chn] = 0;
+            m_ctrl.m_p.template dds_reset<true>(chn);
+            return {50, false};
+        }
         case Controller::Clock:
             // TODO
         default:
