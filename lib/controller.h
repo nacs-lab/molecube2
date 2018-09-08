@@ -60,6 +60,7 @@ private:
     bool m_dds_pending_reset[NDDS] = {false};
     bool m_dds_exist[NDDS] = {false};
     uint64_t m_dds_check_time;
+    ReqCmd *m_cmd_waiting = nullptr;
 };
 
 extern template class Controller<Pulser>;

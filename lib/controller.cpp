@@ -165,9 +165,9 @@ public:
     // Return the sequence time forwarded and whether anything non-trivial is done.
     std::pair<uint32_t,bool> run_wait_step()
     {
-        if (m_cmd_waiting) {
-            if (m_ctrl.m_p.try_get_result(m_cmd_waiting->val)) {
-                m_cmd_waiting = nullptr;
+        if (m_ctrl.m_cmd_waiting) {
+            if (m_ctrl.m_p.try_get_result(m_ctrl.m_cmd_waiting->val)) {
+                m_ctrl.m_cmd_waiting = nullptr;
                 m_ctrl.finish_cmd();
             }
             return {0, true};
@@ -175,7 +175,7 @@ public:
         if (auto cmd = m_ctrl.get_cmd()) {
             auto res = process_cmd(cmd);
             if (res.second) {
-                m_cmd_waiting = cmd;
+                m_ctrl.m_cmd_waiting = cmd;
             }
             else {
                 m_ctrl.finish_cmd();
@@ -225,7 +225,6 @@ private:
     const uint64_t m_min_t{max(getCoarseRes() * 3, 3000000)};
 
     bool m_released = false;
-    Controller::ReqCmd *m_cmd_waiting = nullptr;
 };
 
 template<typename Pulser>
