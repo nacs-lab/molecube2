@@ -183,7 +183,34 @@ public:
     // Return the sequence time forwarded and if the command needs a result.
     std::pair<uint32_t,bool> send_request(const Controller::ReqCmd *cmd)
     {
-        // TODO
+        switch (cmd->opcode) {
+        case Controller::TTL:
+            // Should have been caught by concurrent_get/set.
+            assert(!cmd->has_res && !cmd->is_override);
+            if (cmd->operand == uint32_t((1 << 26) - 1)) {
+                auto val = cmd->val;
+                m_ttl = val;
+                m_preserve_ttl = val & m_ttlmask;
+            }
+            else {
+                assert(cmd->operand < 32);
+                auto chn = uint8_t(cmd->operand);
+                bool val = cmd->val;
+                if (m_ttlmask & (1 << chn))
+                    m_preserve_ttl = setBit(m_preserve_ttl, chn, val);
+                m_ttl = setBit(m_ttl, chn, val);
+            }
+            m_ctrl.m_p.template ttl<true>(m_ttl, 3);
+            return {3, false};
+        case Controller::DDSFreq:
+        case Controller::DDSAmp:
+        case Controller::DDSPhase:
+        case Controller::DDSReset:
+        case Controller::Clock:
+            // TODO
+        default:
+            return {0, false};
+        }
     }
 
 private:
