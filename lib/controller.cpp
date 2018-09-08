@@ -159,10 +159,31 @@ public:
         }
     }
 
+    // Try to process a command or result.
+    // Return the sequence time forwarded and whether anything non-trivial is done.
     std::pair<uint32_t,bool> run_wait_step()
     {
-        // TODO
+        if (m_cmd_waiting) {
+            if (m_ctrl.m_p.try_get_result(m_cmd_waiting->val)) {
+                m_cmd_waiting = nullptr;
+                m_ctrl.finish_cmd();
+            }
+            return {0, true};
+        }
+        if (auto cmd = m_ctrl.get_cmd()) {
+            auto res = send_request(cmd);
+            if (res.second)
+                m_cmd_waiting = cmd;
+            return {res.first, true};
+        }
         return {0, false};
+    }
+
+    // Process a command.
+    // Return the sequence time forwarded and if the command needs a result.
+    std::pair<uint32_t,bool> send_request(const Controller::ReqCmd *cmd)
+    {
+        // TODO
     }
 
 private:
@@ -176,6 +197,7 @@ private:
     const uint64_t m_min_t{max(getCoarseRes() * 3, 3000000)};
 
     bool m_released = false;
+    Controller::ReqCmd *m_cmd_waiting = nullptr;
 };
 
 template<typename Pulser>
