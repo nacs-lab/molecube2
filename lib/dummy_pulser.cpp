@@ -133,20 +133,27 @@ NACS_PROTECTED() void DummyPulser::toggle_init()
 
 NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)
 {
-    if (block && (m_cmds.empty() || m_hold))
-        throw std::runtime_error("Waiting for command queue without releasing hold.");
+    if (m_cmds.empty() || m_hold) {
+        if (block)
+            throw std::runtime_error("Waiting for command queue without releasing hold.");
+        return;
+    }
     do {
-        if (run_past_cmds())
+        auto cur_t = std::chrono::steady_clock::now();
+        if (cur_t < m_release_time) {
+            std::this_thread::sleep_until(m_release_time);
+            cur_t = std::chrono::steady_clock::now();
+        }
+        if (run_past_cmds(cur_t))
             block = false;
     } while (block);
 }
 
-NACS_INTERNAL bool DummyPulser::run_past_cmds()
+NACS_INTERNAL bool DummyPulser::run_past_cmds(time_point_t cur_t)
 {
     if (m_hold)
         return false;
     bool cmd_run = false;
-    auto cur_t = std::chrono::steady_clock::now();
     while (!m_cmds.empty()) {
         auto &cmd = m_cmds.front();
         auto cmdt = cmd.t;

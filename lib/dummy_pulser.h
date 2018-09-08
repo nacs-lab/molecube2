@@ -231,9 +231,9 @@ private:
     // Run the command (apply the side-effects) and return the time
     // it takes to execute the command in FPGA time step (10ns per step).
     uint32_t run_cmd(const Cmd &cmd);
-    // Run the commands that should be executed before the current time.
+    // Run the commands that should be executed before the specified time.
     // Return if any command is run
-    bool run_past_cmds();
+    bool run_past_cmds(time_point_t t);
 
     static constexpr int NDDS = 22;
 
