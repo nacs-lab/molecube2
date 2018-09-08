@@ -174,8 +174,12 @@ public:
         }
         if (auto cmd = m_ctrl.get_cmd()) {
             auto res = process_cmd(cmd);
-            if (res.second)
+            if (res.second) {
                 m_cmd_waiting = cmd;
+            }
+            else {
+                m_ctrl.finish_cmd();
+            }
             return {res.first, true};
         }
         return {0, false};
