@@ -211,6 +211,10 @@ NACS_PROTECTED() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, std::function<vo
 NACS_PROTECTED() void CtrlIFace::reset_dds(int chn)
 {
     send_cmd(ReqCmd{DDSReset, 0, 0, uint32_t(chn & ((1 << 26) - 1)), 0});
+    // Clear overwrite
+    m_cmd_cache.set(DDSFreq, chn, true, -1);
+    m_cmd_cache.set(DDSAmp, chn, true, -1);
+    m_cmd_cache.set(DDSPhase, chn, true, -1);
 }
 
 NACS_PROTECTED() void CtrlIFace::set_clock(uint32_t val)
