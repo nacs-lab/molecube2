@@ -92,9 +92,11 @@ public:
     }
     void dds_reset(uint8_t chn)
     {
-        m_ctrl.m_dds_ovr[chn].phase_enable = 0;
-        m_ctrl.m_dds_ovr[chn].amp_enable = 0;
-        m_ctrl.m_dds_ovr[chn].freq = -1;
+        auto &ovr = m_ctrl.m_dds_ovr[chn];
+        ovr.phase_enable = 0;
+        ovr.amp_enable = 0;
+        ovr.freq = -1;
+        m_ctrl.m_dds_phase[chn] = 0;
         m_t += 50;
         m_ctrl.m_p.template dds_reset<true>(chn);
     }
