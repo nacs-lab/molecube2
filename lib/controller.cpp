@@ -22,6 +22,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <tuple>
 
 namespace Molecube {
 
@@ -44,12 +45,12 @@ public:
         m_ttl = ttl | m_preserve_ttl;
         if (t <= 1000) {
             // 10us
-            m_ctrl.m_p.template ttl<true>(m_ttl, (uint32_t)t);
             m_t += t;
+            m_ctrl.m_p.template ttl<true>(m_ttl, (uint32_t)t);
         }
         else {
-            m_ctrl.m_p.template ttl<true>(m_ttl, 100);
             m_t += 100;
+            m_ctrl.m_p.template ttl<true>(m_ttl, 100);
             wait(t - 100);
         }
     }
@@ -59,8 +60,8 @@ public:
             wait(50);
             return;
         }
-        m_ctrl.m_p.template dds_set_freq<true>(chn, freq);
         m_t += 50;
+        m_ctrl.m_p.template dds_set_freq<true>(chn, freq);
     }
     void dds_amp(uint8_t chn, uint16_t amp)
     {
@@ -68,8 +69,8 @@ public:
             wait(50);
             return;
         }
-        m_ctrl.m_p.template dds_set_amp<true>(chn, amp);
         m_t += 50;
+        m_ctrl.m_p.template dds_set_amp<true>(chn, amp);
     }
     void dds_phase(uint8_t chn, uint16_t phase)
     {
@@ -78,8 +79,8 @@ public:
             return;
         }
         m_ctrl.m_dds_phase[chn] = phase;
-        m_ctrl.m_p.template dds_set_phase<true>(chn, phase);
         m_t += 50;
+        m_ctrl.m_p.template dds_set_phase<true>(chn, phase);
     }
     void dds_detphase(uint8_t chn, uint16_t detphase)
     {
@@ -94,22 +95,74 @@ public:
         m_ctrl.m_dds_ovr[chn].phase_enable = 0;
         m_ctrl.m_dds_ovr[chn].amp_enable = 0;
         m_ctrl.m_dds_ovr[chn].freq = -1;
-        m_ctrl.m_p.template dds_reset<true>(chn);
         m_t += 50;
+        m_ctrl.m_p.template dds_reset<true>(chn);
     }
     void dac(uint8_t chn, uint16_t V)
     {
-        m_ctrl.m_p.template dac<true>(chn, V);
         m_t += 45;
-    }
-    void wait(uint64_t t)
-    {
-        // TODO
+        m_ctrl.m_p.template dac<true>(chn, V);
     }
     void clock(uint8_t period)
     {
-        m_ctrl.m_p.template clock<true>(period);
         m_t += 5;
+        m_ctrl.m_p.template clock<true>(period);
+    }
+    void wait(uint64_t t)
+    {
+        if (t < 1000) {
+            // If the wait time is too short, don't do anything fancy
+            m_t += t;
+            m_ctrl.m_p.template wait<true>(uint32_t(t));
+            return;
+        }
+        if (!m_released) {
+            m_ctrl.m_p.release_hold();
+            m_released = true;
+        }
+        const auto tend = m_t + t;
+        auto tnow = getCoarseTime();
+        while (true) {
+            using namespace std::literals;
+            if (m_start_t + m_t * 10 >= tnow + m_min_t) {
+                // We have time to do something else
+                uint32_t stept;
+                bool processed;
+                std::tie(stept, processed) = run_wait_step();
+                m_t += stept;
+                if (!processed) {
+                    // Didn't find much to do. Sleep for a while
+                    std::this_thread::sleep_for(0.2ms);
+                }
+            }
+            else {
+                // We need to do the actual sequence
+                // At least forward the sequence for 1000 steps.
+                auto stept = max((tnow + m_min_t - m_start_t) / 10 - m_t, 1000);
+                stept = min(stept, tend - m_t);
+                if (m_t + stept + 1000 <= tend) {
+                    // If we are close to the end after this wait, just finish it up.
+                    m_t = tend;
+                    m_ctrl.m_p.template wait<true>(uint32_t(tend - m_t));
+                    return;
+                }
+                m_t += stept;
+                m_ctrl.m_p.template wait<true>(uint32_t(stept));
+            }
+            if (tend < m_t + 1000) {
+                assert(m_t < tend);
+                m_t = tend;
+                m_ctrl.m_p.template wait<true>(uint32_t(tend - m_t));
+                return;
+            }
+            tnow = getCoarseTime();
+        }
+    }
+
+    std::pair<uint32_t,bool> run_wait_step()
+    {
+        // TODO
+        return {0, false};
     }
 
 private:
@@ -118,6 +171,11 @@ private:
     uint32_t m_ttl;
     uint32_t m_preserve_ttl;
     uint64_t m_t{0};
+
+    const uint64_t m_start_t{getCoarseTime()};
+    const uint64_t m_min_t{max(getCoarseRes() * 3, 3000000)};
+
+    bool m_released = false;
 };
 
 template<typename Pulser>
