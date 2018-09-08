@@ -202,9 +202,107 @@ public:
             }
             m_ctrl.m_p.template ttl<true>(m_ttl, 3);
             return {3, false};
-        case Controller::DDSFreq:
-        case Controller::DDSAmp:
-        case Controller::DDSPhase:
+        case Controller::DDSFreq: {
+            bool is_override = cmd->is_override;
+            bool has_res = cmd->has_res;
+            int chn = cmd->operand;
+            uint32_t val = cmd->val;
+            assert(chn < 22);
+            auto &ovr = m_ctrl.m_dds_ovr[chn];
+            if (!is_override && !has_res)
+                is_override = true;
+            if (is_override) {
+                // Should be handled by the cache in ctrl_iface.
+                assert(!has_res);
+                if (val == ovr.freq) {
+                    return {0, false};
+                }
+                ovr.freq = val;
+                if (val == uint32_t(-1)) {
+                    return {0, false};
+                }
+                else {
+                    m_ctrl.m_p.template dds_set_freq<true>(chn, val);
+                    return {50, false};
+                }
+            }
+            if (!has_res) {
+                m_ctrl.m_p.template dds_set_freq<true>(chn, val);
+                return {50, false};
+            }
+            m_ctrl.m_p.template dds_get_freq<true>(chn);
+            return {50, true};
+        }
+        case Controller::DDSAmp: {
+            bool is_override = cmd->is_override;
+            bool has_res = cmd->has_res;
+            int chn = cmd->operand;
+            uint16_t val = uint16_t(cmd->val);
+            assert(chn < 22);
+            auto &ovr = m_ctrl.m_dds_ovr[chn];
+            if (!is_override && !has_res)
+                is_override = true;
+            if (is_override) {
+                // Should be handled by the cache in ctrl_iface.
+                assert(!has_res);
+                if (val == ovr.amp) {
+                    return {0, false};
+                }
+                else if (val == uint16_t(-1)) {
+                    if (ovr.amp_enable)
+                        ovr.amp_enable = false;
+                    return {0, false};
+                }
+                else {
+                    ovr.amp = uint16_t(val & ((1 << 12) - 1));
+                    ovr.amp_enable = true;
+                    m_ctrl.m_p.template dds_set_amp<true>(chn, val);
+                    return {50, false};
+                }
+            }
+            if (!has_res) {
+                m_ctrl.m_p.template dds_set_amp<true>(chn, val);
+                return {50, false};
+            }
+            m_ctrl.m_p.template dds_get_amp<true>(chn);
+            return {50, true};
+        }
+        case Controller::DDSPhase: {
+            bool is_override = cmd->is_override;
+            bool has_res = cmd->has_res;
+            int chn = cmd->operand;
+            uint16_t val = uint16_t(cmd->val);
+            assert(chn < 22);
+            auto &ovr = m_ctrl.m_dds_ovr[chn];
+            if (!is_override && !has_res)
+                is_override = true;
+            if (is_override) {
+                // Should be handled by the cache in ctrl_iface.
+                assert(!has_res);
+                if (val == ovr.phase) {
+                    return {0, false};
+                }
+                else if (val == uint16_t(-1)) {
+                    if (ovr.phase_enable)
+                        ovr.phase_enable = false;
+                    return {0, false};
+                }
+                else {
+                    ovr.phase = val;
+                    ovr.phase_enable = true;
+                    m_ctrl.m_dds_phase[chn] = val;
+                    m_ctrl.m_p.template dds_set_phase<true>(chn, val);
+                    return {50, false};
+                }
+            }
+            if (!has_res) {
+                m_ctrl.m_dds_phase[chn] = val;
+                m_ctrl.m_p.template dds_set_phase<true>(chn, val);
+                return {50, false};
+            }
+            m_ctrl.m_p.template dds_get_phase<true>(chn);
+            return {50, true};
+        }
         case Controller::DDSReset:
         case Controller::Clock:
             // TODO
