@@ -173,7 +173,7 @@ public:
             return {0, true};
         }
         if (auto cmd = m_ctrl.get_cmd()) {
-            auto res = process_cmd(cmd);
+            auto res = m_ctrl.process_cmd(cmd, this);
             if (res.second) {
                 m_ctrl.m_cmd_waiting = cmd;
             }
@@ -185,40 +185,11 @@ public:
         return {0, false};
     }
 
-    // Process a command.
-    // Return the sequence time forwarded and if the command needs a result.
-    std::pair<uint32_t,bool> process_cmd(const Controller::ReqCmd *cmd)
-    {
-        // Most of the states are kept in the controller and only the TTL ones is
-        // kept in the runner for the preserved TTL channels so we only need to
-        // do things differently for the TTL commands.
-        if (cmd->opcode == Controller::TTL) {
-            // Should have been caught by concurrent_get/set.
-            assert(!cmd->has_res && !cmd->is_override);
-            if (cmd->operand == uint32_t((1 << 26) - 1)) {
-                auto val = cmd->val;
-                m_ttl = val;
-                m_preserve_ttl = val & m_ttlmask;
-            }
-            else {
-                assert(cmd->operand < 32);
-                auto chn = uint8_t(cmd->operand);
-                bool val = cmd->val;
-                if (m_ttlmask & (1 << chn))
-                    m_preserve_ttl = setBit(m_preserve_ttl, chn, val);
-                m_ttl = setBit(m_ttl, chn, val);
-            }
-            m_ctrl.m_p.template ttl<true>(m_ttl, 3);
-            return {3, false};
-        }
-        return m_ctrl.process_cmd(cmd);
-    }
-
-private:
     Controller &m_ctrl;
-    uint32_t m_ttlmask;
+    const uint32_t m_ttlmask;
     uint32_t m_ttl;
     uint32_t m_preserve_ttl;
+private:
     uint64_t m_t{0};
 
     const uint64_t m_start_t{getCoarseTime()};
@@ -316,7 +287,7 @@ std::vector<int> Controller<Pulser>::get_active_dds()
 }
 
 template<typename Pulser>
-std::pair<uint32_t,bool> Controller<Pulser>::process_cmd(const Controller::ReqCmd *cmd)
+std::pair<uint32_t,bool> Controller<Pulser>::process_cmd(const ReqCmd *cmd, Runner *runner)
 {
     switch (cmd->opcode) {
     case Controller::TTL: {
@@ -325,12 +296,24 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_cmd(const Controller::ReqCm
         uint32_t ttl;
         if (cmd->operand == uint32_t((1 << 26) - 1)) {
             ttl = cmd->val;
+            if (runner) {
+                runner->m_ttl = ttl;
+                runner->m_preserve_ttl = ttl & runner->m_ttlmask;
+            }
         }
         else {
             assert(cmd->operand < 32);
             auto chn = uint8_t(cmd->operand);
             bool val = cmd->val;
-            ttl = setBit(m_p.cur_ttl(), chn, val);
+            if (runner) {
+                if (runner->m_ttlmask & (1 << chn))
+                    runner->m_preserve_ttl = setBit(runner->m_preserve_ttl, chn, val);
+                ttl = runner->m_ttl;
+            }
+            else {
+                ttl = m_p.cur_ttl();
+            }
+            ttl = setBit(ttl, chn, val);
         }
         m_p.template ttl<true>(ttl, 3);
         return {3, false};

@@ -48,7 +48,9 @@ private:
     std::vector<int> get_active_dds() override;
 
     bool check_dds(int chn);
-    std::pair<uint32_t,bool> process_cmd(const Controller::ReqCmd *cmd);
+    // Process a command.
+    // Return the sequence time forwarded and if the command needs a result.
+    std::pair<uint32_t,bool> process_cmd(const ReqCmd *cmd, Runner *runner=nullptr);
 
     static constexpr uint8_t NDDS = 22;
 
