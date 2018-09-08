@@ -318,7 +318,9 @@ public:
             return {50, false};
         }
         case Controller::Clock:
-            // TODO
+            assert(!cmd->is_override && !cmd->has_res && cmd->operand == 0);
+            m_ctrl.m_p.template clock<true>(uint8_t(cmd->val));
+            return {5, false};
         default:
             return {0, false};
         }
