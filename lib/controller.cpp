@@ -526,7 +526,7 @@ template<typename Pulser>
 void Controller<Pulser>::run_seq(ReqSeq *seq)
 {
     m_p.set_hold();
-    m_p.toggle_init();
+    // m_p.toggle_init();
     seq->state.store(SeqStart, std::memory_order_relaxed);
     backend_event();
 
