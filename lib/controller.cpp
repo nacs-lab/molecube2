@@ -17,6 +17,8 @@
  *************************************************************************/
 
 #include "controller.h"
+#include "pulser.h"
+#include "dummy_pulser.h"
 
 #include <nacs-utils/timer.h>
 
@@ -531,6 +533,7 @@ void Controller<Pulser>::worker()
     }
 }
 
+// Help the compiler to make sure the specialization is in this compile unit.
 template class Controller<Pulser>;
 template class Controller<DummyPulser>;
 

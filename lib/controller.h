@@ -20,8 +20,6 @@
 #define LIBMOLECUBE_CONTROLLER_H
 
 #include "ctrl_iface.h"
-#include "pulser.h"
-#include "dummy_pulser.h"
 
 #include <nacs-utils/mem.h>
 #include <nacs-utils/container.h>
@@ -78,9 +76,6 @@ private:
 
     std::thread m_worker;
 };
-
-extern template class Controller<Pulser>;
-extern template class Controller<DummyPulser>;
 
 }
 
