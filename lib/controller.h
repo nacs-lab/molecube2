@@ -24,6 +24,7 @@
 #include "dummy_pulser.h"
 
 #include <nacs-utils/mem.h>
+#include <nacs-utils/container.h>
 
 #include <vector>
 
@@ -67,7 +68,7 @@ private:
     bool m_dds_pending_reset[NDDS] = {false};
     bool m_dds_exist[NDDS] = {false};
     uint64_t m_dds_check_time;
-    ReqCmd *m_cmd_waiting = nullptr;
+    FixedQueue<ReqCmd*,16> m_cmd_waiting;
 };
 
 extern template class Controller<Pulser>;

@@ -421,21 +421,27 @@ template<typename Pulser>
 template<bool checked>
 std::pair<uint32_t,bool> Controller<Pulser>::process_reqcmd(Runner *runner)
 {
-    if (m_cmd_waiting) {
-        if (m_p.try_get_result(m_cmd_waiting->val)) {
-            m_cmd_waiting = nullptr;
+    bool processed = false;
+    if (!m_cmd_waiting.empty()) {
+        if (m_p.try_get_result(m_cmd_waiting.front()->val)) {
+            m_cmd_waiting.pop();
             finish_cmd();
             if (!checked) {
                 // The time is not very important, notify the frontend.
                 backend_event();
             }
+            return {0, true};
         }
-        return {0, true};
+        processed = true;
     }
     if (auto cmd = get_cmd()) {
+        // If the command potentially have a result
+        // and if the result queue is already full, wait until the queue has space.
+        if (cmd->has_res && m_cmd_waiting.full())
+            return {0, true};
         auto res = run_cmd<checked>(cmd, runner);
         if (res.second) {
-            m_cmd_waiting = cmd;
+            m_cmd_waiting.push(cmd);
         }
         else {
             finish_cmd();
@@ -446,7 +452,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_reqcmd(Runner *runner)
         }
         return {res.first, true};
     }
-    return {0, false};
+    return {0, processed};
 }
 
 template class Controller<Pulser>;
