@@ -70,7 +70,7 @@ bool CtrlIFace::wait()
     m_ftend_evt.wait(lk, [&] {
             return m_quit || m_seq_queue.get_filter() || m_cmd_queue.get_filter();
         });
-    return m_quit;
+    return !m_quit;
 }
 
 auto CtrlIFace::get_seq() -> ReqSeq*
