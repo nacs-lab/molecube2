@@ -185,10 +185,11 @@ protected:
 
     /**
      * Wait for a new request when there's no sequence running.
+     * Wait for at most `maxt` nanoseconds. If `maxt < 0`, do not time out.
      *
      * Return false if the backend should exit.
      */
-    bool wait();
+    bool wait(int64_t maxt=-1);
 
     /**
      * Try popping a command from the queue.

@@ -595,7 +595,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
 template<typename Pulser>
 void Controller<Pulser>::worker()
 {
-    while (wait()) {
+    while (wait(500000000)) { // Wake up every 500ms
         if (auto seq = get_seq()) {
             run_seq(seq);
             finish_seq();

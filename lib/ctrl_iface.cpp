@@ -21,6 +21,8 @@
 #include <nacs-utils/fd_utils.h>
 #include <nacs-utils/timer.h>
 
+#include <chrono>
+
 namespace Molecube {
 
 void CtrlIFace::CmdCache::set(ReqOP op, uint32_t operand, bool is_override, uint32_t val)
@@ -64,12 +66,18 @@ CtrlIFace::CtrlIFace()
 {
 }
 
-bool CtrlIFace::wait()
+bool CtrlIFace::wait(int64_t maxt)
 {
     std::unique_lock<std::mutex> lk(m_ftend_lck);
-    m_ftend_evt.wait(lk, [&] {
-            return m_quit || m_seq_queue.get_filter() || m_cmd_queue.get_filter();
-        });
+    auto pred = [&] {
+        return m_quit || m_seq_queue.get_filter() || m_cmd_queue.get_filter();
+    };
+    if (maxt < 0) {
+        m_ftend_evt.wait(lk, pred);
+    }
+    else {
+        m_ftend_evt.wait_for(lk, std::chrono::nanoseconds(maxt), pred);
+    }
     return !m_quit;
 }
 
