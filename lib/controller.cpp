@@ -564,8 +564,10 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     runner.template wait<false>(3);
     seq->state.store(SeqFlushed, std::memory_order_relaxed);
     backend_event();
-    // This is a hack that is believed to make the NI card happy.
-    runner.template clock<false>(9);
+    if (!seq->is_cmd) {
+        // This is a hack that is believed to make the NI card happy.
+        runner.template clock<false>(9);
+    }
     // Wait for the sequence to finish.
     while (!m_p.is_finished()) {
         if (!process_reqcmd<false>(&runner).second) {
@@ -574,9 +576,11 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     }
     seq->state.store(SeqEnd, std::memory_order_relaxed);
     backend_event();
-    // 10ms
-    runner.template wait<false>(1000000);
-    runner.template clock<false>(255);
+    if (!seq->is_cmd) {
+        // 10ms
+        runner.template wait<false>(1000000);
+        runner.template clock<false>(255);
+    }
     if (!m_p.timing_ok())
         std::cerr << "Warning: timing failures." << std::endl;
     m_p.clear_error();
