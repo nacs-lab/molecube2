@@ -16,10 +16,12 @@
  *   see <http://www.gnu.org/licenses/>.                                 *
  *************************************************************************/
 
-#include "controller.h"
+#include "ctrl_iface.h"
 #include "pulser.h"
 #include "dummy_pulser.h"
 
+#include <nacs-utils/container.h>
+#include <nacs-utils/mem.h>
 #include <nacs-utils/timer.h>
 
 #include <nacs-seq/bytecode.h>
@@ -27,9 +29,59 @@
 
 #include <chrono>
 #include <iostream>
+#include <thread>
 #include <tuple>
 
-namespace Molecube {
+namespace {
+using namespace Molecube;
+
+template<typename Pulser>
+class Controller : public CtrlIFace {
+    Controller(const Controller&) = delete;
+    void operator=(const Controller&) = delete;
+
+public:
+    Controller(Pulser &&p);
+    ~Controller();
+
+private:
+    class Runner;
+    friend class Runner;
+
+    bool concurrent_set(ReqOP op, uint32_t operand, bool is_override,
+                        uint32_t val) override;
+    bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
+                        uint32_t &val) override;
+    std::vector<int> get_active_dds() override;
+
+    bool check_dds(int chn);
+    // Process a command.
+    // Return the sequence time forwarded and if the command needs a result.
+    template<bool checked>
+    std::pair<uint32_t,bool> run_cmd(const ReqCmd *cmd, Runner *runner=nullptr);
+    // Try to process a command or result.
+    // Return the sequence time forwarded and whether anything non-trivial is done.
+    template<bool checked>
+    std::pair<uint32_t,bool> process_reqcmd(Runner *runner=nullptr);
+
+    void run_seq(ReqSeq *seq);
+
+    void worker();
+
+    static constexpr uint8_t NDDS = 22;
+
+    Pulser m_p;
+    DDSState m_dds_ovr[NDDS];
+    uint16_t m_dds_phase[NDDS] = {0};
+    // Reinitialize is a complicated sequence and is rarely needed
+    // so only do that after the sequence finishes.
+    bool m_dds_pending_reset[NDDS] = {false};
+    bool m_dds_exist[NDDS] = {false};
+    uint64_t m_dds_check_time;
+    FixedQueue<ReqCmd*,16> m_cmd_waiting;
+
+    std::thread m_worker;
+};
 
 template<typename Pulser>
 class Controller<Pulser>::Runner {
@@ -533,9 +585,9 @@ void Controller<Pulser>::worker()
     }
 }
 
-// Help the compiler to make sure the specialization is in this compile unit.
-template class Controller<Pulser>;
-template class Controller<DummyPulser>;
+} // anonymous namespace
+
+namespace Molecube {
 
 NACS_PROTECTED() std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy)
 {
