@@ -327,6 +327,7 @@ void Controller<Pulser>::detect_dds(bool force)
     for (int i = 0; i < NDDS; i++) {
         if (!m_p.dds_exists(i)) {
             m_dds_exist[i].store(false, std::memory_order_relaxed);
+            m_dds_pending_reset[i] = false;
             continue;
         }
         m_dds_exist[i].store(true, std::memory_order_relaxed);
