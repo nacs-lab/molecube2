@@ -20,6 +20,9 @@
 
 #include <nacs-utils/timer.h>
 
+#include <nacs-seq/bytecode.h>
+#include <nacs-seq/cmdlist.h>
+
 #include <chrono>
 #include <iostream>
 #include <tuple>
@@ -105,17 +108,19 @@ public:
         m_t += 45;
         m_ctrl.m_p.template dac<true>(chn, V);
     }
+    template<bool checked=true>
     void clock(uint8_t period)
     {
         m_t += 5;
-        m_ctrl.m_p.template clock<true>(period);
+        m_ctrl.m_p.template clock<checked>(period);
     }
+    template<bool checked=true>
     void wait(uint64_t t)
     {
         if (t < 1000) {
             // If the wait time is too short, don't do anything fancy
             m_t += t;
-            m_ctrl.m_p.template wait<true>(uint32_t(t));
+            m_ctrl.m_p.template wait<checked>(uint32_t(t));
             return;
         }
         if (!m_released) {
@@ -130,7 +135,7 @@ public:
                 // We have time to do something else
                 uint32_t stept;
                 bool processed;
-                std::tie(stept, processed) = m_ctrl.process_reqcmd<true>(this);
+                std::tie(stept, processed) = m_ctrl.process_reqcmd<checked>(this);
                 m_t += stept;
                 if (!processed) {
                     // Didn't find much to do. Sleep for a while
@@ -145,16 +150,16 @@ public:
                 if (m_t + stept + 1000 <= tend) {
                     // If we are close to the end after this wait, just finish it up.
                     m_t = tend;
-                    m_ctrl.m_p.template wait<true>(uint32_t(tend - m_t));
+                    m_ctrl.m_p.template wait<checked>(uint32_t(tend - m_t));
                     return;
                 }
                 m_t += stept;
-                m_ctrl.m_p.template wait<true>(uint32_t(stept));
+                m_ctrl.m_p.template wait<checked>(uint32_t(stept));
             }
             if (tend < m_t + 1000) {
                 assert(m_t < tend);
                 m_t = tend;
-                m_ctrl.m_p.template wait<true>(uint32_t(tend - m_t));
+                m_ctrl.m_p.template wait<checked>(uint32_t(tend - m_t));
                 return;
             }
             tnow = getCoarseTime();
@@ -453,6 +458,57 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_reqcmd(Runner *runner)
         return {res.first, true};
     }
     return {0, processed};
+}
+
+template<typename Pulser>
+void Controller<Pulser>::run_seq(ReqSeq *seq)
+{
+    m_p.set_hold();
+    m_p.toggle_init();
+    seq->state.store(SeqStart, std::memory_order_relaxed);
+    backend_event();
+
+    Runner runner(*this, seq->ttl_mask);
+    if (unlikely(seq->is_cmd)) {
+        Seq::CmdList::ExeState exestate;
+        exestate.run(runner, seq->code, seq->code_len);
+    }
+    else {
+        Seq::ByteCode::ExeState exestate;
+        exestate.run(runner, seq->code, seq->code_len);
+    }
+    m_p.release_hold();
+    // Stop the timing check with a short wait.
+    runner.template wait<false>(3);
+    seq->state.store(SeqFlushed, std::memory_order_relaxed);
+    backend_event();
+    // This is a hack that is believed to make the NI card happy.
+    runner.template clock<false>(9);
+    // Wait for the sequence to finish.
+    while (!m_p.is_finished()) {
+        if (!process_reqcmd<false>(&runner).second) {
+            std::this_thread::yield();
+        }
+    }
+    seq->state.store(SeqEnd, std::memory_order_relaxed);
+    backend_event();
+    // 10ms
+    runner.template wait<false>(1000000);
+    runner.template clock<false>(255);
+    if (!m_p.timing_ok())
+        std::cerr << "Warning: timing failures." << std::endl;
+    m_p.clear_error();
+
+    // Doing this check before this sequence will make the current sequence
+    // more likely to work. However, that increase the latency and the DDS
+    // reset only happen very infrequently so let's do it after the sequence
+    // for better efficiency.
+    for (int i = 0; i < NDDS; i++) {
+        if (m_dds_exist[i] && check_dds(i)) {
+            std::cerr << "DDS " << i << " reinit" << std::endl;
+            m_p.dump_dds(std::cerr, i);
+        }
+    }
 }
 
 template class Controller<Pulser>;

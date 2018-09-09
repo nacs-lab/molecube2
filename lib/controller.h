@@ -58,6 +58,8 @@ private:
     template<bool checked>
     std::pair<uint32_t,bool> process_reqcmd(Runner *runner=nullptr);
 
+    void run_seq(ReqSeq *seq);
+
     static constexpr uint8_t NDDS = 22;
 
     Pulser m_p;
