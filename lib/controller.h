@@ -26,6 +26,7 @@
 #include <nacs-utils/mem.h>
 #include <nacs-utils/container.h>
 
+#include <thread>
 #include <vector>
 
 namespace Molecube {
@@ -60,6 +61,8 @@ private:
 
     void run_seq(ReqSeq *seq);
 
+    void worker();
+
     static constexpr uint8_t NDDS = 22;
 
     Pulser m_p;
@@ -71,6 +74,8 @@ private:
     bool m_dds_exist[NDDS] = {false};
     uint64_t m_dds_check_time;
     FixedQueue<ReqCmd*,16> m_cmd_waiting;
+
+    std::thread m_worker;
 };
 
 extern template class Controller<Pulser>;

@@ -181,7 +181,8 @@ private:
 
 template<typename Pulser>
 Controller<Pulser>::Controller(Pulser &&p)
-    : m_p(std::move(p))
+    : m_p(std::move(p)),
+      m_worker(&Controller<Pulser>::worker, this)
 {
     for (int i = 0; i < NDDS; i++) {
         if (!m_p.dds_exists(i)) {
@@ -508,6 +509,18 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
             std::cerr << "DDS " << i << " reinit" << std::endl;
             m_p.dump_dds(std::cerr, i);
         }
+    }
+}
+
+template<typename Pulser>
+void Controller<Pulser>::worker()
+{
+    while (wait()) {
+        if (auto seq = get_seq()) {
+            run_seq(seq);
+            finish_seq();
+        }
+        process_reqcmd<false>();
     }
 }
 
