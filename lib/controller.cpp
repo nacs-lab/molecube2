@@ -267,7 +267,7 @@ template<bool checked>
 std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *runner)
 {
     switch (cmd->opcode) {
-    case Controller::TTL: {
+    case TTL: {
         // Should have been caught by concurrent_get/set.
         assert(!cmd->has_res && !cmd->is_override);
         uint32_t ttl;
@@ -295,7 +295,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         m_p.template ttl<checked>(ttl, 3);
         return {3, false};
     }
-    case Controller::DDSFreq: {
+    case DDSFreq: {
         bool is_override = cmd->is_override;
         bool has_res = cmd->has_res;
         int chn = cmd->operand;
@@ -326,7 +326,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         m_p.template dds_get_freq<checked>(chn);
         return {50, true};
     }
-    case Controller::DDSAmp: {
+    case DDSAmp: {
         bool is_override = cmd->is_override;
         bool has_res = cmd->has_res;
         int chn = cmd->operand;
@@ -360,7 +360,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         m_p.template dds_get_amp<checked>(chn);
         return {50, true};
     }
-    case Controller::DDSPhase: {
+    case DDSPhase: {
         bool is_override = cmd->is_override;
         bool has_res = cmd->has_res;
         int chn = cmd->operand;
@@ -396,7 +396,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         m_p.template dds_get_phase<checked>(chn);
         return {50, true};
     }
-    case Controller::DDSReset: {
+    case DDSReset: {
         assert(!cmd->is_override && !cmd->has_res && cmd->val == 0);
         int chn = cmd->operand;
         assert(chn < 22);
@@ -408,7 +408,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         m_p.template dds_reset<checked>(chn);
         return {50, false};
     }
-    case Controller::Clock:
+    case Clock:
         assert(!cmd->is_override && !cmd->has_res && cmd->operand == 0);
         m_p.template clock<checked>(uint8_t(cmd->val));
         return {5, false};
