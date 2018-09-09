@@ -38,6 +38,7 @@ class Controller : public CtrlIFace {
 
 public:
     Controller(Pulser &&p);
+    ~Controller();
 
 private:
     class Runner;

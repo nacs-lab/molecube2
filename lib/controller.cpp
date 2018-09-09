@@ -203,6 +203,13 @@ Controller<Pulser>::Controller(Pulser &&p)
 }
 
 template<typename Pulser>
+Controller<Pulser>::~Controller()
+{
+    quit();
+    m_worker.join();
+}
+
+template<typename Pulser>
 bool Controller<Pulser>::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
                                         uint32_t val)
 {
