@@ -28,7 +28,7 @@ set(LINKER_FLAGS -Wl,--as-needed -Wl,--no-undefined -Wl,--gc-sections
   -pthread -fno-math-errno)
 
 cmake_c_add_flags(CMAKE_C_FLAGS -std=gnu11)
-cmake_c_add_flags(CMAKE_CXX_FLAGS -std=gnu++14)
+cmake_c_add_flags(CMAKE_CXX_FLAGS -std=gnu++14 -fno-rtti)
 cmake_c_add_flags(CMAKE_EXE_LINKER_FLAGS ${LINKER_FLAGS})
 cmake_c_add_flags(CMAKE_STATIC_LINKER_FLAGS ${LINKER_FLAGS})
 cmake_c_add_flags(CMAKE_SHARED_LINKER_FLAGS ${LINKER_FLAGS})
