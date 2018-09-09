@@ -130,7 +130,7 @@ public:
                 // We have time to do something else
                 uint32_t stept;
                 bool processed;
-                std::tie(stept, processed) = run_wait_step();
+                std::tie(stept, processed) = m_ctrl.process_reqcmd<true>(this);
                 m_t += stept;
                 if (!processed) {
                     // Didn't find much to do. Sleep for a while
@@ -159,30 +159,6 @@ public:
             }
             tnow = getCoarseTime();
         }
-    }
-
-    // Try to process a command or result.
-    // Return the sequence time forwarded and whether anything non-trivial is done.
-    std::pair<uint32_t,bool> run_wait_step()
-    {
-        if (m_ctrl.m_cmd_waiting) {
-            if (m_ctrl.m_p.try_get_result(m_ctrl.m_cmd_waiting->val)) {
-                m_ctrl.m_cmd_waiting = nullptr;
-                m_ctrl.finish_cmd();
-            }
-            return {0, true};
-        }
-        if (auto cmd = m_ctrl.get_cmd()) {
-            auto res = m_ctrl.run_cmd<true>(cmd, this);
-            if (res.second) {
-                m_ctrl.m_cmd_waiting = cmd;
-            }
-            else {
-                m_ctrl.finish_cmd();
-            }
-            return {res.first, true};
-        }
-        return {0, false};
     }
 
     Controller &m_ctrl;
@@ -439,6 +415,38 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
     default:
         return {0, false};
     }
+}
+
+template<typename Pulser>
+template<bool checked>
+std::pair<uint32_t,bool> Controller<Pulser>::process_reqcmd(Runner *runner)
+{
+    if (m_cmd_waiting) {
+        if (m_p.try_get_result(m_cmd_waiting->val)) {
+            m_cmd_waiting = nullptr;
+            finish_cmd();
+            if (!checked) {
+                // The time is not very important, notify the frontend.
+                backend_event();
+            }
+        }
+        return {0, true};
+    }
+    if (auto cmd = get_cmd()) {
+        auto res = run_cmd<checked>(cmd, runner);
+        if (res.second) {
+            m_cmd_waiting = cmd;
+        }
+        else {
+            finish_cmd();
+            if (!checked) {
+                // The time is not very important, notify the frontend.
+                backend_event();
+            }
+        }
+        return {res.first, true};
+    }
+    return {0, false};
 }
 
 template class Controller<Pulser>;

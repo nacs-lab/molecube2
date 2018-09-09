@@ -52,6 +52,10 @@ private:
     // Return the sequence time forwarded and if the command needs a result.
     template<bool checked>
     std::pair<uint32_t,bool> run_cmd(const ReqCmd *cmd, Runner *runner=nullptr);
+    // Try to process a command or result.
+    // Return the sequence time forwarded and whether anything non-trivial is done.
+    template<bool checked>
+    std::pair<uint32_t,bool> process_reqcmd(Runner *runner=nullptr);
 
     static constexpr uint8_t NDDS = 22;
 
