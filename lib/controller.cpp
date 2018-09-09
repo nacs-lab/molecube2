@@ -594,7 +594,8 @@ NACS_PROTECTED() std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy)
     if (!dummy) {
         if (auto addr = Molecube::Pulser::address())
             return std::unique_ptr<CtrlIFace>(new Controller<Pulser>(Pulser(addr)));
-        fprintf(stderr, "Warning: failed to create real pulser, use dummy pulser instead.");
+        std::cerr << "Warning: failed to create real pulser, use dummy pulser instead."
+                  << std::endl;
     }
     return std::unique_ptr<CtrlIFace>(new Controller<DummyPulser>(DummyPulser()));
 }
