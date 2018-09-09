@@ -173,7 +173,7 @@ public:
             return {0, true};
         }
         if (auto cmd = m_ctrl.get_cmd()) {
-            auto res = m_ctrl.process_cmd(cmd, this);
+            auto res = m_ctrl.run_cmd<true>(cmd, this);
             if (res.second) {
                 m_ctrl.m_cmd_waiting = cmd;
             }
@@ -287,7 +287,8 @@ std::vector<int> Controller<Pulser>::get_active_dds()
 }
 
 template<typename Pulser>
-std::pair<uint32_t,bool> Controller<Pulser>::process_cmd(const ReqCmd *cmd, Runner *runner)
+template<bool checked>
+std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *runner)
 {
     switch (cmd->opcode) {
     case Controller::TTL: {
@@ -315,7 +316,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_cmd(const ReqCmd *cmd, Runn
             }
             ttl = setBit(ttl, chn, val);
         }
-        m_p.template ttl<true>(ttl, 3);
+        m_p.template ttl<checked>(ttl, 3);
         return {3, false};
     }
     case Controller::DDSFreq: {
@@ -338,15 +339,15 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_cmd(const ReqCmd *cmd, Runn
                 return {0, false};
             }
             else {
-                m_p.template dds_set_freq<true>(chn, val);
+                m_p.template dds_set_freq<checked>(chn, val);
                 return {50, false};
             }
         }
         if (!has_res) {
-            m_p.template dds_set_freq<true>(chn, val);
+            m_p.template dds_set_freq<checked>(chn, val);
             return {50, false};
         }
-        m_p.template dds_get_freq<true>(chn);
+        m_p.template dds_get_freq<checked>(chn);
         return {50, true};
     }
     case Controller::DDSAmp: {
@@ -372,15 +373,15 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_cmd(const ReqCmd *cmd, Runn
             else {
                 ovr.amp = uint16_t(val & ((1 << 12) - 1));
                 ovr.amp_enable = true;
-                m_p.template dds_set_amp<true>(chn, val);
+                m_p.template dds_set_amp<checked>(chn, val);
                 return {50, false};
             }
         }
         if (!has_res) {
-            m_p.template dds_set_amp<true>(chn, val);
+            m_p.template dds_set_amp<checked>(chn, val);
             return {50, false};
         }
-        m_p.template dds_get_amp<true>(chn);
+        m_p.template dds_get_amp<checked>(chn);
         return {50, true};
     }
     case Controller::DDSPhase: {
@@ -407,16 +408,16 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_cmd(const ReqCmd *cmd, Runn
                 ovr.phase = val;
                 ovr.phase_enable = true;
                 m_dds_phase[chn] = val;
-                m_p.template dds_set_phase<true>(chn, val);
+                m_p.template dds_set_phase<checked>(chn, val);
                 return {50, false};
             }
         }
         if (!has_res) {
             m_dds_phase[chn] = val;
-            m_p.template dds_set_phase<true>(chn, val);
+            m_p.template dds_set_phase<checked>(chn, val);
             return {50, false};
         }
-        m_p.template dds_get_phase<true>(chn);
+        m_p.template dds_get_phase<checked>(chn);
         return {50, true};
     }
     case Controller::DDSReset: {
@@ -428,12 +429,12 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_cmd(const ReqCmd *cmd, Runn
         ovr.amp_enable = 0;
         ovr.freq = -1;
         m_dds_phase[chn] = 0;
-        m_p.template dds_reset<true>(chn);
+        m_p.template dds_reset<checked>(chn);
         return {50, false};
     }
     case Controller::Clock:
         assert(!cmd->is_override && !cmd->has_res && cmd->operand == 0);
-        m_p.template clock<true>(uint8_t(cmd->val));
+        m_p.template clock<checked>(uint8_t(cmd->val));
         return {5, false};
     default:
         return {0, false};

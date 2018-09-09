@@ -50,7 +50,8 @@ private:
     bool check_dds(int chn);
     // Process a command.
     // Return the sequence time forwarded and if the command needs a result.
-    std::pair<uint32_t,bool> process_cmd(const ReqCmd *cmd, Runner *runner=nullptr);
+    template<bool checked>
+    std::pair<uint32_t,bool> run_cmd(const ReqCmd *cmd, Runner *runner=nullptr);
 
     static constexpr uint8_t NDDS = 22;
 
