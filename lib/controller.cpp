@@ -55,6 +55,8 @@ private:
     std::vector<int> get_active_dds() override;
 
     bool check_dds(int chn);
+    void detect_dds(bool force=false);
+
     // Process a command.
     // Return the sequence time forwarded and if the command needs a result.
     template<bool checked>
@@ -76,8 +78,8 @@ private:
     // Reinitialize is a complicated sequence and is rarely needed
     // so only do that after the sequence finishes.
     bool m_dds_pending_reset[NDDS] = {false};
-    bool m_dds_exist[NDDS] = {false};
-    uint64_t m_dds_check_time;
+    std::atomic<bool> m_dds_exist[NDDS] = {};
+    uint64_t m_dds_check_time = 0;
     FixedQueue<ReqCmd*,16> m_cmd_waiting;
 
     std::thread m_worker;
@@ -238,22 +240,8 @@ Controller<Pulser>::Controller(Pulser &&p)
     : m_p(std::move(p)),
       m_worker(&Controller<Pulser>::worker, this)
 {
-    for (int i = 0; i < NDDS; i++) {
-        if (!m_p.dds_exists(i)) {
-            m_dds_exist[i] = false;
-            continue;
-        }
-        m_dds_exist[i] = true;
-        if (check_dds(i)) {
-            std::cerr << "DDS " << i << " initialized" << std::endl;
-        }
-        else {
-            m_p.template dds_reset<false>(i);
-        }
-        m_p.dump_dds(std::cerr, i);
-    }
+    detect_dds(true);
     m_p.clear_error();
-    m_dds_check_time = getTime();
 }
 
 template<typename Pulser>
@@ -318,11 +306,36 @@ bool Controller<Pulser>::check_dds(int chn)
 }
 
 template<typename Pulser>
+void Controller<Pulser>::detect_dds(bool force)
+{
+    const auto t = getCoarseTime();
+    if (!force && t < m_dds_check_time + 1000000000)
+        return;
+    for (int i = 0; i < NDDS; i++) {
+        if (!m_p.dds_exists(i)) {
+            m_dds_exist[i].store(false, std::memory_order_relaxed);
+            continue;
+        }
+        m_dds_exist[i].store(true, std::memory_order_relaxed);
+        if (!check_dds(i)) {
+            m_p.template dds_reset<false>(i);
+        }
+        else if (force) {
+            std::cerr << "DDS " << i << " initialized" << std::endl;
+        }
+        if (force) {
+            m_p.dump_dds(std::cerr, i);
+        }
+    }
+    m_dds_check_time = t;
+}
+
+template<typename Pulser>
 std::vector<int> Controller<Pulser>::get_active_dds()
 {
     std::vector<int> res;
     for (int i = 0; i < NDDS; i++) {
-        if (m_dds_exist[i]) {
+        if (m_dds_exist[i].load(std::memory_order_relaxed)) {
             res.push_back(i);
         }
     }
@@ -566,7 +579,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     // reset only happen very infrequently so let's do it after the sequence
     // for better efficiency.
     for (int i = 0; i < NDDS; i++) {
-        if (m_dds_exist[i] && check_dds(i)) {
+        if (m_dds_exist[i].load(std::memory_order_relaxed) && check_dds(i)) {
             std::cerr << "DDS " << i << " reinit" << std::endl;
             m_p.dump_dds(std::cerr, i);
         }
@@ -581,6 +594,7 @@ void Controller<Pulser>::worker()
             run_seq(seq);
             finish_seq();
         }
+        detect_dds();
         process_reqcmd<false>();
     }
 }
