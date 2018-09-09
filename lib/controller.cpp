@@ -151,13 +151,11 @@ public:
     }
     void dds_reset(uint8_t chn)
     {
-        auto &ovr = m_ctrl.m_dds_ovr[chn];
-        ovr.phase_enable = 0;
-        ovr.amp_enable = 0;
-        ovr.freq = -1;
-        m_ctrl.m_dds_phase[chn] = 0;
+        // Do the reset pulse that's part of the sequence but do the
+        // actual reinitialization later after the sequence finishes.
         m_t += 50;
         m_ctrl.m_p.template dds_reset<true>(chn);
+        m_ctrl.m_dds_pending_reset[chn] = true;
     }
     void dac(uint8_t chn, uint16_t V)
     {
@@ -300,6 +298,13 @@ bool Controller<Pulser>::concurrent_get(ReqOP op, uint32_t operand, bool is_over
 template<typename Pulser>
 bool Controller<Pulser>::check_dds(int chn)
 {
+    if (m_dds_pending_reset[chn]) {
+        auto &ovr = m_dds_ovr[chn];
+        ovr.phase_enable = 0;
+        ovr.amp_enable = 0;
+        ovr.freq = -1;
+        m_dds_phase[chn] = 0;
+    }
     auto res = m_p.check_dds(chn, m_dds_pending_reset[chn]);
     m_dds_pending_reset[chn] = false;
     return res;
@@ -309,7 +314,15 @@ template<typename Pulser>
 void Controller<Pulser>::detect_dds(bool force)
 {
     const auto t = getCoarseTime();
-    if (!force && t < m_dds_check_time + 1000000000)
+    auto has_pending_reset = [&] () {
+        for (auto v: m_dds_pending_reset) {
+            if (v) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (!force && t < m_dds_check_time + 1000000000 && !has_pending_reset())
         return;
     for (int i = 0; i < NDDS; i++) {
         if (!m_p.dds_exists(i)) {
@@ -317,12 +330,10 @@ void Controller<Pulser>::detect_dds(bool force)
             continue;
         }
         m_dds_exist[i].store(true, std::memory_order_relaxed);
-        if (!check_dds(i)) {
-            m_p.template dds_reset<false>(i);
-        }
-        else if (force) {
+        if (force)
+            m_dds_pending_reset[i] = true;
+        if (check_dds(i) && force)
             std::cerr << "DDS " << i << " initialized" << std::endl;
-        }
         if (force) {
             m_p.dump_dds(std::cerr, i);
         }
@@ -480,13 +491,8 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         assert(!cmd->is_override && !cmd->has_res && cmd->val == 0);
         int chn = cmd->operand;
         assert(chn < 22);
-        auto &ovr = m_dds_ovr[chn];
-        ovr.phase_enable = 0;
-        ovr.amp_enable = 0;
-        ovr.freq = -1;
-        m_dds_phase[chn] = 0;
-        m_p.template dds_reset<checked>(chn);
-        return {50, false};
+        m_dds_pending_reset[chn] = true;
+        return {0, false};
     }
     case Clock:
         assert(!cmd->is_override && !cmd->has_res && cmd->operand == 0);
@@ -596,6 +602,7 @@ void Controller<Pulser>::worker()
         }
         detect_dds();
         process_reqcmd<false>();
+        detect_dds();
     }
 }
 
