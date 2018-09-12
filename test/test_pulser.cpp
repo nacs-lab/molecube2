@@ -33,6 +33,7 @@ void test_pulser(P &p)
     assert(p.ttl_himask() == 0);
     p.set_ttl_himask(123);
     assert(p.ttl_himask() == 123);
+    std::this_thread::sleep_for(1ms);
     p.set_ttl_himask(0);
     assert(p.ttl_himask() == 0);
 
