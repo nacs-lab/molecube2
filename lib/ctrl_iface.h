@@ -81,6 +81,9 @@ public:
         // After the sequence finished
         virtual void end(uint64_t)
         {}
+        // After the sequence is cancelled
+        virtual void cancel(uint64_t)
+        {}
     };
     // Opcode for stand alone commands.
     enum ReqOP {
@@ -140,10 +143,11 @@ protected:
     };
 
     enum ReqSeqState {
+        SeqCancel = -1,
         SeqInit = 0,
         SeqStart,
         SeqFlushed,
-        SeqEnd
+        SeqEnd,
     };
     struct ReqSeq {
         // Sequence ID
@@ -158,6 +162,7 @@ protected:
         uint32_t ttl_mask;
         // Whether this is a command list or not. (`false` for bytecode).
         bool is_cmd;
+        std::atomic<bool> cancel{false};
         // This is set by the backend to signal change of state.
         // Only `SeqEnd` event is guaranteed to have a accompanied event fd notification.
         std::atomic<ReqSeqState> state{SeqInit};
@@ -273,6 +278,11 @@ public:
         return _run_code(is_cmd, seq_len_ns, ttl_mask, code, code_len,
                          std::move(notify), AnyPtr(std::forward<Args>(args)...));
     }
+    // Cancel the sequence determined by the `id`. `id == 0` means cancel all sequences.
+    // Return if any sequences may be cancelled.
+    // Note that a cancelled sequence that has been started
+    // may not response to the cancellation.
+    bool cancel_seq(uint64_t id);
 
     void set_ttl(int chn, bool val);
     void set_ttl_all(uint32_t val);

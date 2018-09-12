@@ -119,6 +119,18 @@ NACS_PROTECTED() uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns,
     return id;
 }
 
+NACS_PROTECTED() bool CtrlIFace::cancel_seq(uint64_t id)
+{
+    bool found = false;
+    for (auto seq: m_seq_queue) {
+        if (id == 0 || seq->id == id) {
+            found = true;
+            seq->cancel.store(true, std::memory_order_relaxed);
+        }
+    }
+    return found;
+}
+
 void CtrlIFace::backend_event()
 {
     writeEvent(m_bkend_evt);
@@ -258,14 +270,18 @@ NACS_PROTECTED() void CtrlIFace::run_frontend()
             seq->notify->flushed(seq->id);
         if (state >= SeqEnd && pstate < SeqEnd)
             seq->notify->end(seq->id);
+        if (state == SeqCancel && pstate != SeqCancel)
+            seq->notify->cancel(seq->id);
         if (pstate != state) {
             seq->processed_state = state;
         }
     };
     // Get the current sequence first so that we know everything before
-    // it will be popped below and it is guaranteed that newly finished sequences
-    // won't have the callback executed after the ones for the current sequence
-    // in case it finishes right after we tried popping it here.
+    // it will be popped below.
+    // This guarantees that the callbacks will be executed in order without leaving a gap.
+    // If we get the current sequence after popping all the finished ones, the
+    // current sequence may not be the once immediately after the last finished one we
+    // process if a sequence finished in between.
     auto curseq = m_seq_queue.peak().first;
     while (auto seq = m_seq_queue.pop()) {
         if (curseq && curseq == seq)

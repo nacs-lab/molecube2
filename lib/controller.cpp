@@ -630,7 +630,12 @@ void Controller<Pulser>::worker()
 {
     while (wait(500000000)) { // Wake up every 500ms
         if (auto seq = get_seq()) {
-            run_seq(seq);
+            if (seq->cancel.load(std::memory_order_relaxed)) {
+                seq->state.store(SeqCancel, std::memory_order_relaxed);
+            }
+            else {
+                run_seq(seq);
+            }
             finish_seq();
         }
         detect_dds();
