@@ -58,11 +58,15 @@ private:
     void detect_dds(bool force=false);
 
     // Process a command.
-    // Return the sequence time forwarded and if the command needs a result.
+    // Returns the sequence time forwarded and if the command needs a result.
     template<bool checked>
     std::pair<uint32_t,bool> run_cmd(const ReqCmd *cmd, Runner *runner=nullptr);
+    // Check if we are waiting for results. If yes, try to get one.
+    // Returns whether anything non-trivial is done, and whether a result was read.
+    template<bool checked>
+    std::pair<bool,bool> try_get_result();
     // Try to process a command or result.
-    // Return the sequence time forwarded and whether anything non-trivial is done.
+    // Returns the sequence time forwarded and whether anything non-trivial is done.
     template<bool checked>
     std::pair<uint32_t,bool> process_reqcmd(Runner *runner=nullptr);
 
@@ -506,21 +510,31 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
 
 template<typename Pulser>
 template<bool checked>
+std::pair<bool,bool> Controller<Pulser>::try_get_result()
+{
+    if (!m_cmd_waiting.empty()) {
+        if (!m_p.try_get_result(m_cmd_waiting.front()->val))
+            return {true, false};
+        m_cmd_waiting.pop();
+        finish_cmd();
+        if (!checked) {
+            // The time is not very important, notify the frontend.
+            backend_event();
+        }
+        return {true, true};
+    }
+    return {false, false};
+}
+
+template<typename Pulser>
+template<bool checked>
 std::pair<uint32_t,bool> Controller<Pulser>::process_reqcmd(Runner *runner)
 {
-    bool processed = false;
-    if (!m_cmd_waiting.empty()) {
-        if (m_p.try_get_result(m_cmd_waiting.front()->val)) {
-            m_cmd_waiting.pop();
-            finish_cmd();
-            if (!checked) {
-                // The time is not very important, notify the frontend.
-                backend_event();
-            }
-            return {0, true};
-        }
-        processed = true;
-    }
+    bool processed;
+    bool res_read;
+    std::tie(processed, res_read) = try_get_result<checked>();
+    if (res_read)
+        return {0, true};
     if (auto cmd = get_cmd()) {
         // If the command potentially have a result
         // and if the result queue is already full, wait until the queue has space.
@@ -545,8 +559,22 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_reqcmd(Runner *runner)
 template<typename Pulser>
 void Controller<Pulser>::run_seq(ReqSeq *seq)
 {
+    // Read all the result (`toggle_init` may abort it).
+    while (true) {
+        auto res = try_get_result<false>();
+        if (!res.first)
+            break;
+        if (unlikely(!res.second)) {
+            std::this_thread::yield();
+        }
+    }
+    // Make sure all commands are finished (`toggle_init` will clear them)
+    while (unlikely(!m_p.is_finished()))
+        std::this_thread::yield();
     m_p.set_hold();
-    // m_p.toggle_init();
+    // `toggle_init` is needed to clear the force release flag
+    // so that `set_hold` can work.
+    m_p.toggle_init();
     seq->state.store(SeqStart, std::memory_order_relaxed);
     backend_event();
 
