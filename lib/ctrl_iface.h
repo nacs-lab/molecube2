@@ -304,6 +304,7 @@ public:
     void get_clock(std::function<void(uint32_t)> cb);
 
     void quit();
+    uint64_t get_state_id();
 
     virtual std::vector<int> get_active_dds() = 0;
 
@@ -314,6 +315,9 @@ private:
     uint64_t _run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
                        const uint8_t *code, size_t code_len,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
+
+    void set_dirty();
+    void set_observed();
 
     void send_cmd(const ReqCmd &cmd);
     void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
@@ -328,6 +332,11 @@ private:
 
     // Sequence ID counter
     uint64_t m_seq_cnt = 0;
+    // State ID counter
+    uint64_t m_state_cnt = 0;
+    bool m_dirty = false;
+    bool m_observed = false;
+    bool m_had_seq = false;
 
     // The queues that send the commands/sequences to the backend (filter) and back.
     FilterQueue<ReqCmd> m_cmd_queue;

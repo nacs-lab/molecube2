@@ -108,6 +108,7 @@ NACS_PROTECTED() uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns,
                                             std::unique_ptr<ReqSeqNotify> notify,
                                             AnyPtr storage)
 {
+    set_dirty();
     auto id = ++m_seq_cnt;
     auto seq = m_seq_alloc.alloc(id, seq_len_ns, code, code_len, ttl_mask, is_cmd,
                                  std::move(notify), std::move(storage));
@@ -148,6 +149,7 @@ void CtrlIFace::send_cmd(const ReqCmd &_cmd)
 
 void CtrlIFace::send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val)
 {
+    set_dirty();
     if (!concurrent_set(op, operand, is_override, val))
         send_cmd(ReqCmd{uint8_t(op & 0xf), 0, uint8_t(is_override),
                     operand & ((1 << 26) - 1), val});
@@ -157,6 +159,7 @@ void CtrlIFace::send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint3
 void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
                              std::function<void(uint32_t)> cb)
 {
+    set_observed();
     uint32_t val = 0;
     if (concurrent_get(op, operand, is_override, val)) {
         m_cmd_cache.set(op, operand, is_override, val);
@@ -230,6 +233,7 @@ NACS_PROTECTED() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, std::function<vo
 
 NACS_PROTECTED() void CtrlIFace::reset_dds(int chn)
 {
+    set_dirty();
     send_cmd(ReqCmd{DDSReset, 0, 0, uint32_t(chn & ((1 << 26) - 1)), 0});
     // Clear overwrite
     m_cmd_cache.set(DDSFreq, chn, true, -1);
@@ -282,7 +286,7 @@ NACS_PROTECTED() void CtrlIFace::run_frontend()
     // If we get the current sequence after popping all the finished ones, the
     // current sequence may not be the once immediately after the last finished one we
     // process if a sequence finished in between.
-    auto curseq = m_seq_queue.peak().first;
+    auto curseq = m_seq_queue.peek().first;
     while (auto seq = m_seq_queue.pop()) {
         if (curseq && curseq == seq)
             curseq = nullptr;
@@ -297,6 +301,39 @@ NACS_PROTECTED() void CtrlIFace::run_frontend()
                             cmd->is_override, cmd->val);
         m_cmd_alloc.free(cmd);
     }
+}
+
+inline void CtrlIFace::set_dirty()
+{
+    // If no one has looked at our state, we don't need to invalidate their cache.
+    // Also, if the last one who looked at the state ID still think there's a sequence running
+    // there's no need to explicitly invalidate things either.
+    if (m_observed && !m_had_seq) {
+        m_dirty = true;
+    }
+}
+
+inline void CtrlIFace::set_observed()
+{
+    m_observed = true;
+}
+
+NACS_PROTECTED() uint64_t CtrlIFace::get_state_id()
+{
+    bool has_seq = m_seq_queue.peek().second;
+    if (has_seq != m_had_seq) {
+        // If we started or stopped running sequences since the last query,
+        // always increase the state id.
+        m_had_seq = has_seq;
+        ++m_state_cnt;
+    }
+    else if (m_dirty) {
+        // And if the state changed since the last time someone looked, increase the id.
+        ++m_state_cnt;
+    }
+    m_dirty = false;
+    m_observed = false;
+    return (uint64_t(has_seq) << 63) | m_state_cnt;
 }
 
 }
