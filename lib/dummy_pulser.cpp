@@ -93,8 +93,8 @@ NACS_PROTECTED() void DummyPulser::add_cmd(OP op, bool timing, uint32_t v1, uint
     Cmd cmd{op, timing, std::chrono::steady_clock::now(), v1, v2};
     std::unique_lock<std::mutex> lock(m_cmds_lock);
     while (m_cmds.size() >= 4096) {
-        if (m_hold) {
-            m_hold = false;
+        if (!m_force_release) {
+            m_force_release = true;
             m_release_time = std::chrono::steady_clock::now();
         }
         forward_time(true, lock);
@@ -109,8 +109,9 @@ NACS_PROTECTED() void DummyPulser::release_hold()
     std::unique_lock<std::mutex> lock(m_cmds_lock);
     if (!m_hold)
         return;
+    if (!m_force_release)
+        m_release_time = std::chrono::steady_clock::now();
     m_hold = false;
-    m_release_time = std::chrono::steady_clock::now();
 }
 
 NACS_PROTECTED() void DummyPulser::set_hold()
@@ -119,7 +120,8 @@ NACS_PROTECTED() void DummyPulser::set_hold()
     std::unique_lock<std::mutex> lock(m_cmds_lock);
     if (m_hold)
         return;
-    forward_time(false, lock);
+    if (!m_force_release)
+        forward_time(false, lock);
     m_hold = true;
 }
 
@@ -127,13 +129,14 @@ NACS_PROTECTED() void DummyPulser::toggle_init()
 {
     if (!m_cmds_empty.load(std::memory_order_acquire))
         throw std::runtime_error("Command stream not empty during init.");
+    m_force_release = false;
     m_timing_ok.store(true, std::memory_order_release);
     m_timing_check.store(false, std::memory_order_release);
 }
 
 NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)
 {
-    if (m_cmds.empty() || m_hold) {
+    if (m_cmds.empty() || (m_hold && !m_force_release)) {
         if (block)
             throw std::runtime_error("Waiting for command queue without releasing hold.");
         return;
@@ -151,7 +154,7 @@ NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std
 
 NACS_INTERNAL bool DummyPulser::run_past_cmds(time_point_t cur_t)
 {
-    if (m_hold)
+    if (m_hold && !m_force_release)
         return false;
     bool cmd_run = false;
     while (!m_cmds.empty()) {
@@ -239,6 +242,7 @@ DummyPulser::DummyPulser(DummyPulser &&o)
       m_results(std::move(o.m_results)),
       m_cmds(std::move(o.m_cmds)),
       m_hold(o.m_hold),
+      m_force_release(o.m_force_release),
       m_dds(o.m_dds),
       m_release_time(o.m_release_time)
 {

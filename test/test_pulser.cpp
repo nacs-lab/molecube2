@@ -37,6 +37,8 @@ void test_pulser(P &p)
     p.set_ttl_himask(0);
     assert(p.ttl_himask() == 0);
 
+    p.toggle_init();
+
     // Test TTL pulse
     p.release_hold();
     p.template ttl<false>(0, 10);

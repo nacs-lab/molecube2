@@ -252,6 +252,7 @@ private:
     std::queue<uint32_t> m_results;
     std::queue<Cmd> m_cmds;
     bool m_hold{false};
+    bool m_force_release{false};
 
     DDS m_dds[NDDS];
 
