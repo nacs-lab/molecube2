@@ -7,3 +7,6 @@ target_link_libraries(test_pulser libmolecube)
 
 add_executable(test_controller test_controller.cpp)
 target_link_libraries(test_controller libmolecube)
+
+add_executable(test_DDS test_DDS.cpp)
+target_link_libraries(test_DDS libmolecube)
