@@ -19,8 +19,9 @@
 #ifndef LIBMOLECUBE_CONFIG_H
 #define LIBMOLECUBE_CONFIG_H
 
-#include <nacs-utils/zmq_utils.h>
 #include "ctrl_iface.h"
+
+#include <string>
 
 namespace Molecube {
 
@@ -31,6 +32,7 @@ struct NACS_PROTECTED() Config {
     static Config loadYAML(const char *fname);
 
     bool dummy = false;
+    std::string listen{"tcp://*:7777"};
 };
 
 }

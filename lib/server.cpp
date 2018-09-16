@@ -36,8 +36,11 @@ static uint64_t get_server_id()
 Server::Server(const Config &conf)
     : m_conf(conf),
       m_id(get_server_id()),
-      m_ctrl(CtrlIFace::create(conf.dummy))
+      m_ctrl(CtrlIFace::create(conf.dummy)),
+      m_zmqctx(),
+      m_zmqsock(m_zmqctx, ZMQ_ROUTER)
 {
+    m_zmqsock.bind(m_conf.listen);
 }
 
 }

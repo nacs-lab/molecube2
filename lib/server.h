@@ -37,6 +37,8 @@ private:
     const Config &m_conf;
     const uint64_t m_id;
     std::unique_ptr<CtrlIFace> m_ctrl;
+    zmq::context_t m_zmqctx;
+    zmq::socket_t m_zmqsock;
 };
 
 }
