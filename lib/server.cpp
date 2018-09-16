@@ -186,6 +186,11 @@ void Server::process_zmq()
         m_ctrl->set_clock(clock);
         send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
     }
+    else if (ZMQ::match(msg, "get_clock")) {
+        m_ctrl->get_clock([addr{std::move(addr)}, this] (uint32_t v) mutable {
+                send_reply(addr, ZMQ::bits_msg(uint8_t(v)));
+            });
+    }
 out:
     ZMQ::readall(m_zmqsock);
 }
