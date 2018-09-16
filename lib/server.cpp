@@ -54,6 +54,18 @@ inline bool Server::recv_more(zmq::message_t &msg)
     return ZMQ::recv_more(m_zmqsock, msg);
 }
 
+inline uint64_t Server::get_seq_id(zmq::message_t &msg)
+{
+    if (msg.size() != 16)
+        return 0;
+    uint64_t id;
+    memcpy(&id, (char*)msg.data() + 8, 8);
+    if (id != m_id)
+        return 0;
+    memcpy(&id, msg.data(), 8);
+    return id;
+}
+
 Server::Server(const Config &conf)
     : m_conf(conf),
       m_id(get_server_id()),
@@ -95,6 +107,27 @@ void Server::process_zmq()
         send_reply(addr, ZMQ::bits_msg(false));
         return;
     }
+    if (ZMQ::match(msg, "cancel_seq")) {
+        bool res;
+        if (!recv_more(msg)) {
+            res = m_ctrl->cancel_seq(0);
+        }
+        else if (uint64_t id = get_seq_id(msg)) {
+            res = m_ctrl->cancel_seq(id);
+        }
+        else {
+            res = false;
+        }
+        send_reply(addr, ZMQ::bits_msg(res));
+    }
+    else if (ZMQ::match(msg, "state_id")) {
+        zmq::message_t ret(16);
+        memcpy((char*)msg.data() + 8, &m_id, 8);
+        uint64_t id = m_ctrl->get_state_id();
+        memcpy(msg.data(), &id, 8);
+        send_reply(addr, msg);
+    }
+    ZMQ::readall(m_zmqsock);
 }
 
 }
