@@ -16,29 +16,23 @@
  *   see <http://www.gnu.org/licenses/>.                                 *
  *************************************************************************/
 
-#ifndef LIBMOLECUBE_SERVER_H
-#define LIBMOLECUBE_SERVER_H
-
-#include "ctrl_iface.h"
+#ifndef LIBMOLECUBE_CONFIG_H
+#define LIBMOLECUBE_CONFIG_H
 
 #include <nacs-utils/zmq_utils.h>
+#include "ctrl_iface.h"
 
 namespace Molecube {
 
 using namespace NaCs;
 
-class Config;
+struct NACS_PROTECTED() Config {
+    Config();
+    static Config loadYAML(const char *fname);
 
-class NACS_PROTECTED() Server {
-public:
-    Server(const Config &conf);
-
-private:
-    const Config &m_conf;
-    const uint64_t m_id;
-    std::unique_ptr<CtrlIFace> m_ctrl;
+    bool dummy = false;
 };
 
 }
 
-#endif // LIBMOLECUBE_SERVER_H
+#endif // LIBMOLECUBE_CONFIG_H

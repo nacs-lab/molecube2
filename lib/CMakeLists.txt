@@ -1,6 +1,7 @@
 #
 
 set(libmolecube_SRCS
+  config.cpp
   controller.cpp
   ctrl_iface.cpp
   dummy_pulser.cpp
@@ -9,7 +10,7 @@ set(libmolecube_SRCS
 
 add_library(libmolecube SHARED ${libmolecube_SRCS})
 
-target_link_libraries(libmolecube ${MCDEP_LIBRARIES} rt)
+target_link_libraries(libmolecube ${MCDEP_LIBRARIES} ${YAML_CPP_LIBRARIES} rt)
 
 set_target_properties(libmolecube PROPERTIES
   VERSION 0.1

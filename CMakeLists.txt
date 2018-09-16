@@ -15,6 +15,7 @@ if(NACS_KERNEL_FOUND)
   set(MCDEP_PKGS ${MCDEP_PKGS} nacs-kernel)
 endif()
 pkg_check_modules(MCDEP REQUIRED ${MCDEP_PKGS})
+find_package(yaml-cpp REQUIRED)
 
 # Remove rdynamic
 set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS)
@@ -22,7 +23,7 @@ set(CMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS)
 
 add_definitions(-Wall -Wextra -g -pthread -faligned-new -fvisibility=hidden
   -fno-math-errno -Wconversion -Wno-sign-conversion ${MCDEP_CFLAGS})
-include_directories(${MCDEP_INCLUDE_DIRS})
+include_directories(${MCDEP_INCLUDE_DIRS} ${YAML_CPP_INCLUDE_DIR})
 
 set(LINKER_FLAGS -Wl,--as-needed -Wl,--no-undefined -Wl,--gc-sections
   -pthread -fno-math-errno)

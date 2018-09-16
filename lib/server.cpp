@@ -17,6 +17,7 @@
  *************************************************************************/
 
 #include "server.h"
+#include "config.h"
 
 #include <time.h>
 
@@ -32,9 +33,10 @@ static uint64_t get_server_id()
     return uint64_t(t.tv_sec) * 1000 + t.tv_nsec / 1000000;
 }
 
-Server::Server()
-    : m_id(get_server_id()),
-      m_ctrl(CtrlIFace::create())
+Server::Server(const Config &conf)
+    : m_conf(conf),
+      m_id(get_server_id()),
+      m_ctrl(CtrlIFace::create(conf.dummy))
 {
 }
 
