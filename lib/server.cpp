@@ -127,6 +127,29 @@ void Server::process_zmq()
         memcpy(msg.data(), &id, 8);
         send_reply(addr, msg);
     }
+    else if (ZMQ::match(msg, "reset_dds")) {
+        if (!recv_more(msg) || msg.size() != 1) {
+            send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
+            goto out;
+        }
+        int chn = *(char*)msg.data();
+        if (chn >= 22) {
+            send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
+            goto out;
+        }
+        m_ctrl->reset_dds(chn);
+        send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
+    }
+    else if (ZMQ::match(msg, "set_clock")) {
+        if (!recv_more(msg) || msg.size() != 1) {
+            send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
+            goto out;
+        }
+        uint8_t clock = *(uint8_t*)msg.data();
+        m_ctrl->set_clock(clock);
+        send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
+    }
+out:
     ZMQ::readall(m_zmqsock);
 }
 
