@@ -241,7 +241,7 @@ NACS_PROTECTED() void CtrlIFace::reset_dds(int chn)
     m_cmd_cache.set(DDSPhase, chn, true, -1);
 }
 
-NACS_PROTECTED() void CtrlIFace::set_clock(uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_clock(uint8_t val)
 {
     send_set_cmd(Clock, 0, false, val);
 }

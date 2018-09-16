@@ -300,7 +300,7 @@ public:
     void get_dds_ovr(ReqOP op, int chn, std::function<void(uint32_t)> cb);
     void reset_dds(int chn);
 
-    void set_clock(uint32_t val);
+    void set_clock(uint8_t val);
     void get_clock(std::function<void(uint32_t)> cb);
 
     void quit();
