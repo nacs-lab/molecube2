@@ -16,26 +16,20 @@
  *   see <http://www.gnu.org/licenses/>.                                 *
  *************************************************************************/
 
-#include "server.h"
-
-#include <time.h>
+#include <nacs-utils/zmq_utils.h>
+#include "ctrl_iface.h"
 
 namespace Molecube {
 
-// Return start time in ms as server ID.
-// This is obviously not guaranteed to be unique across multiple servers
-// but is good enough to detect server restart.
-static uint64_t get_server_id()
-{
-    timespec t;
-    clock_gettime(CLOCK_REALTIME_COARSE, &t);
-    return uint64_t(t.tv_sec) * 1000 + t.tv_nsec / 1000000;
-}
+using namespace NaCs;
 
-Server::Server()
-    : m_id(get_server_id()),
-      m_ctrl(CtrlIFace::create())
-{
-}
+class NACS_PROTECTED() Server {
+public:
+    Server();
+
+private:
+    const uint64_t m_id;
+    std::unique_ptr<CtrlIFace> m_ctrl;
+};
 
 }
