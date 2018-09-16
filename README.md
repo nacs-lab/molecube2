@@ -97,6 +97,11 @@ zmq protocol.
 
     where the 1 byte `id` is `[chn_type: 2bits][chn_num: 6bits]` and a overwrite value of
     `0xffffffff` means the overwrite is disabled.
+    Allowed `chn_type` values are:
+
+    * `0`: for DDS frequency
+    * `1`: for DDS amplitude
+    * `2`: for DDS phase
 
 * `get_overwrite_dds`
 
