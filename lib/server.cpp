@@ -23,6 +23,8 @@
 
 namespace Molecube {
 
+namespace {
+
 // Return start time in ms as server ID.
 // This is obviously not guaranteed to be unique across multiple servers
 // but is good enough to detect server restart.
@@ -33,12 +35,28 @@ static uint64_t get_server_id()
     return uint64_t(t.tv_sec) * 1000 + t.tv_nsec / 1000000;
 }
 
+}
+
+void Server::send_header(zmq::message_t &addr)
+{
+    m_zmqsock.send(addr, ZMQ_SNDMORE);
+    m_zmqsock.send(m_empty, ZMQ_SNDMORE);
+}
+
+void Server::send_reply(zmq::message_t &addr, zmq::message_t &msg)
+{
+    send_header(addr);
+    m_zmqsock.send(msg);
+}
+
 Server::Server(const Config &conf)
     : m_conf(conf),
       m_id(get_server_id()),
       m_ctrl(CtrlIFace::create(conf.dummy)),
       m_zmqctx(),
-      m_zmqsock(m_zmqctx, ZMQ_ROUTER)
+      m_zmqsock(m_zmqctx, ZMQ_ROUTER),
+      m_zmqpoll{{(void*)m_zmqsock, 0, ZMQ_POLLIN, 0},
+    {nullptr, m_ctrl->backend_fd(), ZMQ_POLLIN, 0}}
 {
     m_zmqsock.bind(m_conf.listen);
 }

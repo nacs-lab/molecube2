@@ -34,11 +34,20 @@ public:
     Server(const Config &conf);
 
 private:
+    void send_header(zmq::message_t &addr);
+    void send_reply(zmq::message_t &addr, zmq::message_t &msg);
+    void send_reply(zmq::message_t &addr, zmq::message_t &&msg)
+    {
+        send_reply(addr, msg);
+    }
+
     const Config &m_conf;
     const uint64_t m_id;
     std::unique_ptr<CtrlIFace> m_ctrl;
     zmq::context_t m_zmqctx;
     zmq::socket_t m_zmqsock;
+    zmq::pollitem_t m_zmqpoll[2];
+    zmq::message_t m_empty{0};
 };
 
 }
