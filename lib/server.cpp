@@ -93,6 +93,37 @@ void Server::run()
     }
 }
 
+uint8_t Server::process_set_dds(zmq::message_t &msg, bool is_ovr)
+{
+    size_t msgsz = msg.size();
+    if (msgsz % 5 != 0)
+        return 1;
+    uint8_t *data = (uint8_t*)msg.data();
+    // First check if all the channels are valid
+    for (size_t i = 0; i < msgsz; i += 5) {
+        auto chn = data[i];
+        if ((chn >> 6) >= 3 || (chn & 0x3f) >= 22) {
+            return 1;
+        }
+    }
+    static constexpr CtrlIFace::ReqOP ops[3] = {CtrlIFace::DDSFreq, CtrlIFace::DDSAmp,
+                                                CtrlIFace::DDSPhase};
+    for (size_t i = 0; i < msgsz; i += 5) {
+        auto chn = data[i];
+        auto op = ops[chn >> 6];
+        chn = chn & 0x3f;
+        uint32_t val;
+        memcpy(&val, &data[i + 1], 4);
+        if (is_ovr) {
+            m_ctrl->set_dds_ovr(op, chn, val);
+        }
+        else {
+            m_ctrl->set_dds(op, chn, val);
+        }
+    }
+    return 0;
+}
+
 void Server::process_zmq()
 {
     zmq::message_t addr;
@@ -126,6 +157,12 @@ void Server::process_zmq()
         uint64_t id = m_ctrl->get_state_id();
         memcpy(msg.data(), &id, 8);
         send_reply(addr, msg);
+    }
+    else if (ZMQ::match(msg, "overwrite_dds")) {
+        send_reply(addr, ZMQ::bits_msg(recv_more(msg) && process_set_dds(msg, true)));
+    }
+    else if (ZMQ::match(msg, "set_dds")) {
+        send_reply(addr, ZMQ::bits_msg(recv_more(msg) && process_set_dds(msg, false)));
     }
     else if (ZMQ::match(msg, "reset_dds")) {
         if (!recv_more(msg) || msg.size() != 1) {
