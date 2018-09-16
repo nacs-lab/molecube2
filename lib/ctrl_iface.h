@@ -94,6 +94,36 @@ public:
         DDSReset,
         Clock
     };
+    class callback_t {
+        // C++20
+        template<typename T>
+        using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+        template<typename T>
+        struct Caller {
+            static void call(void *p, uint32_t v)
+            {
+                (*(T*)p)(v);
+            }
+        };
+    public:
+        template<typename T,
+                 class=std::enable_if_t<!std::is_same<remove_cvref_t<T>,callback_t>::value>>
+        callback_t(T &&v)
+            : m_ptr(std::forward<T>(v)),
+              m_fptr(Caller<remove_cvref_t<T>>::call)
+        {}
+        callback_t(callback_t &&cb)
+            : m_ptr(std::move(cb.m_ptr)),
+              m_fptr(cb.m_fptr)
+        {}
+        void operator()(uint32_t v)
+        {
+            m_fptr(m_ptr.get(), v);
+        }
+    private:
+        AnyPtr m_ptr;
+        void (*m_fptr)(void*, uint32_t);
+    };
 protected:
     /**
      * There are two kinds of requests that can pass through this interface,
@@ -125,14 +155,13 @@ protected:
         // If the list is empty, return `false` signaling that a new query should be sent.
         // If the list is not empty, return `true` since a query
         // should have been queued already.
-        bool get(ReqOP op, uint32_t operand, bool is_override,
-                 std::function<void(uint32_t)> cb);
+        bool get(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
 
     private:
         struct CacheEntry {
             uint64_t t = 0;
             uint32_t val = 0;
-            std::vector<std::function<void(uint32_t)>> cbs{};
+            std::vector<callback_t> cbs{};
         };
         static uint32_t cache_key(ReqOP op, uint32_t operand, bool is_override)
         {
@@ -289,19 +318,19 @@ public:
     void set_ttl_ovrhi(uint32_t val);
     void set_ttl_ovrlo(uint32_t val);
 
-    void get_ttl(std::function<void(uint32_t)> cb);
-    void get_ttl_ovrhi(std::function<void(uint32_t)> cb);
-    void get_ttl_ovrlo(std::function<void(uint32_t)> cb);
+    void get_ttl(callback_t cb);
+    void get_ttl_ovrhi(callback_t cb);
+    void get_ttl_ovrlo(callback_t cb);
 
     void set_dds(ReqOP op, int chn, uint32_t val);
     void set_dds_ovr(ReqOP op, int chn, uint32_t val);
 
-    void get_dds(ReqOP op, int chn, std::function<void(uint32_t)> cb);
-    void get_dds_ovr(ReqOP op, int chn, std::function<void(uint32_t)> cb);
+    void get_dds(ReqOP op, int chn, callback_t cb);
+    void get_dds_ovr(ReqOP op, int chn, callback_t cb);
     void reset_dds(int chn);
 
     void set_clock(uint8_t val);
-    void get_clock(std::function<void(uint32_t)> cb);
+    void get_clock(callback_t cb);
 
     void quit();
     uint64_t get_state_id();
@@ -321,8 +350,7 @@ private:
 
     void send_cmd(const ReqCmd &cmd);
     void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
-    void send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
-                      std::function<void(uint32_t)> cb);
+    void send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
 
     bool m_quit{false};
 

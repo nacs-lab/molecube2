@@ -37,8 +37,7 @@ void CtrlIFace::CmdCache::set(ReqOP op, uint32_t operand, bool is_override, uint
     entry.cbs.clear();
 }
 
-bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override,
-                              std::function<void(uint32_t)> cb)
+bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override, callback_t cb)
 {
     auto key = cache_key(op, operand, is_override);
     auto t = getTime();
@@ -156,8 +155,7 @@ void CtrlIFace::send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint3
     m_cmd_cache.set(op, operand, is_override, val);
 }
 
-void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
-                             std::function<void(uint32_t)> cb)
+void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb)
 {
     set_observed();
     uint32_t val = 0;
@@ -192,17 +190,17 @@ NACS_PROTECTED() void CtrlIFace::set_ttl_ovrlo(uint32_t val)
     send_set_cmd(TTL, 0, true, val);
 }
 
-NACS_PROTECTED() void CtrlIFace::get_ttl(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_ttl(callback_t cb)
 {
     send_get_cmd(TTL, 0, false, std::move(cb));
 }
 
-NACS_PROTECTED() void CtrlIFace::get_ttl_ovrhi(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_ttl_ovrhi(callback_t cb)
 {
     send_get_cmd(TTL, 1, true, std::move(cb));
 }
 
-NACS_PROTECTED() void CtrlIFace::get_ttl_ovrlo(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_ttl_ovrlo(callback_t cb)
 {
     send_get_cmd(TTL, 0, true, std::move(cb));
 }
@@ -219,13 +217,13 @@ NACS_PROTECTED() void CtrlIFace::set_dds_ovr(ReqOP op, int chn, uint32_t val)
     send_set_cmd(op, chn, true, val);
 }
 
-NACS_PROTECTED() void CtrlIFace::get_dds(ReqOP op, int chn, std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_dds(ReqOP op, int chn, callback_t cb)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_get_cmd(op, chn, false, std::move(cb));
 }
 
-NACS_PROTECTED() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, callback_t cb)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_get_cmd(op, chn, true, std::move(cb));
@@ -246,7 +244,7 @@ NACS_PROTECTED() void CtrlIFace::set_clock(uint8_t val)
     send_set_cmd(Clock, 0, false, val);
 }
 
-NACS_PROTECTED() void CtrlIFace::get_clock(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_clock(callback_t cb)
 {
     send_get_cmd(Clock, 0, false, std::move(cb));
 }
