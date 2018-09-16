@@ -37,16 +37,21 @@ static uint64_t get_server_id()
 
 }
 
-void Server::send_header(zmq::message_t &addr)
+inline void Server::send_header(zmq::message_t &addr)
 {
     m_zmqsock.send(addr, ZMQ_SNDMORE);
     m_zmqsock.send(m_empty, ZMQ_SNDMORE);
 }
 
-void Server::send_reply(zmq::message_t &addr, zmq::message_t &msg)
+inline void Server::send_reply(zmq::message_t &addr, zmq::message_t &msg)
 {
     send_header(addr);
     m_zmqsock.send(msg);
+}
+
+inline bool Server::recv_more(zmq::message_t &msg)
+{
+    return ZMQ::recv_more(m_zmqsock, msg);
 }
 
 Server::Server(const Config &conf)
@@ -59,6 +64,37 @@ Server::Server(const Config &conf)
     {nullptr, m_ctrl->backend_fd(), ZMQ_POLLIN, 0}}
 {
     m_zmqsock.bind(m_conf.listen);
+}
+
+void Server::run()
+{
+    m_running.store(true, std::memory_order_relaxed);
+    while (m_running.load(std::memory_order_relaxed)) {
+        // TODO set timeout based on controller state
+        zmq::poll(m_zmqpoll, sizeof(m_zmqpoll) / sizeof(zmq::pollitem_t), -1);
+        if (m_zmqpoll[1].revents & ZMQ_POLLIN) {
+            m_ctrl->run_frontend();
+        }
+        if (m_zmqpoll[0].revents & ZMQ_POLLIN) {
+            process_zmq();
+        }
+    }
+}
+
+void Server::process_zmq()
+{
+    zmq::message_t addr;
+    m_zmqsock.recv(&addr);
+
+    zmq::message_t msg;
+    m_zmqsock.recv(&msg);
+    assert(msg.size() == 0);
+
+    if (!recv_more(msg)) {
+        // Empty request?
+        send_reply(addr, ZMQ::bits_msg(false));
+        return;
+    }
 }
 
 }

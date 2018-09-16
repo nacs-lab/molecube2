@@ -23,6 +23,8 @@
 
 #include <nacs-utils/zmq_utils.h>
 
+#include <atomic>
+
 namespace Molecube {
 
 using namespace NaCs;
@@ -32,6 +34,11 @@ class Config;
 class NACS_PROTECTED() Server {
 public:
     Server(const Config &conf);
+    void run();
+    void stop()
+    {
+        m_running.store(false, std::memory_order_relaxed);
+    }
 
 private:
     void send_header(zmq::message_t &addr);
@@ -40,6 +47,8 @@ private:
     {
         send_reply(addr, msg);
     }
+    bool recv_more(zmq::message_t &msg);
+    void process_zmq();
 
     const Config &m_conf;
     const uint64_t m_id;
@@ -48,6 +57,7 @@ private:
     zmq::socket_t m_zmqsock;
     zmq::pollitem_t m_zmqpoll[2];
     zmq::message_t m_empty{0};
+    volatile std::atomic_bool m_running{false};
 };
 
 }
