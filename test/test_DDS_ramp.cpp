@@ -21,10 +21,10 @@ num2freq(uint32_t num, double clock = 3.5e9)
     return num * clock * pow2_32;
 }
 
-static inline constexpr uint32_t
+static inline constexpr uint16_t
 amp2num(double amp)
 {
-    return 0x0fff & static_cast<uint32_t>(amp * 4095.0 + 0.5);
+    return 0x0fff & static_cast<uint16_t>(amp * 4095.0 + 0.5);
 }
 
 static inline constexpr double
