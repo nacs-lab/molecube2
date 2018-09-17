@@ -158,6 +158,24 @@ void Server::process_zmq()
         memcpy(msg.data(), &id, 8);
         send_reply(addr, msg);
     }
+    else if (ZMQ::match(msg, "set_ttl")) {
+        if (!recv_more(msg) || msg.size() != 8) {
+            send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
+            goto out;
+        }
+        uint32_t masks[2];
+        memcpy(masks, msg.data(), 8);
+        if (masks[0])
+            m_ctrl->set_ttl(masks[0], false);
+        if (masks[1])
+            m_ctrl->set_ttl(masks[1], true);
+        m_ctrl->get_ttl([addr{std::move(addr)}, masks, this] (uint32_t v) mutable {
+                // The get can arrive faster than the set so manually mask the
+                // value to avoid confusion.
+                v = (v & ~masks[0]) | masks[1];
+                send_reply(addr, ZMQ::bits_msg(v));
+            });
+    }
     else if (ZMQ::match(msg, "override_dds")) {
         send_reply(addr, ZMQ::bits_msg(recv_more(msg) && process_set_dds(msg, true)));
     }
