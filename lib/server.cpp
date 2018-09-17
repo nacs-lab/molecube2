@@ -152,11 +152,30 @@ void Server::process_zmq()
         send_reply(addr, ZMQ::bits_msg(res));
     }
     else if (ZMQ::match(msg, "state_id")) {
-        zmq::message_t ret(16);
-        memcpy((char*)msg.data() + 8, &m_id, 8);
-        uint64_t id = m_ctrl->get_state_id();
-        memcpy(msg.data(), &id, 8);
-        send_reply(addr, msg);
+        std::array<uint64_t,2> id{m_ctrl->get_state_id(), m_id};
+        send_reply(addr, ZMQ::bits_msg(id));
+    }
+    else if (ZMQ::match(msg, "override_ttl")) {
+        if (!recv_more(msg) || msg.size() != 12) {
+            send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
+            goto out;
+        }
+        uint32_t masks[3];
+        memcpy(masks, msg.data(), 12);
+        for (int i = 0; i < 3; i++) {
+            if (masks[i]) {
+                m_ctrl->set_ttl(masks[i], i);
+            }
+        }
+        // get_ttl_ovr* returns immediately and we only have two functions to call
+        // so it's just as fast to do the two calls in series
+        // and it's also easier to implement this way.
+        m_ctrl->get_ttl_ovrlo([addr{std::move(addr)}, this] (uint32_t lo) mutable {
+                m_ctrl->get_ttl_ovrhi([addr{std::move(addr)}, lo, this] (uint32_t hi) mutable {
+                        std::array<uint32_t,2> masks{lo, hi};
+                        send_reply(addr, ZMQ::bits_msg(masks));
+                    });
+            });
     }
     else if (ZMQ::match(msg, "set_ttl")) {
         if (!recv_more(msg) || msg.size() != 8) {
