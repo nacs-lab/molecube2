@@ -13,7 +13,8 @@ zmq protocol.
 
 * `run_seq`
 
-    `[version: 8bytes][bytecode: n]`
+    `[version: 4bytes]`
+    `[bytecode: n]`
 
     This will be how the experiment talks to the backend.
 
@@ -25,7 +26,8 @@ zmq protocol.
 
 * `run_cmdlist`
 
-    `[version: 8bytes][cmd_list: n]`
+    `[version: 4bytes]`
+    `[cmd_list: n]`
 
     This is similar to `run_seq` but uses an uncompressed and simpler format which
     supports all operations.
