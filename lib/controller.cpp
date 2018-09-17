@@ -74,10 +74,24 @@ private:
 
     void worker();
 
+    void sync_ttl()
+    {
+        // This function shouldn't be necessary if we did everything correctly.
+        // This is called periodically in the main loop and also before the sequence start.
+        // to make sure we don't accumulate errors even if we failed to keep track of
+        // every changes.
+        auto ttl = m_p.cur_ttl();
+        if (ttl != m_ttl) {
+            fprintf(stderr, "Warning: TTL out of sync: has %04x, actual %04x\n", m_ttl, ttl);
+            m_ttl = ttl;
+        }
+    }
+
     static constexpr uint8_t NDDS = 22;
 
     Pulser m_p;
     DDSState m_dds_ovr[NDDS];
+    uint32_t m_ttl;
     uint16_t m_dds_phase[NDDS] = {0};
     // Reinitialize is a complicated sequence and is rarely needed
     // so only do that after the sequence finishes.
@@ -95,25 +109,24 @@ public:
     Runner(Controller &ctrl, uint32_t ttlmask)
         : m_ctrl(ctrl),
           m_ttlmask(ttlmask),
-          m_ttl(ctrl.m_p.cur_ttl()),
-          m_preserve_ttl((~ttlmask) & m_ttl)
+          m_preserve_ttl((~ttlmask) & ctrl.m_ttl)
     {
     }
     void ttl1(uint8_t chn, bool val, uint64_t t)
     {
-        ttl(setBit(m_ttl, chn, val), t);
+        ttl(setBit(m_ctrl.m_ttl, chn, val), t);
     }
     void ttl(uint32_t ttl, uint64_t t)
     {
-        m_ttl = ttl | m_preserve_ttl;
+        m_ctrl.m_ttl = ttl | m_preserve_ttl;
         if (t <= 1000) {
             // 10us
             m_t += t;
-            m_ctrl.m_p.template ttl<true>(m_ttl, (uint32_t)t);
+            m_ctrl.m_p.template ttl<true>(m_ctrl.m_ttl, (uint32_t)t);
         }
         else {
             m_t += 100;
-            m_ctrl.m_p.template ttl<true>(m_ttl, 100);
+            m_ctrl.m_p.template ttl<true>(m_ctrl.m_ttl, 100);
             wait(t - 100);
         }
     }
@@ -226,7 +239,6 @@ public:
 
     Controller &m_ctrl;
     const uint32_t m_ttlmask;
-    uint32_t m_ttl;
     uint32_t m_preserve_ttl;
 private:
     uint64_t m_t{0};
@@ -240,6 +252,7 @@ private:
 template<typename Pulser>
 Controller<Pulser>::Controller(Pulser &&p)
     : m_p(std::move(p)),
+      m_ttl(m_p.cur_ttl()),
       m_worker(&Controller<Pulser>::worker, this)
 {
     detect_dds(true);
@@ -366,29 +379,21 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
     case TTL: {
         // Should have been caught by concurrent_get/set.
         assert(!cmd->has_res && !cmd->is_override);
-        uint32_t ttl;
         if (cmd->operand == uint32_t((1 << 26) - 1)) {
-            ttl = cmd->val;
+            m_ttl = cmd->val;
             if (runner) {
-                runner->m_ttl = ttl;
-                runner->m_preserve_ttl = ttl & runner->m_ttlmask;
+                runner->m_preserve_ttl = m_ttl & runner->m_ttlmask;
             }
         }
         else {
             assert(cmd->operand < 32);
             auto chn = uint8_t(cmd->operand);
             bool val = cmd->val;
-            if (runner) {
-                if (runner->m_ttlmask & (1 << chn))
-                    runner->m_preserve_ttl = setBit(runner->m_preserve_ttl, chn, val);
-                ttl = runner->m_ttl;
-            }
-            else {
-                ttl = m_p.cur_ttl();
-            }
-            ttl = setBit(ttl, chn, val);
+            if (runner && runner->m_ttlmask & (1 << chn))
+                runner->m_preserve_ttl = setBit(runner->m_preserve_ttl, chn, val);
+            m_ttl = setBit(m_ttl, chn, val);
         }
-        m_p.template ttl<checked>(ttl, 3);
+        m_p.template ttl<checked>(m_ttl, 3);
         return {3, false};
     }
     case DDSFreq: {
@@ -571,6 +576,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     // Make sure all commands are finished (`toggle_init` will clear them)
     while (unlikely(!m_p.is_finished()))
         std::this_thread::yield();
+    sync_ttl();
     m_p.set_hold();
     // `toggle_init` is needed to clear the force release flag
     // so that `set_hold` can work.
@@ -638,6 +644,8 @@ void Controller<Pulser>::worker()
             }
             finish_seq();
         }
+        if (m_p.is_finished())
+            sync_ttl();
         detect_dds();
         process_reqcmd<false>();
         detect_dds();
