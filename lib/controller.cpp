@@ -270,19 +270,26 @@ template<typename Pulser>
 bool Controller<Pulser>::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
                                         uint32_t val)
 {
-    if (op != TTL)
+    if (op != TTL || !is_override)
         return false;
-    if (!is_override)
-        return false;
+    auto lomask = m_p.ttl_lomask();
+    auto himask = m_p.ttl_himask();
     if (operand == 0) {
-        m_p.set_ttl_lomask(val);
-        return true;
+        m_p.set_ttl_lomask((lomask | val));
+        m_p.set_ttl_himask((himask & ~val));
     }
     else if (operand == 1) {
-        m_p.set_ttl_himask(val);
-        return true;
+        m_p.set_ttl_lomask((lomask & ~val));
+        m_p.set_ttl_himask((himask & ~val));
     }
-    return false;
+    else if (operand == 2) {
+        m_p.set_ttl_lomask((lomask & ~val));
+        m_p.set_ttl_himask((himask | val));
+    }
+    else {
+        return false;
+    }
+    return true;
 }
 
 template<typename Pulser>
@@ -305,7 +312,7 @@ bool Controller<Pulser>::concurrent_get(ReqOP op, uint32_t operand, bool is_over
         val = m_p.ttl_lomask();
         return true;
     }
-    else if (operand == 1) {
+    else if (operand == 2) {
         val = m_p.ttl_himask();
         return true;
     }
@@ -379,20 +386,14 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
     case TTL: {
         // Should have been caught by concurrent_get/set.
         assert(!cmd->has_res && !cmd->is_override);
-        if (cmd->operand == uint32_t((1 << 26) - 1)) {
-            m_ttl = cmd->val;
-            if (runner) {
-                runner->m_preserve_ttl = m_ttl & runner->m_ttlmask;
-            }
+        if (cmd->operand) {
+            m_ttl = m_ttl | cmd->val;
         }
         else {
-            assert(cmd->operand < 32);
-            auto chn = uint8_t(cmd->operand);
-            bool val = cmd->val;
-            if (runner && runner->m_ttlmask & (1 << chn))
-                runner->m_preserve_ttl = setBit(runner->m_preserve_ttl, chn, val);
-            m_ttl = setBit(m_ttl, chn, val);
+            m_ttl = m_ttl & ~cmd->val;
         }
+        if (runner)
+            runner->m_preserve_ttl = m_ttl & runner->m_ttlmask;
         m_p.template ttl<checked>(m_ttl, 3);
         return {3, false};
     }

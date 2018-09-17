@@ -165,6 +165,7 @@ protected:
         };
         static uint32_t cache_key(ReqOP op, uint32_t operand, bool is_override)
         {
+            assert(op != TTL);
             assert(op != Clock || !is_override);
             return uint32_t(op) << 27 | uint32_t(is_override) << 26 | operand;
         }
@@ -313,14 +314,15 @@ public:
     // may not response to the cancellation.
     bool cancel_seq(uint64_t id);
 
-    void set_ttl(int chn, bool val);
-    void set_ttl_all(uint32_t val);
-    void set_ttl_ovrhi(uint32_t val);
-    void set_ttl_ovrlo(uint32_t val);
+    void set_ttl(uint32_t mask, bool val);
+    // val = 0 => low
+    // val = 1 => default
+    // val = 2 => high
+    void set_ttl_ovr(uint32_t mask, int val);
 
     void get_ttl(callback_t cb);
-    void get_ttl_ovrhi(callback_t cb);
     void get_ttl_ovrlo(callback_t cb);
+    void get_ttl_ovrhi(callback_t cb);
 
     void set_dds(ReqOP op, int chn, uint32_t val);
     void set_dds_ovr(ReqOP op, int chn, uint32_t val);
@@ -351,6 +353,9 @@ private:
     void send_cmd(const ReqCmd &cmd);
     void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
     void send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
+
+    void send_ttl_set_cmd(uint32_t operand, bool is_override, uint32_t val);
+    void send_ttl_get_cmd(uint32_t operand, bool is_override, callback_t cb);
 
     bool m_quit{false};
 

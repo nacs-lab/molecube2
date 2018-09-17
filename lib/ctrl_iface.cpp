@@ -48,7 +48,7 @@ bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override, call
         return true;
     }
     // DDS overrides are only kept in software so no need to ask the backend.
-    if (is_override && op != TTL) {
+    if (is_override) {
         // Initially off (-1) by default.
         if (entry.t == 0)
             entry.val = -1;
@@ -170,39 +170,52 @@ void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callb
                 operand & ((1 << 26) - 1), 0});
 }
 
-NACS_PROTECTED() void CtrlIFace::set_ttl(int chn, bool val)
+// TTL channels are get and set in batch so they don't really fit
+// the cache used for other channels.
+// Since the implementation of `Controller` always returns ttl get request concurrently
+// we'll just skip the cache and callback storage for now.
+void CtrlIFace::send_ttl_set_cmd(uint32_t operand, bool is_override, uint32_t val)
 {
-    send_set_cmd(TTL, uint32_t(chn), false, val);
+    set_dirty();
+    if (!concurrent_set(TTL, operand, is_override, val)) {
+        send_cmd(ReqCmd{TTL, 0, uint8_t(is_override), operand & ((1 << 26) - 1), val});
+    }
 }
 
-NACS_PROTECTED() void CtrlIFace::set_ttl_all(uint32_t val)
+void CtrlIFace::send_ttl_get_cmd(uint32_t operand, bool is_override, callback_t cb)
 {
-    send_set_cmd(TTL, uint32_t(-1), false, val);
+    set_observed();
+    // Unsupported for now
+    // We could support asynchronous get by adding a TTL specific callback queue.
+    uint32_t val = 0;
+    if (!concurrent_get(TTL, operand, is_override, val))
+        abort();
+    cb(val);
 }
 
-NACS_PROTECTED() void CtrlIFace::set_ttl_ovrhi(uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_ttl(uint32_t mask, bool val)
 {
-    send_set_cmd(TTL, 1, true, val);
+    send_ttl_set_cmd(uint32_t(val), false, mask);
 }
 
-NACS_PROTECTED() void CtrlIFace::set_ttl_ovrlo(uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_ttl_ovr(uint32_t mask, int val)
 {
-    send_set_cmd(TTL, 0, true, val);
+    send_ttl_set_cmd(uint32_t(val), true, mask);
 }
 
 NACS_PROTECTED() void CtrlIFace::get_ttl(callback_t cb)
 {
-    send_get_cmd(TTL, 0, false, std::move(cb));
-}
-
-NACS_PROTECTED() void CtrlIFace::get_ttl_ovrhi(callback_t cb)
-{
-    send_get_cmd(TTL, 1, true, std::move(cb));
+    send_ttl_get_cmd(0, false, std::move(cb));
 }
 
 NACS_PROTECTED() void CtrlIFace::get_ttl_ovrlo(callback_t cb)
 {
-    send_get_cmd(TTL, 0, true, std::move(cb));
+    send_ttl_get_cmd(0, true, std::move(cb));
+}
+
+NACS_PROTECTED() void CtrlIFace::get_ttl_ovrhi(callback_t cb)
+{
+    send_ttl_get_cmd(2, true, std::move(cb));
 }
 
 NACS_PROTECTED() void CtrlIFace::set_dds(ReqOP op, int chn, uint32_t val)
