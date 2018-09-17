@@ -138,6 +138,127 @@ uint8_t Server::process_set_dds(zmq::message_t &msg, bool is_ovr)
     return 0;
 }
 
+bool Server::process_run_seq(zmq::message_t &addr, bool is_cmd)
+{
+    zmq::message_t msg;
+    // No version
+    if (!recv_more(msg) || msg.size() != 4)
+        return false;
+    uint32_t ver;
+    memcpy(&ver, msg.data(), 4);
+    if (ver != 1)
+        return false;
+    // Not long enough
+    if (!recv_more(msg) || msg.size() < 12)
+        return false;
+    auto msg_data = (const uint8_t*)msg.data();
+    auto msg_sz = msg.size();
+
+    uint64_t len_ns;
+    memcpy(&len_ns, msg_data, 8);
+    msg_data += 8;
+    msg_sz -= 8;
+
+    uint32_t ttl_mask;
+    memcpy(&ttl_mask, msg_data, 4);
+    msg_data += 4;
+    msg_sz -= 4;
+
+    struct Notify: CtrlIFace::ReqSeqNotify {
+        void start(uint64_t _id) override
+        {
+            (void)_id;
+            assert(id == _id);
+            send_reply();
+        }
+        void flushed(uint64_t _id) override
+        {
+            (void)_id;
+            assert(id == _id);
+            send_reply();
+            auto status = server.find_seqstatus(id);
+            assert(status);
+            status->flushed = true;
+            for (auto &wait: status->wait) {
+                if (wait.what == 0) {
+                    server.send_reply(wait.addr, ZMQ::bits_msg<uint8_t>(0));
+                }
+            }
+        }
+        void end(uint64_t _id) override
+        {
+            (void)_id;
+            assert(id == _id);
+            send_reply();
+            finalize(false);
+        }
+        void cancel(uint64_t _id) override
+        {
+            (void)_id;
+            assert(id == _id);
+            send_reply();
+            finalize(true);
+        }
+        Notify(Server &server, zmq::message_t addr)
+            : server(server),
+              addr(std::move(addr))
+        {
+        }
+        ~Notify() override
+        {
+            send_reply();
+            finalize(true);
+        }
+        void send_reply()
+        {
+            if (replied)
+                return;
+            replied = true;
+            std::array<uint8_t,18> res;
+            memcpy(&res[0], &id, 8);
+            memcpy(&res[8], &server.m_id, 8);
+            res[16] = server.m_ctrl->has_ttl_ovr();
+            res[17] = server.m_ctrl->has_dds_ovr();
+            server.send_reply(addr, ZMQ::bits_msg(res));
+        }
+        void finalize(bool cancel)
+        {
+            auto status = server.find_seqstatus(id);
+            if (!status)
+                return;
+            for (auto &wait: status->wait) {
+                if (wait.what == 0 && status->flushed)
+                    continue;
+                server.send_reply(wait.addr, ZMQ::bits_msg<uint8_t>(cancel));
+            }
+            auto idx = status - &server.m_seq_status[0];
+            server.m_seq_status.erase(server.m_seq_status.begin() + idx);
+        }
+        Server &server;
+        zmq::message_t addr;
+        bool replied = false;
+        uint64_t id = -1;
+    };
+
+    auto notify = new Notify(*this, std::move(addr));
+    auto id = m_ctrl->run_code(is_cmd, len_ns, ttl_mask, msg_data, msg_sz,
+                               std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify),
+                               std::move(msg));
+    notify->id = id;
+    m_seq_status.push_back(SeqStatus{id});
+    return true;
+}
+
+auto Server::find_seqstatus(uint64_t id) -> SeqStatus*
+{
+    for (auto &status: m_seq_status) {
+        if (status.id == id) {
+            return &status;
+        }
+    }
+    return nullptr;
+}
+
 void Server::process_zmq()
 {
     zmq::message_t addr;
@@ -152,7 +273,17 @@ void Server::process_zmq()
         send_reply(addr, ZMQ::bits_msg(false));
         return;
     }
-    if (ZMQ::match(msg, "wait_seq")) {
+    if (ZMQ::match(msg, "run_seq")) {
+        if (!process_run_seq(addr, false)) {
+            goto err;
+        }
+    }
+    else if (ZMQ::match(msg, "run_cmdlist")) {
+        if (!process_run_seq(addr, true)) {
+            goto err;
+        }
+    }
+    else if (ZMQ::match(msg, "wait_seq")) {
         if (!recv_more(msg) || msg.size() != 17)
             goto err;
         auto id = get_seq_id(msg, 1);

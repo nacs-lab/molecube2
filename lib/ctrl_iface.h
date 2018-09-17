@@ -84,6 +84,8 @@ public:
         // After the sequence is cancelled
         virtual void cancel(uint64_t)
         {}
+        virtual ~ReqSeqNotify()
+        {}
     };
     // Opcode for stand alone commands.
     enum ReqOP {

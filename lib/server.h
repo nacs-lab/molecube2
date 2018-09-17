@@ -47,8 +47,8 @@ private:
             zmq::message_t addr;
         };
         uint64_t id;
-        std::vector<Wait> wait;
-        bool flushed;
+        std::vector<Wait> wait{};
+        bool flushed{false};
     };
 
     void send_header(zmq::message_t &addr);
@@ -64,6 +64,8 @@ private:
     // Return 0 if the check fails. Otherwise, return the 64bit int from the first 8 bytes.
     uint64_t get_seq_id(zmq::message_t &msg, size_t suffix=0);
     uint8_t process_set_dds(zmq::message_t &msg, bool is_ovr);
+    bool process_run_seq(zmq::message_t &addr, bool is_cmd);
+    SeqStatus *find_seqstatus(uint64_t id);
 
     const Config &m_conf;
     const uint64_t m_id;
