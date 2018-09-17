@@ -129,7 +129,7 @@ protected:
      * There are two kinds of requests that can pass through this interface,
      * 1. Stand alone commands.
      *    These are used to change a single state including
-     *    setting/getting output values or overwrites. These are not timed.
+     *    setting/getting output values or overrides. These are not timed.
      *    They can happen concurrently with a currently running sequence.
      * 2. Sequences.
      *    These are timed sequences of operations.

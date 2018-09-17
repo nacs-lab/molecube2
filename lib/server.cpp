@@ -158,7 +158,7 @@ void Server::process_zmq()
         memcpy(msg.data(), &id, 8);
         send_reply(addr, msg);
     }
-    else if (ZMQ::match(msg, "overwrite_dds")) {
+    else if (ZMQ::match(msg, "override_dds")) {
         send_reply(addr, ZMQ::bits_msg(recv_more(msg) && process_set_dds(msg, true)));
     }
     else if (ZMQ::match(msg, "set_dds")) {

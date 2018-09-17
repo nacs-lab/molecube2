@@ -19,11 +19,11 @@ zmq protocol.
 
     Return positive 16 bytes ID that can be waited/operated on by `wait_seq` and `cancel_seq`.
     Negative ID indicates error.
-    The ID will be optionally followed by a list of TTL and DDS overwrites if exists.
-    If any overwrites is returned, the TTL overwrite will always be included as
+    The ID will be optionally followed by a list of TTL and DDS overrides if exists.
+    If any overrides is returned, the TTL override will always be included as
     `[low_mask: 4bytes][high_mask: 4bytes]` which could be `[0: 4bytes][0: 4bytes]`.
-    DDS overwrites follows the TTL overwrites using a format same as the one for the
-    `overwrite_dds` request below.
+    DDS overrides follows the TTL overrides using a format same as the one for the
+    `override_dds` request below.
     The reply will be sent right away indicating that the sequence is ready to start
     or has started.
 
@@ -72,11 +72,11 @@ zmq protocol.
 
 ### TTL
 
-* `overwrite_ttl`
+* `override_ttl`
 
     `[low mask: 4bytes][high mask: 4bytes][normal mask: 4bytes]`
 
-    The three masks specify the changes to the high and low overwrite masks to be made.
+    The three masks specify the changes to the high and low override masks to be made.
     The new high and low masks will be returned.
     `[0: 4bytes][0: 4bytes][0: 4bytes]` is an no-op and can be used to get the current masks.
 
@@ -86,38 +86,38 @@ zmq protocol.
 
     The two masks specify the channels to be turned on or off.
     This should have the same effect as running a sequence to turn a channel on/off.
-    The new values will be returned including the overwrite.
+    The new values will be returned including the override.
     `[0: 4bytes][0: 4bytes]` is an no-op and can be used to get the current values.
 
 ### DDS
 
-* `overwrite_dds`
+* `override_dds`
 
     `[[[id: 1byte][val: 4bytes]] x n]`
 
-    where the 1 byte `id` is `[chn_type: 2bits][chn_num: 6bits]` and a overwrite value of
-    `0xffffffff` means the overwrite is disabled.
+    where the 1 byte `id` is `[chn_type: 2bits][chn_num: 6bits]` and a override value of
+    `0xffffffff` means the override is disabled.
     Allowed `chn_type` values are:
 
     * `0`: for DDS frequency
     * `1`: for DDS amplitude
     * `2`: for DDS phase
 
-* `get_overwrite_dds`
+* `get_override_dds`
 
-    No arguments. Return the list of overwrites specified in the same format as
-    the argument of `overwrite_dds`.
+    No arguments. Return the list of overrides specified in the same format as
+    the argument of `override_dds`.
 
 * `set_dds`
 
     `[[[id: 1byte][val: 4bytes]] x n]`
 
-    Same as `overwrite_dds`. But set the current value without enabling overwrite.
+    Same as `override_dds`. But set the current value without enabling override.
 
 * `get_dds`
 
-    See `get_overwrite_dds` except that values for all enabled DDS's are returned.
-    An optional list of 1 byte channel id (see `overwrite_dds` for format)
+    See `get_override_dds` except that values for all enabled DDS's are returned.
+    An optional list of 1 byte channel id (see `override_dds` for format)
     can be included as argument for filtering.
 
 * `reset_dds`
