@@ -215,7 +215,7 @@ NACS_PROTECTED() void CtrlIFace::get_ttl_ovrlo(callback_t cb)
 
 NACS_PROTECTED() void CtrlIFace::get_ttl_ovrhi(callback_t cb)
 {
-    send_ttl_get_cmd(2, true, std::move(cb));
+    send_ttl_get_cmd(1, true, std::move(cb));
 }
 
 NACS_PROTECTED() void CtrlIFace::set_dds(ReqOP op, int chn, uint32_t val)

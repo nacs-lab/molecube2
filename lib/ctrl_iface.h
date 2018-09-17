@@ -316,8 +316,8 @@ public:
 
     void set_ttl(uint32_t mask, bool val);
     // val = 0 => low
-    // val = 1 => default
-    // val = 2 => high
+    // val = 1 => high
+    // val = 2 => default
     void set_ttl_ovr(uint32_t mask, int val);
 
     void get_ttl(callback_t cb);

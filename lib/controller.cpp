@@ -280,11 +280,11 @@ bool Controller<Pulser>::concurrent_set(ReqOP op, uint32_t operand, bool is_over
     }
     else if (operand == 1) {
         m_p.set_ttl_lomask((lomask & ~val));
-        m_p.set_ttl_himask((himask & ~val));
+        m_p.set_ttl_himask((himask | val));
     }
     else if (operand == 2) {
         m_p.set_ttl_lomask((lomask & ~val));
-        m_p.set_ttl_himask((himask | val));
+        m_p.set_ttl_himask((himask & ~val));
     }
     else {
         return false;
@@ -312,7 +312,7 @@ bool Controller<Pulser>::concurrent_get(ReqOP op, uint32_t operand, bool is_over
         val = m_p.ttl_lomask();
         return true;
     }
-    else if (operand == 2) {
+    else if (operand == 1) {
         val = m_p.ttl_himask();
         return true;
     }

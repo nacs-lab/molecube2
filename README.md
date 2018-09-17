@@ -21,7 +21,7 @@ zmq protocol.
     Negative ID indicates error.
     The ID will be optionally followed by a list of TTL and DDS overwrites if exists.
     If any overwrites is returned, the TTL overwrite will always be included as
-    `[high_mask: 4bytes][low_mask: 4bytes]` which could be `[0: 4bytes][0: 4bytes]`.
+    `[low_mask: 4bytes][high_mask: 4bytes]` which could be `[0: 4bytes][0: 4bytes]`.
     DDS overwrites follows the TTL overwrites using a format same as the one for the
     `overwrite_dds` request below.
     The reply will be sent right away indicating that the sequence is ready to start
@@ -74,7 +74,7 @@ zmq protocol.
 
 * `overwrite_ttl`
 
-    `[high mask: 4bytes][low mask: 4bytes][normal mask: 4bytes]`
+    `[low mask: 4bytes][high mask: 4bytes][normal mask: 4bytes]`
 
     The three masks specify the changes to the high and low overwrite masks to be made.
     The new high and low masks will be returned.
@@ -82,7 +82,7 @@ zmq protocol.
 
 * `set_ttl`
 
-    `[high mask: 4bytes][low mask: 4bytes]`
+    `[low mask: 4bytes][high mask: 4bytes]`
 
     The two masks specify the channels to be turned on or off.
     This should have the same effect as running a sequence to turn a channel on/off.
