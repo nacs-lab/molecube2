@@ -53,6 +53,7 @@ private:
     bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
                         uint32_t &val) override;
     std::vector<int> get_active_dds() override;
+    bool has_ttl_ovr() override;
 
     bool check_dds(int chn);
     void detect_dds(bool force=false);
@@ -376,6 +377,12 @@ std::vector<int> Controller<Pulser>::get_active_dds()
         }
     }
     return res;
+}
+
+template<typename Pulser>
+bool Controller<Pulser>::has_ttl_ovr()
+{
+    return m_p.ttl_lomask() || m_p.ttl_himask();
 }
 
 template<typename Pulser>

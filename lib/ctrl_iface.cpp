@@ -60,6 +60,20 @@ bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override, call
     return !was_empty;
 }
 
+inline bool CtrlIFace::CmdCache::has_dds_ovr()
+{
+    for (int i = 0; i < 22; i++) {
+        for (auto op: (ReqOP[]){DDSFreq, DDSAmp, DDSPhase}) {
+            auto key = cache_key(op, i, true);
+            auto it = m_cache.find(key);
+            if (it == m_cache.end() || it->second.val == -1)
+                continue;
+            return true;
+        }
+    }
+    return false;
+}
+
 CtrlIFace::CtrlIFace()
     : m_bkend_evt(openEvent(0, EFD_NONBLOCK | EFD_CLOEXEC))
 {
@@ -356,6 +370,11 @@ NACS_PROTECTED() std::pair<bool,bool> CtrlIFace::has_pending()
     if (seqres.second)
         return {true, true};
     return {seqres.first || cmdres.first, false};
+}
+
+NACS_PROTECTED() bool CtrlIFace::has_dds_ovr()
+{
+    return m_cmd_cache.has_dds_ovr();
 }
 
 }

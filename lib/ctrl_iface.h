@@ -156,6 +156,7 @@ protected:
         // If the list is not empty, return `true` since a query
         // should have been queued already.
         bool get(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
+        bool has_dds_ovr();
 
     private:
         struct CacheEntry {
@@ -333,6 +334,9 @@ public:
 
     void set_clock(uint8_t val);
     void get_clock(callback_t cb);
+
+    virtual bool has_ttl_ovr() = 0;
+    bool has_dds_ovr();
 
     void quit();
     uint64_t get_state_id();
