@@ -65,9 +65,9 @@ inline bool Server::recv_more(zmq::message_t &msg)
     return ZMQ::recv_more(m_zmqsock, msg);
 }
 
-inline uint64_t Server::get_seq_id(zmq::message_t &msg)
+inline uint64_t Server::get_seq_id(zmq::message_t &msg, size_t suffix)
 {
-    if (msg.size() != 16)
+    if (msg.size() != 16 + suffix)
         return 0;
     uint64_t id;
     memcpy(&id, (char*)msg.data() + 8, 8);
