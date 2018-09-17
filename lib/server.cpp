@@ -147,7 +147,32 @@ void Server::process_zmq()
         send_reply(addr, ZMQ::bits_msg(false));
         return;
     }
-    if (ZMQ::match(msg, "cancel_seq")) {
+    if (ZMQ::match(msg, "wait_seq")) {
+        if (!recv_more(msg) || msg.size() != 17)
+            goto err;
+        auto id = get_seq_id(msg, 1);
+        if (!id)
+            goto err;
+        uint8_t what = ((uint8_t*)msg.data())[16];
+        if (what != 0 && what != 1)
+            goto err;
+        if (m_seq_status.empty() || m_seq_status[0].id > id) {
+            send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
+            goto out;
+        }
+        for (auto &status: m_seq_status) {
+            if (status.id != id)
+                continue;
+            if (what == 0 && status.flushed) {
+                send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
+                goto out;
+            }
+            status.wait.push_back(SeqStatus::Wait{what, std::move(addr)});
+            goto out;
+        }
+        goto err;
+    }
+    else if (ZMQ::match(msg, "cancel_seq")) {
         bool res;
         if (!recv_more(msg)) {
             res = m_ctrl->cancel_seq(0);

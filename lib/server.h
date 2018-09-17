@@ -41,6 +41,16 @@ public:
     }
 
 private:
+    struct SeqStatus {
+        struct Wait {
+            uint8_t what;
+            zmq::message_t addr;
+        };
+        uint64_t id;
+        std::vector<Wait> wait;
+        bool flushed;
+    };
+
     void send_header(zmq::message_t &addr);
     void send_reply(zmq::message_t &addr, zmq::message_t &msg);
     void send_reply(zmq::message_t &addr, zmq::message_t &&msg)
@@ -63,6 +73,7 @@ private:
     zmq::pollitem_t m_zmqpoll[2];
     zmq::message_t m_empty{0};
     volatile std::atomic_bool m_running{false};
+    std::vector<SeqStatus> m_seq_status{};
 };
 
 }
