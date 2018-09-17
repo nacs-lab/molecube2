@@ -38,6 +38,14 @@ static uint64_t get_server_id()
 static constexpr CtrlIFace::ReqOP dds_ops[3] = {CtrlIFace::DDSFreq, CtrlIFace::DDSAmp,
                                                 CtrlIFace::DDSPhase};
 
+static void push_dds_res(std::vector<uint8_t> &res, uint8_t chn, uint32_t v)
+{
+    auto oldn = res.size();
+    res.resize(oldn + 5);
+    res[oldn] = chn;
+    memcpy(&res[oldn + 1], &v, 4);
+}
+
 }
 
 inline void Server::send_header(zmq::message_t &addr)
@@ -218,17 +226,58 @@ void Server::process_zmq()
             for (int typ = 0; typ < 3; typ++) {
                 m_ctrl->get_dds_ovr(dds_ops[typ], i,
                                     [info, typ, i] (uint32_t v) {
-                                        auto &res = info->res;
-                                        auto oldn = res.size();
-                                        res.resize(oldn + 5);
-                                        res[oldn] = uint8_t((typ << 6) | i);
-                                        memcpy(&res[oldn + 1], &v, 4);
+                                        push_dds_res(info->res, uint8_t((typ << 6) | i), v);
                                     });
             }
         }
     }
     else if (ZMQ::match(msg, "set_dds")) {
         send_reply(addr, ZMQ::bits_msg(recv_more(msg) && process_set_dds(msg, false)));
+    }
+    else if (ZMQ::match(msg, "get_dds")) {
+        struct get_dds {
+            Server *server;
+            zmq::message_t addr;
+            std::vector<uint8_t> res{};
+            ~get_dds()
+            {
+                // This should be called after everyone is done with the callback.
+                auto sz = res.size();
+                zmq::message_t msg(sz);
+                memcpy(msg.data(), &res[0], sz);
+                server->send_reply(addr, msg);
+            }
+        };
+        if (recv_more(msg)) {
+            size_t sz = msg.size();
+            uint8_t *data = (uint8_t*)msg.data();
+            for (size_t i = 0; i < sz; i++) {
+                auto chn = data[i];
+                if ((chn >> 6) >= 3 || (chn & 0x3f) >= 22) {
+                    send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
+                    goto out;
+                }
+            }
+            std::shared_ptr<get_dds> info(new get_dds{this, std::move(addr)});
+            for (size_t i = 0; i < sz; i++) {
+                auto chn = data[i];
+                m_ctrl->get_dds(dds_ops[chn >> 6], chn & 0x3f,
+                                [info, chn] (uint32_t v) {
+                                    push_dds_res(info->res, chn, v);
+                                });
+            }
+        }
+        else {
+            std::shared_ptr<get_dds> info(new get_dds{this, std::move(addr)});
+            for (int i: m_ctrl->get_active_dds()) {
+                for (int typ = 0; typ < 3; typ++) {
+                    m_ctrl->get_dds(dds_ops[typ], i,
+                                    [info, typ, i] (uint32_t v) {
+                                        push_dds_res(info->res, uint8_t((typ << 6) | i), v);
+                                    });
+                }
+            }
+        }
     }
     else if (ZMQ::match(msg, "reset_dds")) {
         if (!recv_more(msg) || msg.size() != 1) {
