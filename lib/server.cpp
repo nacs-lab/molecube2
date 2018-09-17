@@ -35,6 +35,9 @@ static uint64_t get_server_id()
     return uint64_t(t.tv_sec) * 1000 + t.tv_nsec / 1000000;
 }
 
+static constexpr CtrlIFace::ReqOP dds_ops[3] = {CtrlIFace::DDSFreq, CtrlIFace::DDSAmp,
+                                                CtrlIFace::DDSPhase};
+
 }
 
 inline void Server::send_header(zmq::message_t &addr)
@@ -106,11 +109,9 @@ uint8_t Server::process_set_dds(zmq::message_t &msg, bool is_ovr)
             return 1;
         }
     }
-    static constexpr CtrlIFace::ReqOP ops[3] = {CtrlIFace::DDSFreq, CtrlIFace::DDSAmp,
-                                                CtrlIFace::DDSPhase};
     for (size_t i = 0; i < msgsz; i += 5) {
         auto chn = data[i];
-        auto op = ops[chn >> 6];
+        auto op = dds_ops[chn >> 6];
         chn = chn & 0x3f;
         uint32_t val;
         memcpy(&val, &data[i + 1], 4);
@@ -197,6 +198,34 @@ void Server::process_zmq()
     }
     else if (ZMQ::match(msg, "override_dds")) {
         send_reply(addr, ZMQ::bits_msg(recv_more(msg) && process_set_dds(msg, true)));
+    }
+    else if (ZMQ::match(msg, "get_override_dds")) {
+        struct get_override_dds {
+            Server *server;
+            zmq::message_t addr;
+            std::vector<uint8_t> res{};
+            ~get_override_dds()
+            {
+                // This should be called after everyone is done with the callback.
+                auto sz = res.size();
+                zmq::message_t msg(sz);
+                memcpy(msg.data(), &res[0], sz);
+                server->send_reply(addr, msg);
+            }
+        };
+        std::shared_ptr<get_override_dds> info(new get_override_dds{this, std::move(addr)});
+        for (int i: m_ctrl->get_active_dds()) {
+            for (int typ = 0; typ < 3; typ++) {
+                m_ctrl->get_dds_ovr(dds_ops[typ], i,
+                                    [info, typ, i] (uint32_t v) {
+                                        auto &res = info->res;
+                                        auto oldn = res.size();
+                                        res.resize(oldn + 5);
+                                        res[oldn] = uint8_t((typ << 6) | i);
+                                        memcpy(&res[oldn + 1], &v, 4);
+                                    });
+            }
+        }
     }
     else if (ZMQ::match(msg, "set_dds")) {
         send_reply(addr, ZMQ::bits_msg(recv_more(msg) && process_set_dds(msg, false)));
