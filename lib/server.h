@@ -60,7 +60,7 @@ private:
     bool recv_more(zmq::message_t &msg);
     void process_zmq();
     // Read the sequence id from the message.
-    // Check if the message is 16 bytes and if the second 8 bytes matches the server id.
+    // Check if the message is 16+suffix bytes and if the second 8 bytes matches the server id.
     // Return 0 if the check fails. Otherwise, return the 64bit int from the first 8 bytes.
     uint64_t get_seq_id(zmq::message_t &msg, size_t suffix=0);
     uint8_t process_set_dds(zmq::message_t &msg, bool is_ovr);
