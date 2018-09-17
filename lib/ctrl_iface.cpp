@@ -347,4 +347,15 @@ NACS_PROTECTED() uint64_t CtrlIFace::get_state_id()
     return (uint64_t(has_seq) << 63) | m_state_cnt;
 }
 
+NACS_PROTECTED() std::pair<bool,bool> CtrlIFace::has_pending()
+{
+    auto cmdres = m_cmd_queue.peek();
+    if (cmdres.second)
+        return {true, true};
+    auto seqres = m_seq_queue.peek();
+    if (seqres.second)
+        return {true, true};
+    return {seqres.first || cmdres.first, false};
+}
+
 }

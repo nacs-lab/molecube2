@@ -93,11 +93,16 @@ void Server::run()
 {
     m_running.store(true, std::memory_order_relaxed);
     while (m_running.load(std::memory_order_relaxed)) {
-        // TODO set timeout based on controller state
-        zmq::poll(m_zmqpoll, sizeof(m_zmqpoll) / sizeof(zmq::pollitem_t), -1);
-        if (m_zmqpoll[1].revents & ZMQ_POLLIN) {
-            m_ctrl->run_frontend();
+        auto has_pending = m_ctrl->has_pending();
+        long timeout = 1000;
+        if (has_pending.second) {
+            timeout = 0;
         }
+        else if (has_pending.first) {
+            timeout = 10;
+        }
+        zmq::poll(m_zmqpoll, sizeof(m_zmqpoll) / sizeof(zmq::pollitem_t), timeout);
+        m_ctrl->run_frontend();
         if (m_zmqpoll[0].revents & ZMQ_POLLIN) {
             process_zmq();
         }

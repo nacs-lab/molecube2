@@ -339,6 +339,10 @@ public:
 
     virtual std::vector<int> get_active_dds() = 0;
 
+    // Return whether there is any sequence or command waiting to be or being processed
+    // and whether any of them are finished and ready to be freed/trigger the callbacks.
+    std::pair<bool,bool> has_pending();
+
     // Defined in `controller.cpp`
     static std::unique_ptr<CtrlIFace> create(bool dummy=false);
 
