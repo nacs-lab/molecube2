@@ -297,7 +297,7 @@ NACS_PROTECTED() void CtrlIFace::run_frontend()
     // If we get the current sequence after popping all the finished ones, the
     // current sequence may not be the once immediately after the last finished one we
     // process if a sequence finished in between.
-    auto curseq = m_seq_queue.peek().first;
+    auto curseq = m_seq_queue.peek_filter();
     while (auto seq = m_seq_queue.pop()) {
         if (curseq && curseq == seq)
             curseq = nullptr;
