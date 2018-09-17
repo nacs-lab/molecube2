@@ -19,11 +19,7 @@ zmq protocol.
 
     Return positive 16 bytes ID that can be waited/operated on by `wait_seq` and `cancel_seq`.
     Negative ID indicates error.
-    The ID will be optionally followed by a list of TTL and DDS overrides if exists.
-    If any overrides is returned, the TTL override will always be included as
-    `[low_mask: 4bytes][high_mask: 4bytes]` which could be `[0: 4bytes][0: 4bytes]`.
-    DDS overrides follows the TTL overrides using a format same as the one for the
-    `override_dds` request below.
+    The ID will be followed by 2 bytes indicating if there's any TTL and DDS overrides.
     The reply will be sent right away indicating that the sequence is ready to start
     or has started.
 
