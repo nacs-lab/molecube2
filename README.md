@@ -17,8 +17,8 @@ zmq protocol.
 
     This will be how the experiment talks to the backend.
 
-    Return positive 16 bytes ID that can be waited/operated on by `wait_seq` and `cancel_seq`.
-    Negative ID indicates error.
+    Return 16 bytes ID that can be waited/operated on by `wait_seq` and `cancel_seq`.
+    An ID of all bits set indicates error.
     The ID will be followed by 2 bytes indicating if there's any TTL and DDS overrides.
     The reply will be sent right away indicating that the sequence is ready to start
     or has started.
