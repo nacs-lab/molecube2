@@ -165,10 +165,8 @@ void Server::process_zmq()
         send_reply(addr, ZMQ::bits_msg(id));
     }
     else if (ZMQ::match(msg, "override_ttl")) {
-        if (!recv_more(msg) || msg.size() != 12) {
-            send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
-            goto out;
-        }
+        if (!recv_more(msg) || msg.size() != 12)
+            goto err;
         uint32_t masks[3];
         memcpy(masks, msg.data(), 12);
         for (int i = 0; i < 3; i++) {
@@ -187,10 +185,8 @@ void Server::process_zmq()
             });
     }
     else if (ZMQ::match(msg, "set_ttl")) {
-        if (!recv_more(msg) || msg.size() != 8) {
-            send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
-            goto out;
-        }
+        if (!recv_more(msg) || msg.size() != 8)
+            goto err;
         uint32_t masks[2];
         memcpy(masks, msg.data(), 8);
         if (masks[0])
@@ -254,8 +250,7 @@ void Server::process_zmq()
             for (size_t i = 0; i < sz; i++) {
                 auto chn = data[i];
                 if ((chn >> 6) >= 3 || (chn & 0x3f) >= 22) {
-                    send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
-                    goto out;
+                    goto err;
                 }
             }
             std::shared_ptr<get_dds> info(new get_dds{this, std::move(addr)});
@@ -280,23 +275,17 @@ void Server::process_zmq()
         }
     }
     else if (ZMQ::match(msg, "reset_dds")) {
-        if (!recv_more(msg) || msg.size() != 1) {
-            send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
-            goto out;
-        }
+        if (!recv_more(msg) || msg.size() != 1)
+            goto err;
         int chn = *(char*)msg.data();
-        if (chn >= 22) {
-            send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
-            goto out;
-        }
+        if (chn >= 22)
+            goto err;
         m_ctrl->reset_dds(chn);
         send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
     }
     else if (ZMQ::match(msg, "set_clock")) {
-        if (!recv_more(msg) || msg.size() != 1) {
-            send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
-            goto out;
-        }
+        if (!recv_more(msg) || msg.size() != 1)
+            goto err;
         uint8_t clock = *(uint8_t*)msg.data();
         m_ctrl->set_clock(clock);
         send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
@@ -306,6 +295,9 @@ void Server::process_zmq()
                 send_reply(addr, ZMQ::bits_msg(uint8_t(v)));
             });
     }
+    goto out;
+err:
+    send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
 out:
     ZMQ::readall(m_zmqsock);
 }
