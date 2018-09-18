@@ -36,4 +36,5 @@ cmake_c_add_flags(CMAKE_SHARED_LINKER_FLAGS ${LINKER_FLAGS})
 cmake_c_add_flags(CMAKE_MODULE_LINKER_FLAGS ${LINKER_FLAGS})
 
 add_subdirectory(lib)
+add_subdirectory(server)
 add_subdirectory(test)
