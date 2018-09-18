@@ -27,7 +27,7 @@ namespace Molecube {
 
 using namespace NaCs;
 
-struct NACS_PROTECTED() Config {
+struct Config {
     Config();
     static Config loadYAML(const char *fname);
 

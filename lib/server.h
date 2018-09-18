@@ -31,7 +31,7 @@ using namespace NaCs;
 
 class Config;
 
-class NACS_PROTECTED() Server {
+class Server {
 public:
     Server(const Config &conf);
     void run();

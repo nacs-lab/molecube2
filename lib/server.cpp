@@ -48,6 +48,8 @@ static void push_dds_res(std::vector<uint8_t> &res, uint8_t chn, uint32_t v)
 
 }
 
+#define _NACS_PROTECTED NACS_PROTECTED()
+
 inline void Server::send_header(zmq::message_t &addr)
 {
     m_zmqsock.send(addr, ZMQ_SNDMORE);
@@ -77,7 +79,7 @@ inline uint64_t Server::get_seq_id(zmq::message_t &msg, size_t suffix)
     return id;
 }
 
-Server::Server(const Config &conf)
+_NACS_PROTECTED Server::Server(const Config &conf)
     : m_conf(conf),
       m_id(get_server_id()),
       m_ctrl(CtrlIFace::create(conf.dummy)),
@@ -89,7 +91,7 @@ Server::Server(const Config &conf)
     m_zmqsock.bind(m_conf.listen);
 }
 
-void Server::run()
+_NACS_PROTECTED void Server::run()
 {
     m_running.store(true, std::memory_order_relaxed);
     while (m_running.load(std::memory_order_relaxed)) {
