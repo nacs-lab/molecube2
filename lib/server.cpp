@@ -19,6 +19,9 @@
 #include "server.h"
 #include "config.h"
 
+#include <nacs-utils/log.h>
+#include <nacs-utils/timer.h>
+
 #include <time.h>
 
 namespace Molecube {
@@ -156,6 +159,9 @@ bool Server::process_run_seq(zmq::message_t &addr, bool is_cmd)
     auto msg_data = (const uint8_t*)msg.data();
     auto msg_sz = msg.size();
 
+    Timer timer;
+    Log::info("Running %s: %zu bytes.\n", is_cmd ? "command list" : "sequence", msg_sz);
+
     uint64_t len_ns;
     memcpy(&len_ns, msg_data, 8);
     msg_data += 8;
@@ -171,6 +177,7 @@ bool Server::process_run_seq(zmq::message_t &addr, bool is_cmd)
         {
             (void)_id;
             assert(id == _id);
+            Log::info("Start time: %.1f ms\n", (double)timer.elapsed() / 1000000.0);
             send_reply();
         }
         void flushed(uint64_t _id) override
@@ -192,6 +199,7 @@ bool Server::process_run_seq(zmq::message_t &addr, bool is_cmd)
             (void)_id;
             assert(id == _id);
             send_reply();
+            Log::info("Finish time: %.1f ms\n", (double)timer.elapsed() / 1000000.0);
             finalize(false);
         }
         void cancel(uint64_t _id) override
@@ -201,9 +209,10 @@ bool Server::process_run_seq(zmq::message_t &addr, bool is_cmd)
             send_reply();
             finalize(true);
         }
-        Notify(Server &server, zmq::message_t addr)
+        Notify(Server &server, zmq::message_t addr, Timer timer)
             : server(server),
-              addr(std::move(addr))
+              addr(std::move(addr)),
+              timer(std::move(timer))
         {
         }
         ~Notify() override
@@ -238,16 +247,18 @@ bool Server::process_run_seq(zmq::message_t &addr, bool is_cmd)
         }
         Server &server;
         zmq::message_t addr;
+        Timer timer;
         bool replied = false;
         uint64_t id = -1;
     };
 
-    auto notify = new Notify(*this, std::move(addr));
+    auto notify = new Notify(*this, std::move(addr), std::move(timer));
     auto id = m_ctrl->run_code(is_cmd, len_ns, ttl_mask, msg_data, msg_sz,
                                std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify),
                                std::move(msg));
     notify->id = id;
     m_seq_status.push_back(SeqStatus{id});
+    Log::info("Sequence %llu scheduled.\n", (unsigned long long)id);
     return true;
 }
 
@@ -263,6 +274,7 @@ auto Server::find_seqstatus(uint64_t id) -> SeqStatus*
 
 void Server::process_zmq()
 {
+    // LOG
     zmq::message_t addr;
     m_zmqsock.recv(&addr);
 
@@ -291,6 +303,7 @@ void Server::process_zmq()
         uint8_t what = ((uint8_t*)msg.data())[16];
         if (what != 0 && what != 1)
             goto err;
+        Log::info("Waiting for sequence %llu\n", (unsigned long long)id);
         if (m_seq_status.empty() || m_seq_status[0].id > id) {
             send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
             goto out;
@@ -310,18 +323,21 @@ void Server::process_zmq()
     else if (ZMQ::match(msg, "cancel_seq")) {
         bool res;
         if (!recv_more(msg)) {
+            Log::info("Canceling all sequences\n");
             res = m_ctrl->cancel_seq(0);
         }
         else if (uint64_t id = get_seq_id(msg)) {
+            Log::info("Canceling sequence %llu\n", (unsigned long long)id);
             res = m_ctrl->cancel_seq(id);
         }
         else {
-            res = false;
+            goto err;
         }
         send_reply(addr, ZMQ::bits_msg(!res));
     }
     else if (ZMQ::match(msg, "state_id")) {
         std::array<uint64_t,2> id{m_ctrl->get_state_id(), m_id};
+        nacsDbg("state_id\n");
         send_reply(addr, ZMQ::bits_msg(id));
     }
     else if (ZMQ::match(msg, "override_ttl")) {
@@ -329,6 +345,13 @@ void Server::process_zmq()
             goto err;
         uint32_t masks[3];
         memcpy(masks, msg.data(), 12);
+        if (masks[0] || masks[1] || masks[2]) {
+            Log::info("Override TTLs, [%08x, %08x, %08x]\n",
+                      masks[0], masks[1], masks[2]);
+        }
+        else {
+            nacsDbg("get_override_ttl\n");
+        }
         for (int i = 0; i < 3; i++) {
             if (masks[i]) {
                 m_ctrl->set_ttl(masks[i], i);
@@ -349,6 +372,12 @@ void Server::process_zmq()
             goto err;
         uint32_t masks[2];
         memcpy(masks, msg.data(), 8);
+        if (masks[0] || masks[1]) {
+            Log::info("Set TTLs, [%08x, %08x]\n", masks[0], masks[1]);
+        }
+        else {
+            nacsDbg("get_ttl\n");
+        }
         if (masks[0])
             m_ctrl->set_ttl(masks[0], false);
         if (masks[1])
@@ -363,6 +392,7 @@ void Server::process_zmq()
     else if (ZMQ::match(msg, "override_dds")) {
         if (!recv_more(msg) || !process_set_dds(msg, true))
             goto err;
+        Log::info("Override DDSs\n");
         send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
     }
     else if (ZMQ::match(msg, "get_override_dds")) {
@@ -379,6 +409,7 @@ void Server::process_zmq()
                 server->send_reply(addr, msg);
             }
         };
+        nacsDbg("get_override_dds\n");
         std::shared_ptr<get_override_dds> info(new get_override_dds{this, std::move(addr)});
         for (int i: m_ctrl->get_active_dds()) {
             for (int typ = 0; typ < 3; typ++) {
@@ -392,6 +423,7 @@ void Server::process_zmq()
     else if (ZMQ::match(msg, "set_dds")) {
         if (!recv_more(msg) || !process_set_dds(msg, false))
             goto err;
+        Log::info("Set DDSs\n");
         send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
     }
     else if (ZMQ::match(msg, "get_dds")) {
@@ -417,6 +449,7 @@ void Server::process_zmq()
                     goto err;
                 }
             }
+            nacsDbg("get_dds\n");
             std::shared_ptr<get_dds> info(new get_dds{this, std::move(addr)});
             for (size_t i = 0; i < sz; i++) {
                 auto chn = data[i];
@@ -427,6 +460,7 @@ void Server::process_zmq()
             }
         }
         else {
+            nacsDbg("get_dds\n");
             std::shared_ptr<get_dds> info(new get_dds{this, std::move(addr)});
             for (int i: m_ctrl->get_active_dds()) {
                 for (int typ = 0; typ < 3; typ++) {
@@ -444,12 +478,14 @@ void Server::process_zmq()
         int chn = *(char*)msg.data();
         if (chn >= 22)
             goto err;
+        Log::info("Reset DDS\n");
         m_ctrl->reset_dds(chn);
         send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
     }
     else if (ZMQ::match(msg, "set_clock")) {
         if (!recv_more(msg) || msg.size() != 1)
             goto err;
+        Log::info("Set clock\n");
         uint8_t clock = *(uint8_t*)msg.data();
         m_ctrl->set_clock(clock);
         send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
@@ -464,6 +500,7 @@ void Server::process_zmq()
     }
     goto out;
 err:
+    Log::warn("Request validation failed.\n");
     send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
 out:
     ZMQ::readall(m_zmqsock);
