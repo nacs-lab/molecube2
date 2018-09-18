@@ -459,6 +459,9 @@ void Server::process_zmq()
                 send_reply(addr, ZMQ::bits_msg(uint8_t(v)));
             });
     }
+    else {
+        goto err;
+    }
     goto out;
 err:
     send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
