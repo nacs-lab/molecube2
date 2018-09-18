@@ -268,11 +268,8 @@ void Server::process_zmq()
     m_zmqsock.recv(&msg);
     assert(msg.size() == 0);
 
-    if (!recv_more(msg)) {
-        // Empty request?
-        send_reply(addr, ZMQ::bits_msg(false));
-        return;
-    }
+    if (!recv_more(msg))
+        goto err;
     if (ZMQ::match(msg, "run_seq")) {
         if (!process_run_seq(addr, false)) {
             goto err;
@@ -319,7 +316,7 @@ void Server::process_zmq()
         else {
             res = false;
         }
-        send_reply(addr, ZMQ::bits_msg(res));
+        send_reply(addr, ZMQ::bits_msg(!res));
     }
     else if (ZMQ::match(msg, "state_id")) {
         std::array<uint64_t,2> id{m_ctrl->get_state_id(), m_id};
@@ -362,7 +359,9 @@ void Server::process_zmq()
             });
     }
     else if (ZMQ::match(msg, "override_dds")) {
-        send_reply(addr, ZMQ::bits_msg(recv_more(msg) && process_set_dds(msg, true)));
+        if (!recv_more(msg) || !process_set_dds(msg, true))
+            goto err;
+        send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
     }
     else if (ZMQ::match(msg, "get_override_dds")) {
         struct get_override_dds {
@@ -389,7 +388,9 @@ void Server::process_zmq()
         }
     }
     else if (ZMQ::match(msg, "set_dds")) {
-        send_reply(addr, ZMQ::bits_msg(recv_more(msg) && process_set_dds(msg, false)));
+        if (!recv_more(msg) || !process_set_dds(msg, false))
+            goto err;
+        send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
     }
     else if (ZMQ::match(msg, "get_dds")) {
         struct get_dds {

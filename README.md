@@ -55,8 +55,8 @@ zmq protocol.
     `[id: 16bytes (optional)]`
 
     Cancel one (or all) sequences.
-    Return 1 bytes. `0` if no sequence are cancelled.
-    `1` if at least one sequence may be cancelled
+    Return 1 bytes. `1` if no sequence are cancelled.
+    `0` if at least one sequence may be cancelled
     (though the sequence may not response if it is already started).
 
 * `state_id`
@@ -101,6 +101,8 @@ zmq protocol.
     * `1`: for DDS amplitude
     * `2`: for DDS phase
 
+    Return `0` on success. `1` on error.
+
 * `get_override_dds`
 
     No arguments. Return the list of overrides specified in the same format as
@@ -111,6 +113,7 @@ zmq protocol.
     `[[[id: 1byte][val: 4bytes]] x n]`
 
     Same as `override_dds`. But set the current value without enabling override.
+    Return `0` on success. `1` on error.
 
 * `get_dds`
 
