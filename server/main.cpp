@@ -19,14 +19,66 @@
 #include "../lib/server.h"
 #include "../lib/config.h"
 
+#include <nacs-utils/log.h>
+
+#include <signal.h>
+
+#include <thread>
+
+using namespace Molecube;
+
+static void block_sigint()
+{
+    sigset_t sset;
+    sigemptyset(&sset);
+    sigaddset(&sset, SIGINT);
+    if (auto s = pthread_sigmask(SIG_BLOCK, &sset, NULL)) {
+        errno = s;
+        perror("Failed to setup signal mask.");
+        return;
+    }
+}
+
+static std::atomic_bool stop{false};
+static std::thread sigthread;
+
+static void setup_signal(Server *server)
+{
+    sigthread = std::thread([server] () {
+            sigset_t sset;
+            sigemptyset(&sset);
+            sigaddset(&sset, SIGINT);
+            timespec timeout;
+            timeout.tv_sec = 0;
+            timeout.tv_nsec = 50000000; // 50ms
+
+            while (!stop.load(std::memory_order_relaxed)) {
+                auto s = sigtimedwait(&sset, nullptr, &timeout);
+                if (s < 0) {
+                    if (errno == EAGAIN)
+                        continue;
+                    perror("sigtimedwait errors.");
+                    exit(1);
+                }
+                assert(s == SIGINT);
+                Log::info("Stopping server.\n");
+                server->stop();
+            }
+        });
+}
+
 int main(int argc, char **argv)
 {
-    using namespace Molecube;
     // TODO: better arguments handling
     auto config = Config::loadYAML(argc >= 2 ? argv[1] : "/etc/molecube.yml");
 
+    block_sigint();
     Server server(config);
+    setup_signal(&server);
     server.run();
+    stop.store(true, std::memory_order_relaxed);
+    if (sigthread.joinable())
+        sigthread.join();
 
     return 0;
 }
