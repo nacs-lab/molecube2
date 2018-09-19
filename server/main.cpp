@@ -27,6 +27,8 @@
 
 using namespace Molecube;
 
+// Block the sigint before starting any threads so that it's blocked for the whole process.
+// This avoid having to deal with failed system call (especially poll).
 static void block_sigint()
 {
     sigset_t sset;
@@ -53,8 +55,10 @@ static void setup_signal(Server *server)
             timeout.tv_nsec = 50000000; // 50ms
 
             while (!stop.load(std::memory_order_relaxed)) {
+                // The timeout is needed so that we can notice when `stop` is set.
                 auto s = sigtimedwait(&sset, nullptr, &timeout);
                 if (s < 0) {
+                    // Timeout
                     if (errno == EAGAIN)
                         continue;
                     perror("sigtimedwait errors.");
