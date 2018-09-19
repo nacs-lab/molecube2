@@ -1,0 +1,3 @@
+# dummy: false
+# listen: "tcp://*:7777"
+# runtime_dir: /var/lib/molecube

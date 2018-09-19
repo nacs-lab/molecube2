@@ -101,6 +101,7 @@ _NACS_PROTECTED Server::Server(const Config &conf)
       m_ttl_names(conf.runtime_dir + "/ttl.yaml"),
       m_dds_names(conf.runtime_dir + "/dds.yaml")
 {
+    Log::info("Listening on: `%s`\n", m_conf.listen.c_str());
     m_zmqsock.bind(m_conf.listen);
     // This will come after we try to use the directory above
     // This shouldn't cause any major issue though since if the directory didn't exist,
