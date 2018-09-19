@@ -67,6 +67,8 @@ private:
     uint8_t process_set_dds(zmq::message_t &msg, bool is_ovr);
     bool process_run_seq(zmq::message_t &addr, bool is_cmd);
     SeqStatus *find_seqstatus(uint64_t id);
+    bool process_set_names(zmq::message_t &msg, NamesConfig &names);
+    void process_get_names(zmq::message_t &addr, NamesConfig &names);
 
     const Config &m_conf;
     const uint64_t m_id;

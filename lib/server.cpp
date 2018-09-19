@@ -20,8 +20,10 @@
 #include "config.h"
 
 #include <nacs-utils/log.h>
+#include <nacs-utils/streams.h>
 #include <nacs-utils/timer.h>
 
+#include <string.h>
 #include <sys/stat.h>
 #include <time.h>
 
@@ -48,6 +50,11 @@ static void push_dds_res(std::vector<uint8_t> &res, uint8_t chn, uint32_t v)
     res.resize(oldn + 5);
     res[oldn] = chn;
     memcpy(&res[oldn + 1], &v, 4);
+}
+
+static void free_malloc_msg(void *data, void*)
+{
+    free(data);
 }
 
 }
@@ -311,9 +318,55 @@ auto Server::find_seqstatus(uint64_t id) -> SeqStatus*
     return nullptr;
 }
 
+bool Server::process_set_names(zmq::message_t &msg, NamesConfig &names)
+{
+    bool has_set = false;
+    auto &vec = names.get();
+    auto nchn = vec.size();
+
+    char *p = (char*)msg.data();
+    size_t sz = msg.size();
+    char *end = p + sz;
+    while (p + 1 < end) {
+        uint8_t chn = (uint8_t)*p;
+        p++;
+        auto n = strnlen(p, end - p);
+        if (n == end - p) {
+            Log::warn("Name not NUL terminated\n");
+            break;
+        }
+        if (chn >= nchn) {
+            Log::warn("Channel %u out of range: [0, %u)\n", chn, (unsigned)nchn);
+        }
+        else {
+            has_set = true;
+            vec[chn] = std::string(p, n);
+        }
+        p += n + 1;
+    }
+
+    return has_set;
+}
+
+void Server::process_get_names(zmq::message_t &addr, NamesConfig &names)
+{
+    malloc_ostream ostm;
+    auto &vec = names.get();
+    for (size_t i = 0; i < vec.size(); i++) {
+        auto &str = vec[i];
+        if (str.empty())
+            continue;
+        uint8_t chn = (uint8_t)i;
+        ostm.write((const char*)&chn, 1);
+        ostm.write(&str[0], str.size() + 1);
+    }
+    size_t msgsz;
+    auto ptr = ostm.get_buf(msgsz);
+    send_reply(addr, zmq::message_t(ptr, msgsz, free_malloc_msg));
+}
+
 void Server::process_zmq()
 {
-    // LOG
     zmq::message_t addr;
     m_zmqsock.recv(&addr);
 
@@ -533,6 +586,24 @@ void Server::process_zmq()
         m_ctrl->get_clock([addr{std::move(addr)}, this] (uint32_t v) mutable {
                 send_reply(addr, ZMQ::bits_msg(uint8_t(v)));
             });
+    }
+    else if (ZMQ::match(msg, "set_ttl_names")) {
+        Log::info("Setting TTL names.\n");
+        if (!recv_more(msg) || !process_set_names(msg, m_ttl_names))
+            goto err;
+        send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
+    }
+    else if (ZMQ::match(msg, "get_ttl_names")) {
+        process_get_names(addr, m_ttl_names);
+    }
+    else if (ZMQ::match(msg, "set_dds_names")) {
+        Log::info("Setting DDS names.\n");
+        if (!recv_more(msg) || !process_set_names(msg, m_dds_names))
+            goto err;
+        send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
+    }
+    else if (ZMQ::match(msg, "get_dds_names")) {
+        process_get_names(addr, m_dds_names);
     }
     else {
         goto err;
