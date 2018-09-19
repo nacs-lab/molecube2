@@ -33,6 +33,7 @@ struct Config {
 
     bool dummy = false;
     std::string listen{"tcp://*:7777"};
+    std::string runtime_dir{"/var/lib/molecube/"};
 };
 
 }

@@ -35,6 +35,8 @@ NACS_PROTECTED() Config Config::loadYAML(const char *fname)
         conf.dummy = dummy_node.as<bool>();
     if (auto listen_node = file["listen"])
         conf.listen = listen_node.as<std::string>();
+    if (auto runtime_dir_node = file["runtime_dir"])
+        conf.runtime_dir = runtime_dir_node.as<std::string>();
 
     return conf;
 }

@@ -22,6 +22,7 @@
 #include <nacs-utils/log.h>
 #include <nacs-utils/timer.h>
 
+#include <sys/stat.h>
 #include <time.h>
 
 namespace Molecube {
@@ -89,9 +90,47 @@ _NACS_PROTECTED Server::Server(const Config &conf)
       m_zmqctx(),
       m_zmqsock(m_zmqctx, ZMQ_ROUTER),
       m_zmqpoll{{(void*)m_zmqsock, 0, ZMQ_POLLIN, 0},
-    {nullptr, m_ctrl->backend_fd(), ZMQ_POLLIN, 0}}
+    {nullptr, m_ctrl->backend_fd(), ZMQ_POLLIN, 0}},
+      m_ttl_names(conf.runtime_dir + "/ttl.yaml"),
+      m_dds_names(conf.runtime_dir + "/dds.yaml")
 {
     m_zmqsock.bind(m_conf.listen);
+    // This will come after we try to use the directory above
+    // This shouldn't cause any major issue though since if the directory didn't exist,
+    // the file in it won't exist either and the loading will fail no matter what.
+    struct stat info;
+    if (stat(conf.runtime_dir.c_str(), &info) != 0) {
+        auto dir = conf.runtime_dir;
+        char *start = &dir[0];
+        char *p = start;
+        while (true) {
+            while (*p == '/')
+                p++;
+            if (!*p)
+                break;
+            while (*p && *p != '/')
+                p++;
+            bool end = *p == 0;
+            *p = 0;
+            mkdir(start, 0755);
+            if (end)
+                break;
+            *p = '/';
+        }
+    }
+    else if ((info.st_mode & S_IFDIR) == 0) {
+        Log::error("Runtime directory `%s` exists but is not a directory.\n",
+                   conf.runtime_dir.c_str());
+        return;
+    }
+    if (m_ttl_names.get().size() != 32) {
+        m_ttl_names.get().resize(32);
+        m_ttl_names.save();
+    }
+    if (m_dds_names.get().size() != 22) {
+        m_dds_names.get().resize(22);
+        m_dds_names.save();
+    }
 }
 
 _NACS_PROTECTED void Server::run()

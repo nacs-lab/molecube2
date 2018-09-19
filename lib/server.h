@@ -20,6 +20,7 @@
 #define LIBMOLECUBE_SERVER_H
 
 #include "ctrl_iface.h"
+#include "namesconfig.h"
 
 #include <nacs-utils/zmq_utils.h>
 
@@ -76,6 +77,8 @@ private:
     zmq::message_t m_empty{0};
     volatile std::atomic_bool m_running{false};
     std::vector<SeqStatus> m_seq_status{};
+    NamesConfig m_ttl_names;
+    NamesConfig m_dds_names;
 };
 
 }
