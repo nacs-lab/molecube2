@@ -157,10 +157,6 @@ void Server::run_startup()
 
     bool finished = false;
     struct Notify: CtrlIFace::ReqSeqNotify {
-        void end(uint64_t _id) override
-        {
-            *finished = true;
-        }
         Notify(bool *finished)
             : finished(finished)
         {
