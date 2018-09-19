@@ -8,6 +8,13 @@ set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}"
 include(CMakeCMacros)
 include(GNUInstallDirs)
 
+set(SYSTEMD_SERVICE_DIR "${CMAKE_INSTALL_LIBDIR}/systemd/system"
+  CACHE PATH "Systemd service file install dir")
+set(SYSTEMD_SYSUSERS_DIR "${CMAKE_INSTALL_LIBDIR}/sysusers.d"
+  CACHE PATH "Systemd sysusers file install dir")
+set(SYSTEMD_TMPFILES_DIR "${CMAKE_INSTALL_LIBDIR}/tmpfiles.d"
+  CACHE PATH "Systemd tmpfiles file install dir")
+
 find_package(PkgConfig REQUIRED)
 set(MCDEP_PKGS nacs-utils>=9.0 nacs-seq libzmq>=4.0)
 pkg_check_modules(NACS_KERNEL nacs-kernel)

@@ -1,0 +1,16 @@
+#
+
+[Unit]
+Description=Start molecube server
+After=network-online.target auditd.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/molecube2
+Restart=always
+RestartSec=1
+KillMode=process
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target
