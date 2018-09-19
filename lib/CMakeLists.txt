@@ -5,6 +5,7 @@ set(libmolecube_SRCS
   controller.cpp
   ctrl_iface.cpp
   dummy_pulser.cpp
+  namesconfig.cpp
   pulser.cpp
   server.cpp)
 
