@@ -148,7 +148,7 @@ TODO
 
 * `get_startup`
 
-    No argument. Return the startup cmdlist in text format.
+    No argument. Return the startup cmdlist in text format (NUL terminated).
 
 * `set_startup`
 

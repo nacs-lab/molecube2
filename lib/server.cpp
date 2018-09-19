@@ -670,6 +670,15 @@ void Server::process_zmq()
     else if (ZMQ::match(msg, "get_dds_names")) {
         process_get_names(addr, m_dds_names);
     }
+    else if (ZMQ::match(msg, "get_startup")) {
+        std::string str;
+        std::ifstream istm(m_conf.runtime_dir + "/startup.cmdlist");
+        if (istm.good())
+            str.append(std::istreambuf_iterator<char>(istm), {});
+        zmq::message_t msg(str.size() + 1);
+        memcpy(msg.data(), str.c_str(), str.size() + 1);
+        send_reply(addr, msg);
+    }
     else {
         goto err;
     }
