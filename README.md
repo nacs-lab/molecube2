@@ -16,6 +16,7 @@ zmq protocol.
     `[version: 4bytes]`
     `[bytecode: n]`
 
+    The version number and the code are passed in as two different ZMQ messages.
     This will be how the experiment talks to the backend.
 
     Return 16 bytes ID that can be waited/operated on by `wait_seq` and `cancel_seq`.
@@ -142,3 +143,43 @@ TODO
 * `get_clock`
 
     No argument. Return `[clock: 1byte]`
+
+### Miscellaneous
+
+* `get_startup`
+
+    No argument. Return the startup cmdlist in text format.
+
+* `set_startup`
+
+    `[text form cmdlist: n bytes]`
+
+    Set the startup cmdlist. The sequence will be parsed immediately.
+    If parsing succeeded, return `[0: 1 byte]`, otherwise,
+    return `[1: 1 byte]` followed by a serialization of the `SyntaxError` object
+    in the format:
+
+        [message: n bytes NUL terminate]
+        [line: n bytes NUL terminate]
+        [lineno: 4bytes]
+        [colnum: 4bytes]
+        [colstart: 4bytes]
+        [colend: 4bytes]
+
+* `set_ttl_names`
+
+    `[[chn: 1byte][name: n byte NUL terminate] x n]`
+
+    Return `[0: 1byte]` if succeeded, `[1: 1 byte]` on error.
+
+* `get_ttl_names`
+
+    Return all TTL names in the same format as `set_ttl_names`
+
+* `set_dds_names`
+
+    Similar to `set_ttl_names`. Use the same channel format as `set_dds` above.
+
+* `get_ttl_names`
+
+    Similar to `get_ttl_names`. See also `set_dds_names`.
