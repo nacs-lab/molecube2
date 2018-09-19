@@ -66,7 +66,7 @@ inline bool CtrlIFace::CmdCache::has_dds_ovr()
         for (auto op: (ReqOP[]){DDSFreq, DDSAmp, DDSPhase}) {
             auto key = cache_key(op, i, true);
             auto it = m_cache.find(key);
-            if (it == m_cache.end() || it->second.val == -1)
+            if (it == m_cache.end() || it->second.val == uint32_t(-1))
                 continue;
             return true;
         }
