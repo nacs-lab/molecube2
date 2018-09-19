@@ -468,6 +468,7 @@ void Server::process_set_startup(zmq::message_t &addr, zmq::message_t &msg)
         cols[0] = err.columns(&cols[1], &cols[2]);
         memcpy(zmsgdata, &cols[0], 12);
         send_reply(addr, zmsg);
+        return;
     }
     auto ttmpname = m_conf.runtime_dir + "/startup.cmdlist.tmp";
     auto btmpname = m_conf.runtime_dir + "/startup.cmdbin.tmp";
