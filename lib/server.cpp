@@ -168,7 +168,7 @@ void Server::run_startup()
         bool *finished;
     };
     m_ctrl->run_code(true, len_ns, ttl_mask, str_data, str_sz,
-                     std::unique_ptr<CtrlIFace::ReqSeqNotify>(new Notify(&finished)));
+                     std::make_unique<Notify>(&finished));
     while (!finished) {
         using namespace std::literals;
         m_ctrl->run_frontend();
