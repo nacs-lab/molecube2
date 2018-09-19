@@ -178,8 +178,8 @@ TODO
 
 * `set_dds_names`
 
-    Similar to `set_ttl_names`. Use the same channel format as `set_dds` above.
+    Similar to `set_ttl_names`. Use the DDS instead of TTL channel number.
 
 * `get_ttl_names`
 
-    Similar to `get_ttl_names`. See also `set_dds_names`.
+    Similar to `get_ttl_names`. Use the DDS instead of TTL channel number.
