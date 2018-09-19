@@ -152,7 +152,7 @@ TODO
 
 * `set_startup`
 
-    `[text form cmdlist: n bytes]`
+    `[text form cmdlist: n bytes NUL terminate]`
 
     Set the startup cmdlist. The sequence will be parsed immediately.
     If parsing succeeded, return `[0: 1 byte]`, otherwise,

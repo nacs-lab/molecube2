@@ -19,14 +19,18 @@
 #include "server.h"
 #include "config.h"
 
+#include <nacs-utils/errors.h>
 #include <nacs-utils/log.h>
 #include <nacs-utils/streams.h>
 #include <nacs-utils/timer.h>
+
+#include <nacs-seq/cmdlist.h>
 
 #include <chrono>
 #include <fstream>
 #include <thread>
 
+#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -430,6 +434,66 @@ void Server::process_get_names(zmq::message_t &addr, NamesConfig &names)
     send_reply(addr, zmq::message_t(ptr, msgsz, free_malloc_msg));
 }
 
+void Server::process_set_startup(zmq::message_t &addr, zmq::message_t &msg)
+{
+    char *data = (char*)msg.data();
+    size_t size = strnlen(data, msg.size());
+    if (size == msg.size()) {
+        Log::error("Startup sequence not NUL terminated.\n");
+        send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
+        return;
+    }
+    const_istream istm(data, data + size);
+    string_ostream sstm;
+    uint32_t ttl_mask;
+    try {
+        ttl_mask = Seq::CmdList::parse(sstm, istm);
+    }
+    catch (const SyntaxError &err) {
+        Log::error("Error parsing startup script: %s\n", err.what());
+        auto &emsg = err.msg();
+        auto emsgsz = emsg.size();
+        auto &line = err.line();
+        auto linesz = line.size();
+        zmq::message_t zmsg(emsgsz + 1 + linesz + 1 + 4 * 4);
+        char *zmsgdata = (char*)zmsg.data();
+        memcpy(zmsgdata, emsg.c_str(), emsgsz + 1);
+        zmsgdata += emsgsz + 1;
+        memcpy(zmsgdata, line.c_str(), linesz + 1);
+        zmsgdata += linesz + 1;
+        int lineno = err.lineno();
+        memcpy(zmsgdata, &lineno, 4);
+        zmsgdata += 4;
+        std::array<int,3> cols;
+        cols[0] = err.columns(&cols[1], &cols[2]);
+        memcpy(zmsgdata, &cols[0], 12);
+        send_reply(addr, zmsg);
+    }
+    auto ttmpname = m_conf.runtime_dir + "/startup.cmdlist.tmp";
+    auto btmpname = m_conf.runtime_dir + "/startup.cmdbin.tmp";
+    std::ofstream otstm(ttmpname);
+    std::ofstream obstm(btmpname);
+    otstm.write(data, size);
+    uint32_t ver = 1;
+    obstm.write((char*)&ver, 4);
+    auto bstr = sstm.get_buf();
+    uint64_t len_ns = Seq::CmdList::total_time((uint8_t*)bstr.data(), bstr.size()) * 10;
+    obstm.write((char*)&len_ns, 8);
+    obstm.write((char*)&ttl_mask, 4);
+    obstm.write(bstr.data(), bstr.size());
+    if (!obstm.good() || !otstm.good()) {
+        Log::error("Cannot save startup file.\n");
+        send_reply(addr, ZMQ::bits_msg<uint8_t>(1));
+        return;
+    }
+    otstm.close();
+    obstm.close();
+
+    // I'm not really sure what to do if these fails so just ignore error....
+    rename(ttmpname.c_str(), (m_conf.runtime_dir + "/startup.cmdlist").c_str());
+    rename(btmpname.c_str(), (m_conf.runtime_dir + "/startup.cmdbin").c_str());
+}
+
 void Server::process_zmq()
 {
     zmq::message_t addr;
@@ -678,6 +742,11 @@ void Server::process_zmq()
         zmq::message_t msg(str.size() + 1);
         memcpy(msg.data(), str.c_str(), str.size() + 1);
         send_reply(addr, msg);
+    }
+    else if (ZMQ::match(msg, "set_startup")) {
+        if (!recv_more(msg) || msg.size() < 1)
+            goto err;
+        process_set_startup(addr, msg);
     }
     else {
         goto err;

@@ -71,6 +71,7 @@ private:
     void process_get_names(zmq::message_t &addr, NamesConfig &names);
     void ensure_runtime_dir();
     void run_startup();
+    void process_set_startup(zmq::message_t &addr, zmq::message_t &msg);
 
     const Config &m_conf;
     const uint64_t m_id;
