@@ -23,6 +23,10 @@
 #include <nacs-utils/streams.h>
 #include <nacs-utils/timer.h>
 
+#include <chrono>
+#include <fstream>
+#include <thread>
+
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -90,25 +94,11 @@ inline uint64_t Server::get_seq_id(zmq::message_t &msg, size_t suffix)
     return id;
 }
 
-_NACS_PROTECTED Server::Server(const Config &conf)
-    : m_conf(conf),
-      m_id(get_server_id()),
-      m_ctrl(CtrlIFace::create(conf.dummy)),
-      m_zmqctx(),
-      m_zmqsock(m_zmqctx, ZMQ_ROUTER),
-      m_zmqpoll{{(void*)m_zmqsock, 0, ZMQ_POLLIN, 0},
-    {nullptr, m_ctrl->backend_fd(), ZMQ_POLLIN, 0}},
-      m_ttl_names(conf.runtime_dir + "/ttl.yaml"),
-      m_dds_names(conf.runtime_dir + "/dds.yaml")
+void Server::ensure_runtime_dir()
 {
-    Log::info("Listening on: `%s`\n", m_conf.listen.c_str());
-    m_zmqsock.bind(m_conf.listen);
-    // This will come after we try to use the directory above
-    // This shouldn't cause any major issue though since if the directory didn't exist,
-    // the file in it won't exist either and the loading will fail no matter what.
     struct stat info;
-    if (stat(conf.runtime_dir.c_str(), &info) != 0) {
-        auto dir = conf.runtime_dir;
+    if (stat(m_conf.runtime_dir.c_str(), &info) != 0) {
+        auto dir = m_conf.runtime_dir;
         char *start = &dir[0];
         char *p = start;
         while (true) {
@@ -128,9 +118,86 @@ _NACS_PROTECTED Server::Server(const Config &conf)
     }
     else if ((info.st_mode & S_IFDIR) == 0) {
         Log::error("Runtime directory `%s` exists but is not a directory.\n",
-                   conf.runtime_dir.c_str());
+                   m_conf.runtime_dir.c_str());
         return;
     }
+}
+
+void Server::run_startup()
+{
+    std::ifstream istm(m_conf.runtime_dir + "/startup.cmdbin");
+    if (!istm.good()) {
+        Log::info("No startup sequence found.\n");
+        return;
+    }
+    std::string str(std::istreambuf_iterator<char>(istm), {});
+    if (str.size() < 16) {
+        Log::error("`startup.cmdbin` too short.\n");
+        return;
+    }
+    auto str_data = (const uint8_t*)str.data();
+    auto str_sz = str.size();
+
+    uint32_t ver;
+    memcpy(&ver, str_data, 4);
+    if (ver != 1) {
+        Log::error("Wrong startup file version.\n");
+        return;
+    }
+
+    uint64_t len_ns;
+    memcpy(&len_ns, str_data, 8);
+    str_data += 8;
+    str_sz -= 8;
+
+    uint32_t ttl_mask;
+    memcpy(&ttl_mask, str_data, 4);
+    str_data += 4;
+    str_sz -= 4;
+
+    bool finished = false;
+    struct Notify: CtrlIFace::ReqSeqNotify {
+        void end(uint64_t _id) override
+        {
+            *finished = true;
+        }
+        Notify(bool *finished)
+            : finished(finished)
+        {
+        }
+        ~Notify() override
+        {
+            *finished = true;
+        }
+        bool *finished;
+    };
+    m_ctrl->run_code(true, len_ns, ttl_mask, str_data, str_sz,
+                     std::unique_ptr<CtrlIFace::ReqSeqNotify>(new Notify(&finished)));
+    while (!finished) {
+        using namespace std::literals;
+        m_ctrl->run_frontend();
+        std::this_thread::sleep_for(1ms);
+    }
+    Log::info("Startup sequence finished.\n");
+}
+
+_NACS_PROTECTED Server::Server(const Config &conf)
+    : m_conf(conf),
+      m_id(get_server_id()),
+      m_ctrl(CtrlIFace::create(conf.dummy)),
+      m_zmqctx(),
+      m_zmqsock(m_zmqctx, ZMQ_ROUTER),
+      m_zmqpoll{{(void*)m_zmqsock, 0, ZMQ_POLLIN, 0},
+    {nullptr, m_ctrl->backend_fd(), ZMQ_POLLIN, 0}},
+      m_ttl_names(conf.runtime_dir + "/ttl.yaml"),
+      m_dds_names(conf.runtime_dir + "/dds.yaml")
+{
+    Log::info("Listening on: `%s`\n", m_conf.listen.c_str());
+    m_zmqsock.bind(m_conf.listen);
+    // This will come after we try to use the directory above
+    // This shouldn't cause any major issue though since if the directory didn't exist,
+    // the file in it won't exist either and the loading will fail no matter what.
+    ensure_runtime_dir();
     if (m_ttl_names.get().size() != 32) {
         m_ttl_names.get().resize(32);
         m_ttl_names.save();
@@ -139,6 +206,7 @@ _NACS_PROTECTED Server::Server(const Config &conf)
         m_dds_names.get().resize(22);
         m_dds_names.save();
     }
+    run_startup();
 }
 
 _NACS_PROTECTED void Server::run()

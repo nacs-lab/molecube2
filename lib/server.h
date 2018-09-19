@@ -69,6 +69,8 @@ private:
     SeqStatus *find_seqstatus(uint64_t id);
     bool process_set_names(zmq::message_t &msg, NamesConfig &names);
     void process_get_names(zmq::message_t &addr, NamesConfig &names);
+    void ensure_runtime_dir();
+    void run_startup();
 
     const Config &m_conf;
     const uint64_t m_id;
