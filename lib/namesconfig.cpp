@@ -35,7 +35,7 @@ NACS_PROTECTED() void NamesConfig::save()
     }
     YAML::Emitter yaml;
     yaml << m_names;
-    fstm << yaml.c_str();
+    fstm << yaml.c_str() << std::endl;
 }
 
 NACS_PROTECTED() void NamesConfig::load()
