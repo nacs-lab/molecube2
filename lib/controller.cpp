@@ -198,9 +198,22 @@ public:
             m_ctrl.m_p.template wait<checked>(uint32_t(t));
             return;
         }
-        if (!m_released) {
+        if (unlikely(!m_released)) {
+            if (t < 2000) {
+                m_t += t;
+                m_ctrl.m_p.template wait<checked>(uint32_t(t));
+                t = 0;
+            }
+            else {
+                m_t += 1000;
+                m_ctrl.m_p.template wait<checked>(uint32_t(1000));
+                t -= 1000;
+            }
             m_ctrl.m_p.release_hold();
             m_released = true;
+            if (t == 0) {
+                return;
+            }
         }
         const auto tend = m_t + t;
         auto tnow = getCoarseTime();
