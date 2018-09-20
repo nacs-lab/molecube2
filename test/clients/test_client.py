@@ -67,3 +67,10 @@ elif cmd == 'set_ttl':
     hi = int(sys.argv[4], 16)
     sock.send(struct.pack('II', lo, hi))
     print("ttl: {0:#0{1}x}".format(struct.unpack('I', sock.recv())[0], 10))
+elif cmd == 'set_clock':
+    sock.send_string("set_clock", zmq.SNDMORE)
+    sock.send(struct.pack('B', int(sys.argv[3])))
+    print(sock.recv())
+elif cmd == 'get_clock':
+    sock.send_string("get_clock")
+    print("clock: {0}".format(struct.unpack('B', sock.recv())[0]))
