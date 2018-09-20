@@ -315,7 +315,7 @@ bool Controller<Pulser>::concurrent_get(ReqOP op, uint32_t operand, bool is_over
 {
     if (op == Clock) {
         val = m_p.cur_clock();
-        return false;
+        return true;
     }
     if (op != TTL)
         return false;
