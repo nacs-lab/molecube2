@@ -144,6 +144,8 @@ void Server::run_startup()
 
     uint32_t ver;
     memcpy(&ver, str_data, 4);
+    str_data += 4;
+    str_sz -= 4;
     if (ver != 1) {
         Log::error("Wrong startup file version.\n");
         return;
