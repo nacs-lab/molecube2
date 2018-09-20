@@ -53,3 +53,17 @@ elif cmd == 'get_dds_names':
     sock.send_string("get_dds_names")
     msg = sock.recv()
     print(msg)
+elif cmd == 'override_ttl':
+    sock.send_string("override_ttl", zmq.SNDMORE)
+    lo = int(sys.argv[3], 16)
+    hi = int(sys.argv[4], 16)
+    normal = int(sys.argv[5], 16)
+    sock.send(struct.pack('III', lo, hi, normal))
+    lo, hi = struct.unpack('II', sock.recv())
+    print("lo: {0:#0{1}x}; hi: {2:#0{1}x}".format(lo, 10, hi))
+elif cmd == 'set_ttl':
+    sock.send_string("set_ttl", zmq.SNDMORE)
+    lo = int(sys.argv[3], 16)
+    hi = int(sys.argv[4], 16)
+    sock.send(struct.pack('II', lo, hi))
+    print("ttl: {0:#0{1}x}".format(struct.unpack('I', sock.recv())[0], 10))
