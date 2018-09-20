@@ -415,6 +415,8 @@ bool Server::process_set_names(zmq::message_t &msg, NamesConfig &names)
         }
         p += n + 1;
     }
+    if (has_set)
+        names.save();
 
     return has_set;
 }
