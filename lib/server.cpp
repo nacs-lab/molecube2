@@ -582,7 +582,7 @@ void Server::process_zmq()
         }
         for (int i = 0; i < 3; i++) {
             if (masks[i]) {
-                m_ctrl->set_ttl(masks[i], i);
+                m_ctrl->set_ttl_ovr(masks[i], i);
             }
         }
         // get_ttl_ovr* returns immediately and we only have two functions to call
