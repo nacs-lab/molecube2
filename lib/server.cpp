@@ -400,7 +400,7 @@ bool Server::process_set_names(zmq::message_t &msg, NamesConfig &names)
         uint8_t chn = (uint8_t)*p;
         p++;
         auto n = strnlen(p, end - p);
-        if (n == end - p) {
+        if (n == size_t(end - p)) {
             Log::warn("Name not NUL terminated\n");
             break;
         }
