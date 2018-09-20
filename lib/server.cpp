@@ -493,6 +493,7 @@ void Server::process_set_startup(zmq::message_t &addr, zmq::message_t &msg)
     // I'm not really sure what to do if these fails so just ignore error....
     rename(ttmpname.c_str(), (m_conf.runtime_dir + "/startup.cmdlist").c_str());
     rename(btmpname.c_str(), (m_conf.runtime_dir + "/startup.cmdbin").c_str());
+    send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
 }
 
 void Server::process_zmq()
