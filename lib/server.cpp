@@ -436,6 +436,7 @@ void Server::process_get_names(zmq::message_t &addr, NamesConfig &names)
 
 void Server::process_set_startup(zmq::message_t &addr, zmq::message_t &msg)
 {
+    Log::info("Setting startup file.\n");
     char *data = (char*)msg.data();
     size_t size = strnlen(data, msg.size());
     if (size == msg.size()) {

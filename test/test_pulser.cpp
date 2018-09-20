@@ -23,6 +23,8 @@
 #include <stdio.h>
 #include <thread>
 
+#include <nacs-utils/log.h>
+
 template<typename P>
 void test_pulser(P &p)
 {
@@ -97,7 +99,7 @@ int main()
         test_pulser(p);
     }
     else {
-        fprintf(stderr, "Pulse not enabled!\n");
+        NaCs::Log::warn("Pulse not enabled!\n");
     }
 
     Molecube::DummyPulser dp;

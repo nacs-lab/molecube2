@@ -21,6 +21,7 @@
 #include "dummy_pulser.h"
 
 #include <nacs-utils/container.h>
+#include <nacs-utils/log.h>
 #include <nacs-utils/mem.h>
 #include <nacs-utils/timer.h>
 
@@ -83,7 +84,7 @@ private:
         // every changes.
         auto ttl = m_p.cur_ttl();
         if (ttl != m_ttl) {
-            fprintf(stderr, "Warning: TTL out of sync: has %04x, actual %04x\n", m_ttl, ttl);
+            Log::warn("TTL out of sync: has %04x, actual %04x\n", m_ttl, ttl);
             m_ttl = ttl;
         }
     }
@@ -624,7 +625,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
         runner.template clock<false>(255);
     }
     if (!m_p.timing_ok())
-        std::cerr << "Warning: timing failures." << std::endl;
+        Log::warn("Timing failures.\n");
     m_p.clear_error();
 
     // Doing this check before this sequence will make the current sequence
@@ -669,8 +670,7 @@ NACS_PROTECTED() std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy)
     if (!dummy) {
         if (auto addr = Molecube::Pulser::address())
             return std::unique_ptr<CtrlIFace>(new Controller<Pulser>(Pulser(addr)));
-        std::cerr << "Warning: failed to create real pulser, use dummy pulser instead."
-                  << std::endl;
+        Log::warn("Failed to create real pulser, use dummy pulser instead.\n");
     }
     return std::unique_ptr<CtrlIFace>(new Controller<DummyPulser>(DummyPulser()));
 }
