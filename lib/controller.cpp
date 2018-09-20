@@ -23,6 +23,7 @@
 #include <nacs-utils/container.h>
 #include <nacs-utils/log.h>
 #include <nacs-utils/mem.h>
+#include <nacs-utils/streams.h>
 #include <nacs-utils/timer.h>
 
 #include <nacs-seq/bytecode.h>
@@ -58,6 +59,7 @@ private:
 
     bool check_dds(int chn);
     void detect_dds(bool force=false);
+    void dump_dds(int i);
 
     // Process a command.
     // Returns the sequence time forwarded and if the command needs a result.
@@ -337,6 +339,24 @@ bool Controller<Pulser>::check_dds(int chn)
 }
 
 template<typename Pulser>
+void Controller<Pulser>::dump_dds(int i)
+{
+    string_ostream stm;
+    m_p.dump_dds(stm, i);
+    auto str = stm.get_buf();
+    char *start = &str[0];
+    while (*start) {
+        char *p = strchrnul(start, '\n');
+        auto end = !*p;
+        *p = 0;
+        Log::info("%s\n", start);
+        if (end)
+            break;
+        start = p + 1;
+    }
+}
+
+template<typename Pulser>
 void Controller<Pulser>::detect_dds(bool force)
 {
     const auto t = getCoarseTime();
@@ -360,9 +380,9 @@ void Controller<Pulser>::detect_dds(bool force)
         if (force)
             m_dds_pending_reset[i] = true;
         if (check_dds(i) && force)
-            std::cerr << "DDS " << i << " initialized" << std::endl;
+            Log::info("DDS %d initialized\n", i);
         if (force) {
-            m_p.dump_dds(std::cerr, i);
+            dump_dds(i);
         }
     }
     m_dds_check_time = t;
@@ -634,8 +654,8 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     // for better efficiency.
     for (int i = 0; i < NDDS; i++) {
         if (m_dds_exist[i].load(std::memory_order_relaxed) && check_dds(i)) {
-            std::cerr << "DDS " << i << " reinit" << std::endl;
-            m_p.dump_dds(std::cerr, i);
+            Log::info("DDS %d reinit\n", i);
+            dump_dds(i);
         }
     }
 }
