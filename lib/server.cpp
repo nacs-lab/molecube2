@@ -580,11 +580,8 @@ void Server::process_zmq()
         else {
             nacsDbg("get_override_ttl\n");
         }
-        for (int i = 0; i < 3; i++) {
-            if (masks[i]) {
-                m_ctrl->set_ttl_ovr(masks[i], i);
-            }
-        }
+        for (int i = 0; i < 3; i++)
+            m_ctrl->set_ttl_ovr(masks[i], i);
         // get_ttl_ovr* returns immediately and we only have two functions to call
         // so it's just as fast to do the two calls in series
         // and it's also easier to implement this way.
@@ -606,10 +603,8 @@ void Server::process_zmq()
         else {
             nacsDbg("get_ttl\n");
         }
-        if (masks[0])
-            m_ctrl->set_ttl(masks[0], false);
-        if (masks[1])
-            m_ctrl->set_ttl(masks[1], true);
+        m_ctrl->set_ttl(masks[0], false);
+        m_ctrl->set_ttl(masks[1], true);
         m_ctrl->get_ttl([addr{std::move(addr)}, masks, this] (uint32_t v) mutable {
                 // The get can arrive faster than the set so manually mask the
                 // value to avoid confusion.

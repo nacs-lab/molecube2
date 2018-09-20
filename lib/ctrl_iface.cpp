@@ -209,11 +209,15 @@ void CtrlIFace::send_ttl_get_cmd(uint32_t operand, bool is_override, callback_t 
 
 NACS_PROTECTED() void CtrlIFace::set_ttl(uint32_t mask, bool val)
 {
+    if (!mask)
+        return;
     send_ttl_set_cmd(uint32_t(val), false, mask);
 }
 
 NACS_PROTECTED() void CtrlIFace::set_ttl_ovr(uint32_t mask, int val)
 {
+    if (!mask)
+        return;
     send_ttl_set_cmd(uint32_t(val), true, mask);
 }
 
