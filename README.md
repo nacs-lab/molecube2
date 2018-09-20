@@ -94,7 +94,7 @@ zmq protocol.
 
     `[[[id: 1byte][val: 4bytes]] x n]`
 
-    where the 1 byte `id` is `[chn_type: 2bits][chn_num: 6bits]` and a override value of
+    where the 1 byte `id` is `[chn_num: 6bits][chn_type: 2bits]` and a override value of
     `0xffffffff` means the override is disabled.
     Allowed `chn_type` values are:
 
