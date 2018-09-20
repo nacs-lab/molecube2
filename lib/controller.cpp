@@ -635,9 +635,11 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
         Seq::ByteCode::ExeState exestate;
         exestate.run(runner, seq->code, seq->code_len);
     }
-    m_p.release_hold();
     // Stop the timing check with a short wait.
+    // Do this before releasing the hold since the effect of the time check flag
+    // in the previous instruction last until the next one.
     runner.template wait<false>(3);
+    m_p.release_hold();
     seq->state.store(SeqFlushed, std::memory_order_relaxed);
     backend_event();
     if (!seq->is_cmd) {
