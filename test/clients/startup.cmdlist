@@ -1,0 +1,8 @@
+#
+ttl(0)=0
+ttl(1)=1 t=20us
+freq(3)=10MHz
+amp(3)=0.3
+ttl(10)=On
+ttl(11)=False
+freq(3)=0.7GHz
