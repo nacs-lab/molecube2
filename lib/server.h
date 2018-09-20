@@ -64,7 +64,7 @@ private:
     // Check if the message is 16+suffix bytes and if the second 8 bytes matches the server id.
     // Return 0 if the check fails. Otherwise, return the 64bit int from the first 8 bytes.
     uint64_t get_seq_id(zmq::message_t &msg, size_t suffix=0);
-    uint8_t process_set_dds(zmq::message_t &msg, bool is_ovr);
+    bool process_set_dds(zmq::message_t &msg, bool is_ovr);
     bool process_run_seq(zmq::message_t &addr, bool is_cmd);
     SeqStatus *find_seqstatus(uint64_t id);
     bool process_set_names(zmq::message_t &msg, NamesConfig &names);

@@ -231,17 +231,17 @@ _NACS_PROTECTED void Server::run()
     }
 }
 
-uint8_t Server::process_set_dds(zmq::message_t &msg, bool is_ovr)
+bool Server::process_set_dds(zmq::message_t &msg, bool is_ovr)
 {
     size_t msgsz = msg.size();
     if (msgsz % 5 != 0)
-        return 1;
+        return false;
     uint8_t *data = (uint8_t*)msg.data();
     // First check if all the channels are valid
     for (size_t i = 0; i < msgsz; i += 5) {
         auto chn = data[i];
         if ((chn >> 6) >= 3 || (chn & 0x3f) >= 22) {
-            return 1;
+            return false;
         }
     }
     for (size_t i = 0; i < msgsz; i += 5) {
@@ -257,7 +257,7 @@ uint8_t Server::process_set_dds(zmq::message_t &msg, bool is_ovr)
             m_ctrl->set_dds(op, chn, val);
         }
     }
-    return 0;
+    return true;
 }
 
 bool Server::process_run_seq(zmq::message_t &addr, bool is_cmd)
