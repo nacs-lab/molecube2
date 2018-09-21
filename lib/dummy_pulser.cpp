@@ -31,6 +31,7 @@ NACS_PROTECTED() void DummyPulser::init_dds(int chn)
 {
     if (!dds_exists(chn))
         return;
+    dds_reset<false>(chn);
     m_dds[chn].init = true;
 }
 
@@ -206,7 +207,6 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
         m_dds[cmd.v1].phase = uint16_t(cmd.v2);
         return 50;
     case OP::DDSReset:
-        m_dds[cmd.v1].init = false;
         m_dds[cmd.v1].amp = 0;
         m_dds[cmd.v1].phase = 0;
         m_dds[cmd.v1].freq = 0;
