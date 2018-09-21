@@ -638,6 +638,8 @@ void Server::process_zmq()
             for (int typ = 0; typ < 3; typ++) {
                 m_ctrl->get_dds_ovr(dds_ops[typ], i,
                                     [info, typ, i] (uint32_t v) {
+                                        if (v == uint32_t(-1))
+                                            return;
                                         push_dds_res(info->res, uint8_t((typ << 6) | i), v);
                                     });
             }
