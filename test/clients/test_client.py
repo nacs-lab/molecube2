@@ -117,4 +117,34 @@ elif cmd == 'get_override_dds':
     print("%d DDS overrides" % (len(msg) / 5))
     for i in range(0, len(msg), 5):
         print("  {0} = {1:#0{2}x}".format(print_ddschn(msg[i]),
-                                           struct.unpack('I', msg[i + 1:i + 5])[0], 10))
+                                          struct.unpack('I', msg[i + 1:i + 5])[0], 10))
+elif cmd == 'set_dds':
+    sock.send_string("set_dds", zmq.SNDMORE)
+    msg = b''
+    for i in range(3, len(sys.argv), 2):
+        chn = parse_ddschn(sys.argv[i]).to_bytes(1, byteorder=sys.byteorder, signed=False)
+        val = int(sys.argv[i + 1], 16).to_bytes(4, byteorder=sys.byteorder, signed=False)
+        msg += chn + val
+    sock.send(msg)
+    msg = sock.recv()
+    print(msg)
+elif cmd == 'get_dds':
+    if len(sys.argv) == 3:
+        sock.send_string("get_dds")
+    else:
+        sock.send_string("get_dds", zmq.SNDMORE)
+        msg = b''
+        for i in range(3, len(sys.argv)):
+            msg += parse_ddschn(sys.argv[i]).to_bytes(1, byteorder=sys.byteorder, signed=False)
+        sock.send(msg)
+    msg = sock.recv()
+    assert len(msg) % 15 == 0
+    print("%d x 3 channels" % (len(msg) / 15))
+    for i in range(0, len(msg), 5):
+        print("  {0} = {1:#0{2}x}".format(print_ddschn(msg[i]),
+                                          struct.unpack('I', msg[i + 1:i + 5])[0], 10))
+elif cmd == 'reset_dds':
+    sock.send_string("reset_dds", zmq.SNDMORE)
+    sock.send(int(sys.argv[3]).to_bytes(1, byteorder=sys.byteorder, signed=False))
+    msg = sock.recv()
+    print(msg)
