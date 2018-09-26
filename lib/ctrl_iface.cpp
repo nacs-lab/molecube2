@@ -37,8 +37,7 @@ void CtrlIFace::CmdCache::set(ReqOP op, uint32_t operand, bool is_override, uint
     entry.cbs.clear();
 }
 
-bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override,
-                              std::function<void(uint32_t)> cb)
+bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override, callback_t cb)
 {
     auto key = cache_key(op, operand, is_override);
     auto t = getTime();
@@ -49,7 +48,7 @@ bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override,
         return true;
     }
     // DDS overrides are only kept in software so no need to ask the backend.
-    if (is_override && op != TTL) {
+    if (is_override) {
         // Initially off (-1) by default.
         if (entry.t == 0)
             entry.val = -1;
@@ -59,6 +58,20 @@ bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override,
     auto was_empty = entry.cbs.empty();
     entry.cbs.push_back(std::move(cb));
     return !was_empty;
+}
+
+inline bool CtrlIFace::CmdCache::has_dds_ovr()
+{
+    for (int i = 0; i < 22; i++) {
+        for (auto op: (ReqOP[]){DDSFreq, DDSAmp, DDSPhase}) {
+            auto key = cache_key(op, i, true);
+            auto it = m_cache.find(key);
+            if (it == m_cache.end() || it->second.val == uint32_t(-1))
+                continue;
+            return true;
+        }
+    }
+    return false;
 }
 
 CtrlIFace::CtrlIFace()
@@ -156,8 +169,7 @@ void CtrlIFace::send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint3
     m_cmd_cache.set(op, operand, is_override, val);
 }
 
-void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
-                             std::function<void(uint32_t)> cb)
+void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb)
 {
     set_observed();
     uint32_t val = 0;
@@ -172,39 +184,56 @@ void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
                 operand & ((1 << 26) - 1), 0});
 }
 
-NACS_PROTECTED() void CtrlIFace::set_ttl(int chn, bool val)
+// TTL channels are get and set in batch so they don't really fit
+// the cache used for other channels.
+// Since the implementation of `Controller` always returns ttl get request concurrently
+// we'll just skip the cache and callback storage for now.
+void CtrlIFace::send_ttl_set_cmd(uint32_t operand, bool is_override, uint32_t val)
 {
-    send_set_cmd(TTL, uint32_t(chn), false, val);
+    set_dirty();
+    if (!concurrent_set(TTL, operand, is_override, val)) {
+        send_cmd(ReqCmd{TTL, 0, uint8_t(is_override), operand & ((1 << 26) - 1), val});
+    }
 }
 
-NACS_PROTECTED() void CtrlIFace::set_ttl_all(uint32_t val)
+void CtrlIFace::send_ttl_get_cmd(uint32_t operand, bool is_override, callback_t cb)
 {
-    send_set_cmd(TTL, uint32_t(-1), false, val);
+    set_observed();
+    // Unsupported for now
+    // We could support asynchronous get by adding a TTL specific callback queue.
+    uint32_t val = 0;
+    if (!concurrent_get(TTL, operand, is_override, val))
+        abort();
+    cb(val);
 }
 
-NACS_PROTECTED() void CtrlIFace::set_ttl_ovrhi(uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_ttl(uint32_t mask, bool val)
 {
-    send_set_cmd(TTL, 1, true, val);
+    if (!mask)
+        return;
+    send_ttl_set_cmd(uint32_t(val), false, mask);
 }
 
-NACS_PROTECTED() void CtrlIFace::set_ttl_ovrlo(uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_ttl_ovr(uint32_t mask, int val)
 {
-    send_set_cmd(TTL, 0, true, val);
+    if (!mask)
+        return;
+    send_ttl_set_cmd(uint32_t(val), true, mask);
 }
 
-NACS_PROTECTED() void CtrlIFace::get_ttl(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_ttl(callback_t cb)
 {
-    send_get_cmd(TTL, 0, false, std::move(cb));
+    send_ttl_get_cmd(0, false, std::move(cb));
 }
 
-NACS_PROTECTED() void CtrlIFace::get_ttl_ovrhi(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_ttl_ovrlo(callback_t cb)
 {
-    send_get_cmd(TTL, 1, true, std::move(cb));
+    send_ttl_get_cmd(0, true, std::move(cb));
 }
 
-NACS_PROTECTED() void CtrlIFace::get_ttl_ovrlo(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_ttl_ovrhi(callback_t cb)
 {
-    send_get_cmd(TTL, 0, true, std::move(cb));
+    send_ttl_get_cmd(1, true, std::move(cb));
 }
 
 NACS_PROTECTED() void CtrlIFace::set_dds(ReqOP op, int chn, uint32_t val)
@@ -219,13 +248,13 @@ NACS_PROTECTED() void CtrlIFace::set_dds_ovr(ReqOP op, int chn, uint32_t val)
     send_set_cmd(op, chn, true, val);
 }
 
-NACS_PROTECTED() void CtrlIFace::get_dds(ReqOP op, int chn, std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_dds(ReqOP op, int chn, callback_t cb)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_get_cmd(op, chn, false, std::move(cb));
 }
 
-NACS_PROTECTED() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, callback_t cb)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     send_get_cmd(op, chn, true, std::move(cb));
@@ -235,18 +264,18 @@ NACS_PROTECTED() void CtrlIFace::reset_dds(int chn)
 {
     set_dirty();
     send_cmd(ReqCmd{DDSReset, 0, 0, uint32_t(chn & ((1 << 26) - 1)), 0});
-    // Clear overwrite
+    // Clear override
     m_cmd_cache.set(DDSFreq, chn, true, -1);
     m_cmd_cache.set(DDSAmp, chn, true, -1);
     m_cmd_cache.set(DDSPhase, chn, true, -1);
 }
 
-NACS_PROTECTED() void CtrlIFace::set_clock(uint32_t val)
+NACS_PROTECTED() void CtrlIFace::set_clock(uint8_t val)
 {
     send_set_cmd(Clock, 0, false, val);
 }
 
-NACS_PROTECTED() void CtrlIFace::get_clock(std::function<void(uint32_t)> cb)
+NACS_PROTECTED() void CtrlIFace::get_clock(callback_t cb)
 {
     send_get_cmd(Clock, 0, false, std::move(cb));
 }
@@ -286,7 +315,7 @@ NACS_PROTECTED() void CtrlIFace::run_frontend()
     // If we get the current sequence after popping all the finished ones, the
     // current sequence may not be the once immediately after the last finished one we
     // process if a sequence finished in between.
-    auto curseq = m_seq_queue.peek().first;
+    auto curseq = m_seq_queue.peek_filter();
     while (auto seq = m_seq_queue.pop()) {
         if (curseq && curseq == seq)
             curseq = nullptr;
@@ -334,6 +363,22 @@ NACS_PROTECTED() uint64_t CtrlIFace::get_state_id()
     m_dirty = false;
     m_observed = false;
     return (uint64_t(has_seq) << 63) | m_state_cnt;
+}
+
+NACS_PROTECTED() std::pair<bool,bool> CtrlIFace::has_pending()
+{
+    auto cmdres = m_cmd_queue.peek();
+    if (cmdres.second)
+        return {true, true};
+    auto seqres = m_seq_queue.peek();
+    if (seqres.second)
+        return {true, true};
+    return {seqres.first || cmdres.first, false};
+}
+
+NACS_PROTECTED() bool CtrlIFace::has_dds_ovr()
+{
+    return m_cmd_cache.has_dds_ovr();
 }
 
 }

@@ -84,6 +84,8 @@ public:
         // After the sequence is cancelled
         virtual void cancel(uint64_t)
         {}
+        virtual ~ReqSeqNotify()
+        {}
     };
     // Opcode for stand alone commands.
     enum ReqOP {
@@ -94,12 +96,42 @@ public:
         DDSReset,
         Clock
     };
+    class callback_t {
+        // C++20
+        template<typename T>
+        using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+        template<typename T>
+        struct Caller {
+            static void call(void *p, uint32_t v)
+            {
+                (*(T*)p)(v);
+            }
+        };
+    public:
+        template<typename T,
+                 class=std::enable_if_t<!std::is_same<remove_cvref_t<T>,callback_t>::value>>
+        callback_t(T &&v)
+            : m_ptr(std::forward<T>(v)),
+              m_fptr(Caller<remove_cvref_t<T>>::call)
+        {}
+        callback_t(callback_t &&cb)
+            : m_ptr(std::move(cb.m_ptr)),
+              m_fptr(cb.m_fptr)
+        {}
+        void operator()(uint32_t v)
+        {
+            m_fptr(m_ptr.get(), v);
+        }
+    private:
+        AnyPtr m_ptr;
+        void (*m_fptr)(void*, uint32_t);
+    };
 protected:
     /**
      * There are two kinds of requests that can pass through this interface,
      * 1. Stand alone commands.
      *    These are used to change a single state including
-     *    setting/getting output values or overwrites. These are not timed.
+     *    setting/getting output values or overrides. These are not timed.
      *    They can happen concurrently with a currently running sequence.
      * 2. Sequences.
      *    These are timed sequences of operations.
@@ -125,17 +157,18 @@ protected:
         // If the list is empty, return `false` signaling that a new query should be sent.
         // If the list is not empty, return `true` since a query
         // should have been queued already.
-        bool get(ReqOP op, uint32_t operand, bool is_override,
-                 std::function<void(uint32_t)> cb);
+        bool get(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
+        bool has_dds_ovr();
 
     private:
         struct CacheEntry {
             uint64_t t = 0;
             uint32_t val = 0;
-            std::vector<std::function<void(uint32_t)>> cbs{};
+            std::vector<callback_t> cbs{};
         };
         static uint32_t cache_key(ReqOP op, uint32_t operand, bool is_override)
         {
+            assert(op != TTL);
             assert(op != Clock || !is_override);
             return uint32_t(op) << 27 | uint32_t(is_override) << 26 | operand;
         }
@@ -284,29 +317,37 @@ public:
     // may not response to the cancellation.
     bool cancel_seq(uint64_t id);
 
-    void set_ttl(int chn, bool val);
-    void set_ttl_all(uint32_t val);
-    void set_ttl_ovrhi(uint32_t val);
-    void set_ttl_ovrlo(uint32_t val);
+    void set_ttl(uint32_t mask, bool val);
+    // val = 0 => low
+    // val = 1 => high
+    // val = 2 => default
+    void set_ttl_ovr(uint32_t mask, int val);
 
-    void get_ttl(std::function<void(uint32_t)> cb);
-    void get_ttl_ovrhi(std::function<void(uint32_t)> cb);
-    void get_ttl_ovrlo(std::function<void(uint32_t)> cb);
+    void get_ttl(callback_t cb);
+    void get_ttl_ovrlo(callback_t cb);
+    void get_ttl_ovrhi(callback_t cb);
 
     void set_dds(ReqOP op, int chn, uint32_t val);
     void set_dds_ovr(ReqOP op, int chn, uint32_t val);
 
-    void get_dds(ReqOP op, int chn, std::function<void(uint32_t)> cb);
-    void get_dds_ovr(ReqOP op, int chn, std::function<void(uint32_t)> cb);
+    void get_dds(ReqOP op, int chn, callback_t cb);
+    void get_dds_ovr(ReqOP op, int chn, callback_t cb);
     void reset_dds(int chn);
 
-    void set_clock(uint32_t val);
-    void get_clock(std::function<void(uint32_t)> cb);
+    void set_clock(uint8_t val);
+    void get_clock(callback_t cb);
+
+    virtual bool has_ttl_ovr() = 0;
+    bool has_dds_ovr();
 
     void quit();
     uint64_t get_state_id();
 
     virtual std::vector<int> get_active_dds() = 0;
+
+    // Return whether there is any sequence or command waiting to be or being processed
+    // and whether any of them are finished and ready to be freed/trigger the callbacks.
+    std::pair<bool,bool> has_pending();
 
     // Defined in `controller.cpp`
     static std::unique_ptr<CtrlIFace> create(bool dummy=false);
@@ -321,8 +362,10 @@ private:
 
     void send_cmd(const ReqCmd &cmd);
     void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
-    void send_get_cmd(ReqOP op, uint32_t operand, bool is_override,
-                      std::function<void(uint32_t)> cb);
+    void send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
+
+    void send_ttl_set_cmd(uint32_t operand, bool is_override, uint32_t val);
+    void send_ttl_get_cmd(uint32_t operand, bool is_override, callback_t cb);
 
     bool m_quit{false};
 

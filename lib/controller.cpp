@@ -21,7 +21,9 @@
 #include "dummy_pulser.h"
 
 #include <nacs-utils/container.h>
+#include <nacs-utils/log.h>
 #include <nacs-utils/mem.h>
+#include <nacs-utils/streams.h>
 #include <nacs-utils/timer.h>
 
 #include <nacs-seq/bytecode.h>
@@ -53,9 +55,11 @@ private:
     bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
                         uint32_t &val) override;
     std::vector<int> get_active_dds() override;
+    bool has_ttl_ovr() override;
 
     bool check_dds(int chn);
     void detect_dds(bool force=false);
+    void dump_dds(int i);
 
     // Process a command.
     // Returns the sequence time forwarded and if the command needs a result.
@@ -74,10 +78,24 @@ private:
 
     void worker();
 
+    void sync_ttl()
+    {
+        // This function shouldn't be necessary if we did everything correctly.
+        // This is called periodically in the main loop and also before the sequence start.
+        // to make sure we don't accumulate errors even if we failed to keep track of
+        // every changes.
+        auto ttl = m_p.cur_ttl();
+        if (ttl != m_ttl) {
+            Log::warn("TTL out of sync: has %04x, actual %04x\n", m_ttl, ttl);
+            m_ttl = ttl;
+        }
+    }
+
     static constexpr uint8_t NDDS = 22;
 
     Pulser m_p;
     DDSState m_dds_ovr[NDDS];
+    uint32_t m_ttl;
     uint16_t m_dds_phase[NDDS] = {0};
     // Reinitialize is a complicated sequence and is rarely needed
     // so only do that after the sequence finishes.
@@ -95,60 +113,59 @@ public:
     Runner(Controller &ctrl, uint32_t ttlmask)
         : m_ctrl(ctrl),
           m_ttlmask(ttlmask),
-          m_ttl(ctrl.m_p.cur_ttl()),
-          m_preserve_ttl((~ttlmask) & m_ttl)
+          m_preserve_ttl((~ttlmask) & ctrl.m_ttl)
     {
     }
     void ttl1(uint8_t chn, bool val, uint64_t t)
     {
-        ttl(setBit(m_ttl, chn, val), t);
+        ttl(setBit(m_ctrl.m_ttl, chn, val), t);
     }
     void ttl(uint32_t ttl, uint64_t t)
     {
-        m_ttl = ttl | m_preserve_ttl;
+        m_ctrl.m_ttl = ttl | m_preserve_ttl;
         if (t <= 1000) {
             // 10us
             m_t += t;
-            m_ctrl.m_p.template ttl<true>(m_ttl, (uint32_t)t);
+            m_ctrl.m_p.template ttl<true>(m_ctrl.m_ttl, (uint32_t)t);
         }
         else {
             m_t += 100;
-            m_ctrl.m_p.template ttl<true>(m_ttl, 100);
+            m_ctrl.m_p.template ttl<true>(m_ctrl.m_ttl, 100);
             wait(t - 100);
         }
     }
     void dds_freq(uint8_t chn, uint32_t freq)
     {
         if (unlikely(m_ctrl.m_dds_ovr[chn].freq != uint32_t(-1))) {
-            wait(50);
+            wait(Seq::PulseTime::DDSFreq);
             return;
         }
-        m_t += 50;
+        m_t += Seq::PulseTime::DDSFreq;
         m_ctrl.m_p.template dds_set_freq<true>(chn, freq);
     }
     void dds_amp(uint8_t chn, uint16_t amp)
     {
         if (unlikely(m_ctrl.m_dds_ovr[chn].amp_enable)) {
-            wait(50);
+            wait(Seq::PulseTime::DDSAmp);
             return;
         }
-        m_t += 50;
+        m_t += Seq::PulseTime::DDSAmp;
         m_ctrl.m_p.template dds_set_amp<true>(chn, amp);
     }
     void dds_phase(uint8_t chn, uint16_t phase)
     {
         if (unlikely(m_ctrl.m_dds_ovr[chn].phase_enable)) {
-            wait(50);
+            wait(Seq::PulseTime::DDSPhase);
             return;
         }
         m_ctrl.m_dds_phase[chn] = phase;
-        m_t += 50;
+        m_t += Seq::PulseTime::DDSPhase;
         m_ctrl.m_p.template dds_set_phase<true>(chn, phase);
     }
     void dds_detphase(uint8_t chn, uint16_t detphase)
     {
         if (unlikely(m_ctrl.m_dds_ovr[chn].phase_enable)) {
-            wait(50);
+            wait(Seq::PulseTime::DDSPhase);
             return;
         }
         dds_phase(chn, uint16_t(m_ctrl.m_dds_phase[chn] + detphase));
@@ -157,19 +174,19 @@ public:
     {
         // Do the reset pulse that's part of the sequence but do the
         // actual reinitialization later after the sequence finishes.
-        m_t += 50;
+        m_t += Seq::PulseTime::DDSReset;
         m_ctrl.m_p.template dds_reset<true>(chn);
         m_ctrl.m_dds_pending_reset[chn] = true;
     }
     void dac(uint8_t chn, uint16_t V)
     {
-        m_t += 45;
+        m_t += Seq::PulseTime::DAC;
         m_ctrl.m_p.template dac<true>(chn, V);
     }
     template<bool checked=true>
     void clock(uint8_t period)
     {
-        m_t += 5;
+        m_t += Seq::PulseTime::Clock;
         m_ctrl.m_p.template clock<checked>(period);
     }
     template<bool checked=true>
@@ -181,9 +198,22 @@ public:
             m_ctrl.m_p.template wait<checked>(uint32_t(t));
             return;
         }
-        if (!m_released) {
+        if (unlikely(!m_released)) {
+            if (t < 2000) {
+                m_t += t;
+                m_ctrl.m_p.template wait<checked>(uint32_t(t));
+                t = 0;
+            }
+            else {
+                m_t += 1000;
+                m_ctrl.m_p.template wait<checked>(uint32_t(1000));
+                t -= 1000;
+            }
             m_ctrl.m_p.release_hold();
             m_released = true;
+            if (t == 0) {
+                return;
+            }
         }
         const auto tend = m_t + t;
         auto tnow = getCoarseTime();
@@ -226,7 +256,6 @@ public:
 
     Controller &m_ctrl;
     const uint32_t m_ttlmask;
-    uint32_t m_ttl;
     uint32_t m_preserve_ttl;
 private:
     uint64_t m_t{0};
@@ -240,6 +269,7 @@ private:
 template<typename Pulser>
 Controller<Pulser>::Controller(Pulser &&p)
     : m_p(std::move(p)),
+      m_ttl(m_p.cur_ttl()),
       m_worker(&Controller<Pulser>::worker, this)
 {
     detect_dds(true);
@@ -257,19 +287,26 @@ template<typename Pulser>
 bool Controller<Pulser>::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
                                         uint32_t val)
 {
-    if (op != TTL)
+    if (op != TTL || !is_override)
         return false;
-    if (!is_override)
-        return false;
+    auto lomask = m_p.ttl_lomask();
+    auto himask = m_p.ttl_himask();
     if (operand == 0) {
-        m_p.set_ttl_lomask(val);
-        return true;
+        m_p.set_ttl_lomask((lomask | val));
+        m_p.set_ttl_himask((himask & ~val));
     }
     else if (operand == 1) {
-        m_p.set_ttl_himask(val);
-        return true;
+        m_p.set_ttl_lomask((lomask & ~val));
+        m_p.set_ttl_himask((himask | val));
     }
-    return false;
+    else if (operand == 2) {
+        m_p.set_ttl_lomask((lomask & ~val));
+        m_p.set_ttl_himask((himask & ~val));
+    }
+    else {
+        return false;
+    }
+    return true;
 }
 
 template<typename Pulser>
@@ -278,7 +315,7 @@ bool Controller<Pulser>::concurrent_get(ReqOP op, uint32_t operand, bool is_over
 {
     if (op == Clock) {
         val = m_p.cur_clock();
-        return false;
+        return true;
     }
     if (op != TTL)
         return false;
@@ -315,6 +352,24 @@ bool Controller<Pulser>::check_dds(int chn)
 }
 
 template<typename Pulser>
+void Controller<Pulser>::dump_dds(int i)
+{
+    string_ostream stm;
+    m_p.dump_dds(stm, i);
+    auto str = stm.get_buf();
+    char *start = &str[0];
+    while (*start) {
+        char *p = strchrnul(start, '\n');
+        auto end = !*p;
+        *p = 0;
+        Log::info("%s\n", start);
+        if (end)
+            break;
+        start = p + 1;
+    }
+}
+
+template<typename Pulser>
 void Controller<Pulser>::detect_dds(bool force)
 {
     const auto t = getCoarseTime();
@@ -338,9 +393,9 @@ void Controller<Pulser>::detect_dds(bool force)
         if (force)
             m_dds_pending_reset[i] = true;
         if (check_dds(i) && force)
-            std::cerr << "DDS " << i << " initialized" << std::endl;
+            Log::info("DDS %d initialized\n", i);
         if (force) {
-            m_p.dump_dds(std::cerr, i);
+            dump_dds(i);
         }
     }
     m_dds_check_time = t;
@@ -359,6 +414,12 @@ std::vector<int> Controller<Pulser>::get_active_dds()
 }
 
 template<typename Pulser>
+bool Controller<Pulser>::has_ttl_ovr()
+{
+    return m_p.ttl_lomask() || m_p.ttl_himask();
+}
+
+template<typename Pulser>
 template<bool checked>
 std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *runner)
 {
@@ -366,30 +427,16 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
     case TTL: {
         // Should have been caught by concurrent_get/set.
         assert(!cmd->has_res && !cmd->is_override);
-        uint32_t ttl;
-        if (cmd->operand == uint32_t((1 << 26) - 1)) {
-            ttl = cmd->val;
-            if (runner) {
-                runner->m_ttl = ttl;
-                runner->m_preserve_ttl = ttl & runner->m_ttlmask;
-            }
+        if (cmd->operand) {
+            m_ttl = m_ttl | cmd->val;
         }
         else {
-            assert(cmd->operand < 32);
-            auto chn = uint8_t(cmd->operand);
-            bool val = cmd->val;
-            if (runner) {
-                if (runner->m_ttlmask & (1 << chn))
-                    runner->m_preserve_ttl = setBit(runner->m_preserve_ttl, chn, val);
-                ttl = runner->m_ttl;
-            }
-            else {
-                ttl = m_p.cur_ttl();
-            }
-            ttl = setBit(ttl, chn, val);
+            m_ttl = m_ttl & ~cmd->val;
         }
-        m_p.template ttl<checked>(ttl, 3);
-        return {3, false};
+        if (runner)
+            runner->m_preserve_ttl = m_ttl & runner->m_ttlmask;
+        m_p.template ttl<checked>(m_ttl, Seq::PulseTime::Min);
+        return {Seq::PulseTime::Min, false};
     }
     case DDSFreq: {
         bool is_override = cmd->is_override;
@@ -412,15 +459,15 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
             }
             else {
                 m_p.template dds_set_freq<checked>(chn, val);
-                return {50, false};
+                return {Seq::PulseTime::DDSFreq, false};
             }
         }
         if (!has_res) {
             m_p.template dds_set_freq<checked>(chn, val);
-            return {50, false};
+            return {Seq::PulseTime::DDSFreq, false};
         }
         m_p.template dds_get_freq<checked>(chn);
-        return {50, true};
+        return {Seq::PulseTime::DDSFreq, true};
     }
     case DDSAmp: {
         bool is_override = cmd->is_override;
@@ -446,15 +493,15 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
                 ovr.amp = uint16_t(val & ((1 << 12) - 1));
                 ovr.amp_enable = true;
                 m_p.template dds_set_amp<checked>(chn, val);
-                return {50, false};
+                return {Seq::PulseTime::DDSAmp, false};
             }
         }
         if (!has_res) {
             m_p.template dds_set_amp<checked>(chn, val);
-            return {50, false};
+            return {Seq::PulseTime::DDSAmp, false};
         }
         m_p.template dds_get_amp<checked>(chn);
-        return {50, true};
+        return {Seq::PulseTime::DDSAmp, true};
     }
     case DDSPhase: {
         bool is_override = cmd->is_override;
@@ -481,16 +528,16 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
                 ovr.phase_enable = true;
                 m_dds_phase[chn] = val;
                 m_p.template dds_set_phase<checked>(chn, val);
-                return {50, false};
+                return {Seq::PulseTime::DDSPhase, false};
             }
         }
         if (!has_res) {
             m_dds_phase[chn] = val;
             m_p.template dds_set_phase<checked>(chn, val);
-            return {50, false};
+            return {Seq::PulseTime::DDSPhase, false};
         }
         m_p.template dds_get_phase<checked>(chn);
-        return {50, true};
+        return {Seq::PulseTime::DDSPhase, true};
     }
     case DDSReset: {
         assert(!cmd->is_override && !cmd->has_res && cmd->val == 0);
@@ -502,7 +549,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
     case Clock:
         assert(!cmd->is_override && !cmd->has_res && cmd->operand == 0);
         m_p.template clock<checked>(uint8_t(cmd->val));
-        return {5, false};
+        return {Seq::PulseTime::Clock, false};
     default:
         return {0, false};
     }
@@ -571,6 +618,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     // Make sure all commands are finished (`toggle_init` will clear them)
     while (unlikely(!m_p.is_finished()))
         std::this_thread::yield();
+    sync_ttl();
     m_p.set_hold();
     // `toggle_init` is needed to clear the force release flag
     // so that `set_hold` can work.
@@ -587,9 +635,11 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
         Seq::ByteCode::ExeState exestate;
         exestate.run(runner, seq->code, seq->code_len);
     }
-    m_p.release_hold();
     // Stop the timing check with a short wait.
-    runner.template wait<false>(3);
+    // Do this before releasing the hold since the effect of the time check flag
+    // in the previous instruction last until the next one.
+    runner.template wait<false>(Seq::PulseTime::Min);
+    m_p.release_hold();
     seq->state.store(SeqFlushed, std::memory_order_relaxed);
     backend_event();
     if (!seq->is_cmd) {
@@ -610,7 +660,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
         runner.template clock<false>(255);
     }
     if (!m_p.timing_ok())
-        std::cerr << "Warning: timing failures." << std::endl;
+        Log::warn("Timing failures.\n");
     m_p.clear_error();
 
     // Doing this check before this sequence will make the current sequence
@@ -619,8 +669,8 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     // for better efficiency.
     for (int i = 0; i < NDDS; i++) {
         if (m_dds_exist[i].load(std::memory_order_relaxed) && check_dds(i)) {
-            std::cerr << "DDS " << i << " reinit" << std::endl;
-            m_p.dump_dds(std::cerr, i);
+            Log::info("DDS %d reinit\n", i);
+            dump_dds(i);
         }
     }
 }
@@ -638,6 +688,8 @@ void Controller<Pulser>::worker()
             }
             finish_seq();
         }
+        if (m_p.is_finished())
+            sync_ttl();
         detect_dds();
         process_reqcmd<false>();
         detect_dds();
@@ -653,8 +705,7 @@ NACS_PROTECTED() std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy)
     if (!dummy) {
         if (auto addr = Molecube::Pulser::address())
             return std::unique_ptr<CtrlIFace>(new Controller<Pulser>(Pulser(addr)));
-        std::cerr << "Warning: failed to create real pulser, use dummy pulser instead."
-                  << std::endl;
+        Log::warn("Failed to create real pulser, use dummy pulser instead.\n");
     }
     return std::unique_ptr<CtrlIFace>(new Controller<DummyPulser>(DummyPulser()));
 }

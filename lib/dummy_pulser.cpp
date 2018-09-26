@@ -18,6 +18,8 @@
 
 #include "dummy_pulser.h"
 
+#include <nacs-seq/seq.h>
+
 #include <stdexcept>
 #include <thread>
 
@@ -31,6 +33,7 @@ NACS_PROTECTED() void DummyPulser::init_dds(int chn)
 {
     if (!dds_exists(chn))
         return;
+    dds_reset<false>(chn);
     m_dds[chn].init = true;
 }
 
@@ -188,41 +191,40 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
         return cmd.v1;
     case OP::Clock:
         m_clock.store(uint8_t(cmd.v1), std::memory_order_release);
-        return 5;
+        return Seq::PulseTime::Clock;
     case OP::DAC:
-        return 45;
+        return Seq::PulseTime::DAC;
     case OP::Wait:
         return cmd.v1;
     case OP::ClearErr:
         m_timing_ok.store(true, std::memory_order_release);
-        return 5;
+        return Seq::PulseTime::Clear;
     case OP::DDSSetFreq:
         m_dds[cmd.v1].freq = cmd.v2;
-        return 50;
+        return Seq::PulseTime::DDSFreq;
     case OP::DDSSetAmp:
         m_dds[cmd.v1].amp = uint16_t(cmd.v2);
-        return 50;
+        return Seq::PulseTime::DDSAmp;
     case OP::DDSSetPhase:
         m_dds[cmd.v1].phase = uint16_t(cmd.v2);
-        return 50;
+        return Seq::PulseTime::DDSPhase;
     case OP::DDSReset:
-        m_dds[cmd.v1].init = false;
         m_dds[cmd.v1].amp = 0;
         m_dds[cmd.v1].phase = 0;
         m_dds[cmd.v1].freq = 0;
-        return 50;
+        return Seq::PulseTime::DDSReset;
     case OP::LoopBack:
         add_result(cmd.v1);
-        return 5;
+        return Seq::PulseTime::LoopBack;
     case OP::DDSGetFreq:
         add_result(m_dds[cmd.v1].freq);
-        return 50;
+        return Seq::PulseTime::DDSFreq;
     case OP::DDSGetAmp:
         add_result(m_dds[cmd.v1].amp);
-        return 50;
+        return Seq::PulseTime::DDSAmp;
     case OP::DDSGetPhase:
         add_result(m_dds[cmd.v1].phase);
-        return 50;
+        return Seq::PulseTime::DDSPhase;
     default:
         throw std::runtime_error("Invalid command.");
     }

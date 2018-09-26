@@ -13,23 +13,22 @@ zmq protocol.
 
 * `run_seq`
 
-    `[version: 8bytes][bytecode: n]`
+    `[version: 4bytes]`
+    `[bytecode: n]`
 
+    The version number and the code are passed in as two different ZMQ messages.
     This will be how the experiment talks to the backend.
 
-    Return positive 16 bytes ID that can be waited/operated on by `wait_seq` and `cancel_seq`.
-    Negative ID indicates error.
-    The ID will be optionally followed by a list of TTL and DDS overwrites if exists.
-    If any overwrites is returned, the TTL overwrite will always be included as
-    `[high_mask: 4bytes][low_mask: 4bytes]` which could be `[0: 4bytes][0: 4bytes]`.
-    DDS overwrites follows the TTL overwrites using a format same as the one for the
-    `overwrite_dds` request below.
+    Return 16 bytes ID that can be waited/operated on by `wait_seq` and `cancel_seq`.
+    An ID of all bits set indicates error.
+    The ID will be followed by 2 bytes indicating if there's any TTL and DDS overrides.
     The reply will be sent right away indicating that the sequence is ready to start
     or has started.
 
 * `run_cmdlist`
 
-    `[version: 8bytes][cmd_list: n]`
+    `[version: 4bytes]`
+    `[cmd_list: n]`
 
     This is similar to `run_seq` but uses an uncompressed and simpler format which
     supports all operations.
@@ -57,8 +56,8 @@ zmq protocol.
     `[id: 16bytes (optional)]`
 
     Cancel one (or all) sequences.
-    Return 1 bytes. `0` if no sequence are cancelled.
-    `1` if at least one sequence may be cancelled
+    Return 1 bytes. `1` if no sequence are cancelled.
+    `0` if at least one sequence may be cancelled
     (though the sequence may not response if it is already started).
 
 * `state_id`
@@ -72,47 +71,55 @@ zmq protocol.
 
 ### TTL
 
-* `overwrite_ttl`
+* `override_ttl`
 
-    `[high mask: 4bytes][low mask: 4bytes][normal mask: 4bytes]`
+    `[low mask: 4bytes][high mask: 4bytes][normal mask: 4bytes]`
 
-    The three masks specify the changes to the high and low overwrite masks to be made.
+    The three masks specify the changes to the high and low override masks to be made.
     The new high and low masks will be returned.
     `[0: 4bytes][0: 4bytes][0: 4bytes]` is an no-op and can be used to get the current masks.
 
 * `set_ttl`
 
-    `[high mask: 4bytes][low mask: 4bytes]`
+    `[low mask: 4bytes][high mask: 4bytes]`
 
     The two masks specify the channels to be turned on or off.
     This should have the same effect as running a sequence to turn a channel on/off.
-    The new values will be returned including the overwrite.
+    The new values will be returned including the override.
     `[0: 4bytes][0: 4bytes]` is an no-op and can be used to get the current values.
 
 ### DDS
 
-* `overwrite_dds`
+* `override_dds`
 
     `[[[id: 1byte][val: 4bytes]] x n]`
 
-    where the 1 byte `id` is `[chn_type: 2bits][chn_num: 6bits]` and a overwrite value of
-    `0xffffffff` means the overwrite is disabled.
+    where the 1 byte `id` is `[chn_num: 6bits][chn_type: 2bits]` and a override value of
+    `0xffffffff` means the override is disabled.
+    Allowed `chn_type` values are:
 
-* `get_overwrite_dds`
+    * `0`: for DDS frequency
+    * `1`: for DDS amplitude
+    * `2`: for DDS phase
 
-    No arguments. Return the list of overwrites specified in the same format as
-    the argument of `overwrite_dds`.
+    Return `0` on success. `1` on error.
+
+* `get_override_dds`
+
+    No arguments. Return the list of overrides specified in the same format as
+    the argument of `override_dds`.
 
 * `set_dds`
 
     `[[[id: 1byte][val: 4bytes]] x n]`
 
-    Same as `overwrite_dds`. But set the current value without enabling overwrite.
+    Same as `override_dds`. But set the current value without enabling override.
+    Return `0` on success. `1` on error.
 
 * `get_dds`
 
-    See `get_overwrite_dds` except that values for all enabled DDS's are returned.
-    An optional list of 1 byte channel id (see `overwrite_dds` for format)
+    See `get_override_dds` except that values for all enabled DDS's are returned.
+    An optional list of 1 byte channel id (see `override_dds` for format)
     can be included as argument for filtering.
 
 * `reset_dds`
@@ -136,3 +143,43 @@ TODO
 * `get_clock`
 
     No argument. Return `[clock: 1byte]`
+
+### Miscellaneous
+
+* `get_startup`
+
+    No argument. Return the startup cmdlist in text format (NUL terminated).
+
+* `set_startup`
+
+    `[text form cmdlist: n bytes NUL terminate]`
+
+    Set the startup cmdlist. The sequence will be parsed immediately.
+    If parsing succeeded, return `[0: 1 byte]`, otherwise,
+    return `[1: 1 byte]` followed by a serialization of the `SyntaxError` object
+    in the format:
+
+        [message: n bytes NUL terminate]
+        [line: n bytes NUL terminate]
+        [lineno: 4bytes]
+        [colnum: 4bytes]
+        [colstart: 4bytes]
+        [colend: 4bytes]
+
+* `set_ttl_names`
+
+    `[[chn: 1byte][name: n byte NUL terminate] x n]`
+
+    Return `[0: 1byte]` if succeeded, `[1: 1 byte]` on error.
+
+* `get_ttl_names`
+
+    Return all TTL names in the same format as `set_ttl_names`
+
+* `set_dds_names`
+
+    Similar to `set_ttl_names`. Use the DDS instead of TTL channel number.
+
+* `get_ttl_names`
+
+    Similar to `get_ttl_names`. Use the DDS instead of TTL channel number.
