@@ -13,3 +13,6 @@ target_link_libraries(test_DDS libmolecube)
 
 add_executable(test_DDS_ramp test_DDS_ramp.cpp)
 target_link_libraries(test_DDS_ramp libmolecube)
+
+add_executable(test_DDS_full_ramp test_DDS_full_ramp.cpp)
+target_link_libraries(test_DDS_full_ramp libmolecube)

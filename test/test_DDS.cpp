@@ -37,7 +37,7 @@ void test_DDS(P &p)
 {
     using namespace std::literals;
 
-    int chn = 11;
+    int chn = 1;
     double f = 80e6;
     double amp = 0.1;
 
