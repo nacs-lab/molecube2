@@ -473,7 +473,8 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         bool is_override = cmd->is_override;
         bool has_res = cmd->has_res;
         int chn = cmd->operand;
-        uint16_t val = uint16_t(cmd->val);
+        uint32_t val = cmd->val;
+        uint16_t val16 = uint16_t(val);
         assert(chn < 22);
         auto &ovr = m_dds_ovr[chn];
         if (!is_override && !has_res)
@@ -481,23 +482,23 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         if (is_override) {
             // Should be handled by the cache in ctrl_iface.
             assert(!has_res);
-            if (val == ovr.amp) {
+            if (val16 == ovr.amp) {
                 return {0, false};
             }
-            else if (val == uint16_t(-1)) {
+            else if (val == uint32_t(-1)) {
                 if (ovr.amp_enable)
                     ovr.amp_enable = false;
                 return {0, false};
             }
             else {
-                ovr.amp = uint16_t(val & ((1 << 12) - 1));
+                ovr.amp = uint16_t(val16 & ((1 << 12) - 1));
                 ovr.amp_enable = true;
-                m_p.template dds_set_amp<checked>(chn, val);
+                m_p.template dds_set_amp<checked>(chn, val16);
                 return {Seq::PulseTime::DDSAmp, false};
             }
         }
         if (!has_res) {
-            m_p.template dds_set_amp<checked>(chn, val);
+            m_p.template dds_set_amp<checked>(chn, val16);
             return {Seq::PulseTime::DDSAmp, false};
         }
         m_p.template dds_get_amp<checked>(chn);
@@ -507,7 +508,8 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         bool is_override = cmd->is_override;
         bool has_res = cmd->has_res;
         int chn = cmd->operand;
-        uint16_t val = uint16_t(cmd->val);
+        uint32_t val = cmd->val;
+        uint16_t val16 = uint16_t(val);
         assert(chn < 22);
         auto &ovr = m_dds_ovr[chn];
         if (!is_override && !has_res)
@@ -515,25 +517,25 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         if (is_override) {
             // Should be handled by the cache in ctrl_iface.
             assert(!has_res);
-            if (val == ovr.phase) {
+            if (val16 == ovr.phase) {
                 return {0, false};
             }
-            else if (val == uint16_t(-1)) {
+            else if (val == uint32_t(-1)) {
                 if (ovr.phase_enable)
                     ovr.phase_enable = false;
                 return {0, false};
             }
             else {
-                ovr.phase = val;
+                ovr.phase = val16;
                 ovr.phase_enable = true;
-                m_dds_phase[chn] = val;
-                m_p.template dds_set_phase<checked>(chn, val);
+                m_dds_phase[chn] = val16;
+                m_p.template dds_set_phase<checked>(chn, val16);
                 return {Seq::PulseTime::DDSPhase, false};
             }
         }
         if (!has_res) {
-            m_dds_phase[chn] = val;
-            m_p.template dds_set_phase<checked>(chn, val);
+            m_dds_phase[chn] = val16;
+            m_p.template dds_set_phase<checked>(chn, val16);
             return {Seq::PulseTime::DDSPhase, false};
         }
         m_p.template dds_get_phase<checked>(chn);
