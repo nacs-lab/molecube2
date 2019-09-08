@@ -22,11 +22,11 @@
 
 namespace Molecube {
 
-NACS_PROTECTED() Config::Config()
+NACS_EXPORT() Config::Config()
 {
 }
 
-NACS_PROTECTED() Config Config::loadYAML(const char *fname)
+NACS_EXPORT() Config Config::loadYAML(const char *fname)
 {
     Config conf;
     auto file = YAML::LoadFile(fname);

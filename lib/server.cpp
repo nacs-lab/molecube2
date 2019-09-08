@@ -67,7 +67,7 @@ static void free_malloc_msg(void *data, void*)
 
 }
 
-#define _NACS_PROTECTED NACS_PROTECTED()
+#define _NACS_EXPORT NACS_EXPORT()
 
 inline void Server::send_header(zmq::message_t &addr)
 {
@@ -183,7 +183,7 @@ void Server::run_startup()
     Log::info("Startup sequence finished.\n");
 }
 
-_NACS_PROTECTED Server::Server(const Config &conf)
+_NACS_EXPORT Server::Server(const Config &conf)
     : m_conf(conf),
       m_id(get_server_id()),
       m_ctrl(CtrlIFace::create(conf.dummy)),
@@ -211,7 +211,7 @@ _NACS_PROTECTED Server::Server(const Config &conf)
     run_startup();
 }
 
-_NACS_PROTECTED void Server::run()
+_NACS_EXPORT void Server::run()
 {
     m_running.store(true, std::memory_order_relaxed);
     while (m_running.load(std::memory_order_relaxed)) {

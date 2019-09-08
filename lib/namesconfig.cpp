@@ -26,7 +26,7 @@
 
 namespace Molecube {
 
-NACS_PROTECTED() void NamesConfig::save()
+NACS_EXPORT() void NamesConfig::save()
 {
     std::ofstream fstm(m_fname);
     if (!fstm.good()) {
@@ -38,7 +38,7 @@ NACS_PROTECTED() void NamesConfig::save()
     fstm << yaml.c_str() << std::endl;
 }
 
-NACS_PROTECTED() void NamesConfig::load()
+NACS_EXPORT() void NamesConfig::load()
 {
     YAML::Node file;
     try {

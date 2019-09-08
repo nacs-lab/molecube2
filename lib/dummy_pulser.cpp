@@ -25,11 +25,11 @@
 
 namespace Molecube {
 
-NACS_PROTECTED() DummyPulser::DummyPulser()
+NACS_EXPORT() DummyPulser::DummyPulser()
 {
 }
 
-NACS_PROTECTED() void DummyPulser::init_dds(int chn)
+NACS_EXPORT() void DummyPulser::init_dds(int chn)
 {
     if (!dds_exists(chn))
         return;
@@ -37,7 +37,7 @@ NACS_PROTECTED() void DummyPulser::init_dds(int chn)
     m_dds[chn].init = true;
 }
 
-NACS_PROTECTED() bool DummyPulser::check_dds(int chn, bool force)
+NACS_EXPORT() bool DummyPulser::check_dds(int chn, bool force)
 {
     if (!dds_exists(chn))
         return true;
@@ -48,19 +48,19 @@ NACS_PROTECTED() bool DummyPulser::check_dds(int chn, bool force)
     return false;
 }
 
-NACS_PROTECTED() bool DummyPulser::dds_exists(int chn)
+NACS_EXPORT() bool DummyPulser::dds_exists(int chn)
 {
     return 0 <= chn && chn < NDDS;
 }
 
-NACS_PROTECTED() void DummyPulser::dump_dds(std::ostream &stm, int chn)
+NACS_EXPORT() void DummyPulser::dump_dds(std::ostream &stm, int chn)
 {
     stm << "*******************************" << std::endl;
     stm << "Dummy DDS board: " << chn << std::endl;
     stm << "*******************************" << std::endl;
 }
 
-NACS_PROTECTED() bool DummyPulser::try_get_result(uint32_t &res)
+NACS_EXPORT() bool DummyPulser::try_get_result(uint32_t &res)
 {
     if (m_results.empty()) {
         forward_time();
@@ -73,7 +73,7 @@ NACS_PROTECTED() bool DummyPulser::try_get_result(uint32_t &res)
     return true;
 }
 
-NACS_PROTECTED() uint32_t DummyPulser::get_result()
+NACS_EXPORT() uint32_t DummyPulser::get_result()
 {
     uint32_t res;
     while (!try_get_result(res)) {
@@ -91,7 +91,7 @@ NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
     m_results.push(v);
 }
 
-NACS_PROTECTED() void DummyPulser::add_cmd(OP op, bool timing, uint32_t v1, uint32_t v2)
+NACS_EXPORT() void DummyPulser::add_cmd(OP op, bool timing, uint32_t v1, uint32_t v2)
 {
     Cmd cmd{op, timing, std::chrono::steady_clock::now(), v1, v2};
     std::unique_lock<std::mutex> lock(m_cmds_lock);
@@ -106,7 +106,7 @@ NACS_PROTECTED() void DummyPulser::add_cmd(OP op, bool timing, uint32_t v1, uint
     m_cmds_empty.store(false, std::memory_order_release);
 }
 
-NACS_PROTECTED() void DummyPulser::release_hold()
+NACS_EXPORT() void DummyPulser::release_hold()
 {
     // Protecting access to `m_release_time` and `m_hold`
     std::unique_lock<std::mutex> lock(m_cmds_lock);
@@ -117,7 +117,7 @@ NACS_PROTECTED() void DummyPulser::release_hold()
     m_hold = false;
 }
 
-NACS_PROTECTED() void DummyPulser::set_hold()
+NACS_EXPORT() void DummyPulser::set_hold()
 {
     // Protecting access to `m_hold`
     std::unique_lock<std::mutex> lock(m_cmds_lock);
@@ -128,7 +128,7 @@ NACS_PROTECTED() void DummyPulser::set_hold()
     m_hold = true;
 }
 
-NACS_PROTECTED() void DummyPulser::toggle_init()
+NACS_EXPORT() void DummyPulser::toggle_init()
 {
     if (!m_cmds_empty.load(std::memory_order_acquire))
         throw std::runtime_error("Command stream not empty during init.");
@@ -137,7 +137,7 @@ NACS_PROTECTED() void DummyPulser::toggle_init()
     m_timing_check.store(false, std::memory_order_release);
 }
 
-NACS_PROTECTED() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)
+NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)
 {
     if (m_cmds.empty() || (m_hold && !m_force_release)) {
         if (block)
@@ -230,9 +230,9 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
     }
 }
 
-#define _NACS_PROTECTED NACS_PROTECTED() // Somehow the () really messes up emacs indent...
+#define _NACS_EXPORT NACS_EXPORT() // Somehow the () really messes up emacs indent...
 
-_NACS_PROTECTED
+_NACS_EXPORT
 DummyPulser::DummyPulser(DummyPulser &&o)
     : m_ttl_hi(o.m_ttl_hi.load(std::memory_order_relaxed)),
       m_ttl_lo(o.m_ttl_lo.load(std::memory_order_relaxed)),

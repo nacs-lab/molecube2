@@ -702,7 +702,7 @@ void Controller<Pulser>::worker()
 
 namespace Molecube {
 
-NACS_PROTECTED() std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy)
+NACS_EXPORT() std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy)
 {
     if (!dummy) {
         if (auto addr = Molecube::Pulser::address())

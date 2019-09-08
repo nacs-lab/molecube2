@@ -31,18 +31,18 @@
 namespace Molecube {
 
 #if NACS_KERNEL_ENABLED
-NACS_PROTECTED() void *Pulser::address()
+NACS_EXPORT() void *Pulser::address()
 {
     return Kernel::mapPulseCtrl();
 }
 #else
-NACS_PROTECTED() void *Pulser::address()
+NACS_EXPORT() void *Pulser::address()
 {
     return nullptr;
 }
 #endif
 
-NACS_PROTECTED() bool Pulser::try_get_result(uint32_t &res)
+NACS_EXPORT() bool Pulser::try_get_result(uint32_t &res)
 {
     if (!num_results())
         return false;
@@ -50,7 +50,7 @@ NACS_PROTECTED() bool Pulser::try_get_result(uint32_t &res)
     return true;
 }
 
-NACS_PROTECTED() uint32_t Pulser::get_result()
+NACS_EXPORT() uint32_t Pulser::get_result()
 {
     // Used in cases where we don't care about the performance
     // of the calling thread too much.
@@ -60,7 +60,7 @@ NACS_PROTECTED() uint32_t Pulser::get_result()
     return res;
 }
 
-NACS_PROTECTED() void Pulser::init_dds(int chn)
+NACS_EXPORT() void Pulser::init_dds(int chn)
 {
     using namespace std::literals;
 
@@ -102,7 +102,7 @@ NACS_PROTECTED() void Pulser::init_dds(int chn)
     dds_set_4bytes<false>(chn, 0x64, magic_bytes);
 }
 
-NACS_PROTECTED() bool Pulser::dds_exists(int chn)
+NACS_EXPORT() bool Pulser::dds_exists(int chn)
 {
     dds_set_2bytes<false>(chn, 0x68, 0);
     dds_get_2bytes<false>(chn, 0x68);
@@ -113,7 +113,7 @@ NACS_PROTECTED() bool Pulser::dds_exists(int chn)
     return res0 == 0 && res1 == 1;
 }
 
-NACS_PROTECTED() void Pulser::dump_dds(std::ostream &stm, int chn)
+NACS_EXPORT() void Pulser::dump_dds(std::ostream &stm, int chn)
 {
     stm << "*******************************" << std::endl;
 
@@ -128,7 +128,7 @@ NACS_PROTECTED() void Pulser::dump_dds(std::ostream &stm, int chn)
     stm << "*******************************" << std::endl;
 }
 
-NACS_PROTECTED() bool Pulser::check_dds(int chn, bool force)
+NACS_EXPORT() bool Pulser::check_dds(int chn, bool force)
 {
     if (!force) {
         // Check if magic bytes have been set (profile 7, FTW) which is
