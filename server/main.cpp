@@ -81,8 +81,7 @@ int main(int argc, char **argv)
     setup_signal(&server);
     server.run();
     stop.store(true, std::memory_order_relaxed);
-    if (sigthread.joinable())
-        sigthread.join();
+    sigthread.join();
 
     return 0;
 }
