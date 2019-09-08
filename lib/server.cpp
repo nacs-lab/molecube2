@@ -190,7 +190,7 @@ _NACS_PROTECTED Server::Server(const Config &conf)
       m_zmqctx(),
       m_zmqsock(m_zmqctx, ZMQ_ROUTER),
       m_zmqpoll{{(void*)m_zmqsock, 0, ZMQ_POLLIN, 0},
-    {nullptr, m_ctrl->backend_fd(), ZMQ_POLLIN, 0}},
+                {nullptr, m_ctrl->backend_fd(), ZMQ_POLLIN, 0}},
       m_ttl_names(conf.runtime_dir + "/ttl.yaml"),
       m_dds_names(conf.runtime_dir + "/dds.yaml")
 {
@@ -586,11 +586,11 @@ void Server::process_zmq()
         // so it's just as fast to do the two calls in series
         // and it's also easier to implement this way.
         m_ctrl->get_ttl_ovrlo([addr{std::move(addr)}, this] (uint32_t lo) mutable {
-                m_ctrl->get_ttl_ovrhi([addr{std::move(addr)}, lo, this] (uint32_t hi) mutable {
-                        std::array<uint32_t,2> masks{lo, hi};
-                        send_reply(addr, ZMQ::bits_msg(masks));
-                    });
+            m_ctrl->get_ttl_ovrhi([addr{std::move(addr)}, lo, this] (uint32_t hi) mutable {
+                std::array<uint32_t,2> masks{lo, hi};
+                send_reply(addr, ZMQ::bits_msg(masks));
             });
+        });
     }
     else if (ZMQ::match(msg, "set_ttl")) {
         if (!recv_more(msg) || msg.size() != 8)
@@ -606,11 +606,11 @@ void Server::process_zmq()
         m_ctrl->set_ttl(masks[0], false);
         m_ctrl->set_ttl(masks[1], true);
         m_ctrl->get_ttl([addr{std::move(addr)}, masks, this] (uint32_t v) mutable {
-                // The get can arrive faster than the set so manually mask the
-                // value to avoid confusion.
-                v = (v & ~masks[0]) | masks[1];
-                send_reply(addr, ZMQ::bits_msg(v));
-            });
+            // The get can arrive faster than the set so manually mask the
+            // value to avoid confusion.
+            v = (v & ~masks[0]) | masks[1];
+            send_reply(addr, ZMQ::bits_msg(v));
+        });
     }
     else if (ZMQ::match(msg, "override_dds")) {
         if (!recv_more(msg) || !process_set_dds(msg, true))
@@ -717,8 +717,8 @@ void Server::process_zmq()
     }
     else if (ZMQ::match(msg, "get_clock")) {
         m_ctrl->get_clock([addr{std::move(addr)}, this] (uint32_t v) mutable {
-                send_reply(addr, ZMQ::bits_msg(uint8_t(v)));
-            });
+            send_reply(addr, ZMQ::bits_msg(uint8_t(v)));
+        });
     }
     else if (ZMQ::match(msg, "set_ttl_names")) {
         Log::info("Setting TTL names.\n");

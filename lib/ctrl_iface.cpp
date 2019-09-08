@@ -116,10 +116,10 @@ void CtrlIFace::finish_cmd()
 }
 
 NACS_PROTECTED() uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns,
-                                            uint32_t ttl_mask,
-                                            const uint8_t *code, size_t code_len,
-                                            std::unique_ptr<ReqSeqNotify> notify,
-                                            AnyPtr storage)
+                                               uint32_t ttl_mask,
+                                               const uint8_t *code, size_t code_len,
+                                               std::unique_ptr<ReqSeqNotify> notify,
+                                               AnyPtr storage)
 {
     set_dirty();
     auto id = ++m_seq_cnt;
@@ -165,7 +165,7 @@ void CtrlIFace::send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint3
     set_dirty();
     if (!concurrent_set(op, operand, is_override, val))
         send_cmd(ReqCmd{uint8_t(op & 0xf), 0, uint8_t(is_override),
-                    operand & ((1 << 26) - 1), val});
+                        operand & ((1 << 26) - 1), val});
     m_cmd_cache.set(op, operand, is_override, val);
 }
 
@@ -181,7 +181,7 @@ void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callb
     if (m_cmd_cache.get(op, operand, is_override, std::move(cb)))
         return;
     send_cmd(ReqCmd{uint8_t(op & 0xf), 1, uint8_t(is_override),
-                operand & ((1 << 26) - 1), 0});
+                    operand & ((1 << 26) - 1), 0});
 }
 
 // TTL channels are get and set in batch so they don't really fit
