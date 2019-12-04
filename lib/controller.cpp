@@ -256,11 +256,13 @@ public:
             bool processed;
             std::tie(stept, processed) = m_ctrl.process_reqcmd<checked>(this);
             if (!processed) {
-                m_t += stept;
-                t -= stept;
                 // Didn't find much to do. Sleep for a while
                 using namespace std::literals;
                 std::this_thread::sleep_for(1ms);
+            }
+            else {
+                m_t += stept;
+                t -= stept;
             }
         }
     }
