@@ -71,14 +71,14 @@ static void free_malloc_msg(void *data, void*)
 
 inline void Server::send_header(zmq::message_t &addr)
 {
-    m_zmqsock.send(addr, ZMQ_SNDMORE);
-    m_zmqsock.send(m_empty, ZMQ_SNDMORE);
+    ZMQ::send_more(m_zmqsock, addr);
+    ZMQ::send_more(m_zmqsock, m_empty);
 }
 
 inline void Server::send_reply(zmq::message_t &addr, zmq::message_t &msg)
 {
     send_header(addr);
-    m_zmqsock.send(msg);
+    ZMQ::send(m_zmqsock, msg);
 }
 
 inline bool Server::recv_more(zmq::message_t &msg)
@@ -504,10 +504,10 @@ void Server::process_set_startup(zmq::message_t &addr, zmq::message_t &msg)
 void Server::process_zmq()
 {
     zmq::message_t addr;
-    m_zmqsock.recv(&addr);
+    ZMQ::recv(m_zmqsock, addr);
 
     zmq::message_t msg;
-    m_zmqsock.recv(&msg);
+    ZMQ::recv(m_zmqsock, msg);
     assert(msg.size() == 0);
 
     if (!recv_more(msg))
