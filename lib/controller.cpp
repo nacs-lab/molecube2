@@ -264,11 +264,15 @@ public:
             }
         }
     }
+    void update_preserve_ttl(uint32_t ttl)
+    {
+        m_preserve_ttl = ttl & m_ttlmask;
+    }
 
+private:
     Controller &m_ctrl;
     const uint32_t m_ttlmask;
     uint32_t m_preserve_ttl;
-private:
     uint64_t m_t{0};
 
     const uint64_t m_start_t{getCoarseTime()};
@@ -447,7 +451,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
             m_ttl = m_ttl & ~cmd->val;
         }
         if (runner)
-            runner->m_preserve_ttl = m_ttl & runner->m_ttlmask;
+            runner->update_preserve_ttl(m_ttl);
         m_p.template ttl<checked>(m_ttl, Seq::PulseTime::Min);
         return {Seq::PulseTime::Min, false};
     }
