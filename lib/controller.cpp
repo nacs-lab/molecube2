@@ -192,8 +192,7 @@ public:
     template<bool checked=true>
     void wait(uint64_t t)
     {
-        if (!m_process_cmd) {
-            // The sequence is short enough that we can let the web page wait.
+        auto output_wait = [&] (uint64_t t) {
             m_t += t;
             while (t > m_ctrl.m_p.max_wait_t + 100) {
                 t -= m_ctrl.m_p.max_wait_t;
@@ -207,67 +206,62 @@ public:
             else if (t > 0) {
                 m_ctrl.m_p.template wait<checked>(uint32_t(t));
             }
+        };
+        if (!m_process_cmd) {
+            // The sequence is short enough that we can let the web page wait.
+            output_wait(t);
             return;
         }
-        if (t < 1000) {
+        if (t < 2000) {
             // If the wait time is too short, don't do anything fancy
             m_t += t;
             m_ctrl.m_p.template wait<checked>(uint32_t(t));
             return;
         }
-        if (unlikely(!m_released)) {
-            if (t < 2000) {
-                m_t += t;
-                m_ctrl.m_p.template wait<checked>(uint32_t(t));
-                t = 0;
+        while (true) {
+            // Now we always make sure that the sequence time is at least 0.5s ahead of
+            // the real time.
+            auto tnow = getCoarseTime();
+            // Current sequence time in real time.
+            auto seq_rt = m_start_t + m_t * 10;
+            // We need to output to this time before processing commands.
+            auto thresh_rt = tnow + m_min_t;
+            if (seq_rt < thresh_rt) {
+                auto min_seqt = max((seq_rt - thresh_rt) / 10, 10000);
+                if (t <= min_seqt + 3000) {
+                    output_wait(t);
+                    return;
+                }
+                output_wait(min_seqt);
+                t -= min_seqt;
+                continue;
             }
-            else {
+            if (unlikely(!m_released)) {
+                m_released = true;
+                // At the beginning of the loop, `t` may come froms
+                // 1. The value before entering the loop, in which case `t >= 2000`.
+                // 2. `continue` for the `seq_rt < thresh_rt` case above, in which case
+                //    `t >= 3000`.
+                // 3. End of the loop. `t` could be less than `2000` in this case
+                //    but there must be `m_release == true` and it won't end up in
+                //    this branch again.
+                assert(t >= 2000);
                 m_t += 1000;
                 m_ctrl.m_p.template wait<checked>(uint32_t(1000));
                 t -= 1000;
+                m_ctrl.m_p.release_hold();
             }
-            m_ctrl.m_p.release_hold();
-            m_released = true;
-            if (t == 0) {
-                return;
-            }
-        }
-        const auto tend = m_t + t;
-        auto tnow = getCoarseTime();
-        while (true) {
-            using namespace std::literals;
-            if (m_start_t + m_t * 10 >= tnow + m_min_t) {
-                // We have time to do something else
-                uint32_t stept;
-                bool processed;
-                std::tie(stept, processed) = m_ctrl.process_reqcmd<checked>(this);
+            // We have time to do something else
+            uint32_t stept;
+            bool processed;
+            std::tie(stept, processed) = m_ctrl.process_reqcmd<checked>(this);
+            if (!processed) {
                 m_t += stept;
-                if (!processed) {
-                    // Didn't find much to do. Sleep for a while
-                    std::this_thread::sleep_for(0.2ms);
-                }
+                t -= stept;
+                // Didn't find much to do. Sleep for a while
+                using namespace std::literals;
+                std::this_thread::sleep_for(1ms);
             }
-            else {
-                // We need to do the actual sequence
-                // At least forward the sequence for 1000 steps.
-                auto stept = max((tnow + m_min_t - m_start_t) / 10 - m_t, 1000);
-                stept = min(stept, tend - m_t);
-                if (m_t + stept + 1000 <= tend) {
-                    // If we are close to the end after this wait, just finish it up.
-                    m_t = tend;
-                    m_ctrl.m_p.template wait<checked>(uint32_t(tend - m_t));
-                    return;
-                }
-                m_t += stept;
-                m_ctrl.m_p.template wait<checked>(uint32_t(stept));
-            }
-            if (tend < m_t + 1000) {
-                assert(m_t < tend);
-                m_t = tend;
-                m_ctrl.m_p.template wait<checked>(uint32_t(tend - m_t));
-                return;
-            }
-            tnow = getCoarseTime();
         }
     }
 
@@ -278,7 +272,8 @@ private:
     uint64_t m_t{0};
 
     const uint64_t m_start_t{getCoarseTime()};
-    const uint64_t m_min_t{max(getCoarseRes() * 3, 3000000)};
+    // Minimum time we stay ahead of the sequence.
+    const uint64_t m_min_t{max(getCoarseRes() * 20, 500000000)}; // 0.5s
     const bool m_process_cmd;
 
     bool m_released = false;
