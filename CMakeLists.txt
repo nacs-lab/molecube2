@@ -22,7 +22,7 @@ if(NACS_KERNEL_FOUND)
   set(MCDEP_PKGS ${MCDEP_PKGS} nacs-kernel)
 endif()
 pkg_check_modules(MCDEP REQUIRED ${MCDEP_PKGS})
-find_package(yaml-cpp REQUIRED)
+find_package(yaml-cpp REQUIRED CONFIG NO_SYSTEM_ENVIRONMENT_PATH)
 
 # Remove rdynamic
 set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS)
