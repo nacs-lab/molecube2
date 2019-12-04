@@ -75,6 +75,7 @@ class DummyPulser {
         uint32_t v2;
     };
 public:
+    static constexpr uint32_t max_wait_t = (1 << 24) - 1;
     // Read
     inline uint32_t ttl_himask() const
     {
@@ -128,7 +129,7 @@ public:
     template<bool checked>
     inline void ttl(uint32_t ttl, uint32_t t)
     {
-        assert(t < (1 << 24));
+        assert(t <= max_wait_t);
         add_cmd(OP::TTL, checked, t, ttl);
     }
     template<bool checked>
@@ -144,7 +145,7 @@ public:
     template<bool checked>
     inline void wait(uint32_t t)
     {
-        assert(t < (1 << 24));
+        assert(t <= max_wait_t);
         add_cmd(OP::Wait, checked, t);
     }
     // clear timing check (clear failures)

@@ -109,10 +109,11 @@ private:
 template<typename Pulser>
 class Controller<Pulser>::Runner {
 public:
-    Runner(Controller &ctrl, uint32_t ttlmask)
+    Runner(Controller &ctrl, uint32_t ttlmask, uint64_t seq_len_ns)
         : m_ctrl(ctrl),
           m_ttlmask(ttlmask),
-          m_preserve_ttl((~ttlmask) & ctrl.m_ttl)
+          m_preserve_ttl((~ttlmask) & ctrl.m_ttl),
+          m_process_cmd(seq_len_ns > 1000000000ul) // 1s
     {
     }
     void ttl1(uint8_t chn, bool val, uint64_t t)
@@ -191,6 +192,23 @@ public:
     template<bool checked=true>
     void wait(uint64_t t)
     {
+        if (!m_process_cmd) {
+            // The sequence is short enough that we can let the web page wait.
+            m_t += t;
+            while (t > m_ctrl.m_p.max_wait_t + 100) {
+                t -= m_ctrl.m_p.max_wait_t;
+                m_ctrl.m_p.template wait<checked>(m_ctrl.m_p.max_wait_t);
+            }
+            if (t > m_ctrl.m_p.max_wait_t) {
+                auto t0 = t / 2;
+                m_ctrl.m_p.template wait<checked>(uint32_t(t0));
+                m_ctrl.m_p.template wait<checked>(uint32_t(t - t0));
+            }
+            else if (t > 0) {
+                m_ctrl.m_p.template wait<checked>(uint32_t(t));
+            }
+            return;
+        }
         if (t < 1000) {
             // If the wait time is too short, don't do anything fancy
             m_t += t;
@@ -261,6 +279,7 @@ private:
 
     const uint64_t m_start_t{getCoarseTime()};
     const uint64_t m_min_t{max(getCoarseRes() * 3, 3000000)};
+    const bool m_process_cmd;
 
     bool m_released = false;
 };
@@ -627,7 +646,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     seq->state.store(SeqStart, std::memory_order_relaxed);
     backend_event();
 
-    Runner runner(*this, seq->ttl_mask);
+    Runner runner(*this, seq->ttl_mask, seq->seq_len_ns);
     if (unlikely(seq->is_cmd)) {
         Seq::CmdList::ExeState exestate;
         exestate.run(runner, seq->code, seq->code_len);

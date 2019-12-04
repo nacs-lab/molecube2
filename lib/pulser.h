@@ -94,6 +94,7 @@ class Pulser {
     }
 
 public:
+    static constexpr uint32_t max_wait_t = (1 << 24) - 1;
     // Public functions that are not exposed by the dummy pulser.
     // set bytes at addr + 1 and addr
     template<bool checked>
@@ -179,7 +180,7 @@ public:
     template<bool checked>
     inline void ttl(uint32_t ttl, uint32_t t)
     {
-        assert(t < (1 << 24));
+        assert(t <= max_wait_t);
         pulse<checked>(t, ttl);
     }
     template<bool checked>
@@ -195,7 +196,7 @@ public:
     template<bool checked>
     inline void wait(uint32_t t)
     {
-        assert(t < (1 << 24));
+        assert(t <= max_wait_t);
         pulse<checked>(Bits::Wait | t, 0);
     }
     // clear timing check (clear failures)
