@@ -268,6 +268,10 @@ public:
     {
         m_preserve_ttl = ttl & m_ttlmask;
     }
+    void enable_process_cmd()
+    {
+        m_process_cmd = true;
+    }
 
 private:
     Controller &m_ctrl;
@@ -278,7 +282,7 @@ private:
     const uint64_t m_start_t{getCoarseTime()};
     // Minimum time we stay ahead of the sequence.
     const uint64_t m_min_t{max(getCoarseRes() * 20, 500000000)}; // 0.5s
-    const bool m_process_cmd;
+    bool m_process_cmd;
 
     bool m_released = false;
 };
@@ -673,6 +677,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     }
     seq->state.store(SeqEnd, std::memory_order_relaxed);
     backend_event();
+    runner.enable_process_cmd();
     if (!seq->is_cmd) {
         // 10ms
         runner.template wait<false>(1000000);
