@@ -48,7 +48,6 @@ public:
 
 private:
     class Runner;
-    friend class Runner;
 
     bool concurrent_set(ReqOP op, uint32_t operand, bool is_override,
                         uint32_t val) override;
