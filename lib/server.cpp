@@ -460,8 +460,9 @@ void Server::process_set_startup(zmq::message_t &addr, zmq::message_t &msg)
         auto emsgsz = emsg.size();
         auto &line = err.line();
         auto linesz = line.size();
-        zmq::message_t zmsg(emsgsz + 1 + linesz + 1 + 4 * 4);
+        zmq::message_t zmsg(1 + emsgsz + 1 + linesz + 1 + 4 * 4);
         char *zmsgdata = (char*)zmsg.data();
+        *(zmsgdata++) = 1;
         memcpy(zmsgdata, emsg.c_str(), emsgsz + 1);
         zmsgdata += emsgsz + 1;
         memcpy(zmsgdata, line.c_str(), linesz + 1);

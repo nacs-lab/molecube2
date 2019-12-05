@@ -156,8 +156,8 @@ TODO
 
     Set the startup cmdlist. The sequence will be parsed immediately.
     If parsing succeeded, return `[0: 1 byte]`, otherwise,
-    return `[1: 1 byte]` followed by a serialization of the `SyntaxError` object
-    in the format:
+    return a non zero error code as `[errno: 1 byte]`
+    optionally followed by a serialization of the `SyntaxError` object in the format:
 
         [message: n bytes NUL terminate]
         [line: n bytes NUL terminate]
@@ -165,6 +165,10 @@ TODO
         [colnum: 4bytes]
         [colstart: 4bytes]
         [colend: 4bytes]
+
+    The error code (`errno`) currently will always be `1` but may be changed to include
+    other values later. The serialized object following a `1` will always be
+    a `SyntaxError`. Other error code added later might have other message following them.
 
 * `set_ttl_names`
 
