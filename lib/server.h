@@ -45,16 +45,15 @@ private:
     struct SeqStatus {
         struct Wait {
             uint8_t what;
-            zmq::message_t addr;
+            std::vector<zmq::message_t> addr;
         };
         uint64_t id;
         std::vector<Wait> wait{};
         bool flushed{false};
     };
 
-    void send_header(zmq::message_t &addr);
-    void send_reply(zmq::message_t &addr, zmq::message_t &msg);
-    void send_reply(zmq::message_t &addr, zmq::message_t &&msg)
+    void send_reply(std::vector<zmq::message_t> &addr, zmq::message_t &msg);
+    void send_reply(std::vector<zmq::message_t> &addr, zmq::message_t &&msg)
     {
         send_reply(addr, msg);
     }
@@ -65,13 +64,13 @@ private:
     // Return 0 if the check fails. Otherwise, return the 64bit int from the first 8 bytes.
     uint64_t get_seq_id(zmq::message_t &msg, size_t suffix=0);
     bool process_set_dds(zmq::message_t &msg, bool is_ovr);
-    bool process_run_seq(zmq::message_t &addr, bool is_cmd);
+    bool process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd);
     SeqStatus *find_seqstatus(uint64_t id);
     bool process_set_names(zmq::message_t &msg, NamesConfig &names);
-    void process_get_names(zmq::message_t &addr, NamesConfig &names);
+    void process_get_names(std::vector<zmq::message_t> &addr, NamesConfig &names);
     void ensure_runtime_dir();
     void run_startup();
-    void process_set_startup(zmq::message_t &addr, zmq::message_t &msg);
+    void process_set_startup(std::vector<zmq::message_t> &addr, zmq::message_t &msg);
 
     const Config &m_conf;
     const uint64_t m_id;

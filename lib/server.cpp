@@ -69,15 +69,9 @@ static void free_malloc_msg(void *data, void*)
 
 #define _NACS_EXPORT NACS_EXPORT()
 
-inline void Server::send_header(zmq::message_t &addr)
+inline void Server::send_reply(std::vector<zmq::message_t> &addr, zmq::message_t &msg)
 {
-    ZMQ::send_more(m_zmqsock, addr);
-    ZMQ::send_more(m_zmqsock, m_empty);
-}
-
-inline void Server::send_reply(zmq::message_t &addr, zmq::message_t &msg)
-{
-    send_header(addr);
+    ZMQ::send_addr(m_zmqsock, addr, m_empty);
     ZMQ::send(m_zmqsock, msg);
 }
 
@@ -260,7 +254,7 @@ bool Server::process_set_dds(zmq::message_t &msg, bool is_ovr)
     return true;
 }
 
-bool Server::process_run_seq(zmq::message_t &addr, bool is_cmd)
+bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
 {
     zmq::message_t msg;
     // No version
@@ -326,7 +320,7 @@ bool Server::process_run_seq(zmq::message_t &addr, bool is_cmd)
             send_reply();
             finalize(true);
         }
-        Notify(Server &server, zmq::message_t addr, Timer timer)
+        Notify(Server &server, std::vector<zmq::message_t> addr, Timer timer)
             : server(server),
               addr(std::move(addr)),
               timer(std::move(timer))
@@ -363,7 +357,7 @@ bool Server::process_run_seq(zmq::message_t &addr, bool is_cmd)
             server.m_seq_status.erase(server.m_seq_status.begin() + idx);
         }
         Server &server;
-        zmq::message_t addr;
+        std::vector<zmq::message_t> addr;
         Timer timer;
         bool replied = false;
         uint64_t id = -1;
@@ -421,7 +415,7 @@ bool Server::process_set_names(zmq::message_t &msg, NamesConfig &names)
     return has_set;
 }
 
-void Server::process_get_names(zmq::message_t &addr, NamesConfig &names)
+void Server::process_get_names(std::vector<zmq::message_t> &addr, NamesConfig &names)
 {
     malloc_ostream ostm;
     auto &vec = names.get();
@@ -438,7 +432,7 @@ void Server::process_get_names(zmq::message_t &addr, NamesConfig &names)
     send_reply(addr, zmq::message_t(ptr, msgsz, free_malloc_msg));
 }
 
-void Server::process_set_startup(zmq::message_t &addr, zmq::message_t &msg)
+void Server::process_set_startup(std::vector<zmq::message_t> &addr, zmq::message_t &msg)
 {
     Log::info("Setting startup file.\n");
     char *data = (char*)msg.data();
@@ -504,13 +498,9 @@ void Server::process_set_startup(zmq::message_t &addr, zmq::message_t &msg)
 
 void Server::process_zmq()
 {
-    zmq::message_t addr;
-    ZMQ::recv(m_zmqsock, addr);
+    auto addr = ZMQ::recv_addr(m_zmqsock);
 
     zmq::message_t msg;
-    ZMQ::recv(m_zmqsock, msg);
-    assert(msg.size() == 0);
-
     if (!recv_more(msg))
         goto err;
     if (ZMQ::match(msg, "run_seq")) {
@@ -622,7 +612,7 @@ void Server::process_zmq()
     else if (ZMQ::match(msg, "get_override_dds")) {
         struct get_override_dds {
             Server *server;
-            zmq::message_t addr;
+            std::vector<zmq::message_t> addr;
             std::vector<uint8_t> res{};
             ~get_override_dds()
             {
@@ -655,7 +645,7 @@ void Server::process_zmq()
     else if (ZMQ::match(msg, "get_dds")) {
         struct get_dds {
             Server *server;
-            zmq::message_t addr;
+            std::vector<zmq::message_t> addr;
             std::vector<uint8_t> res{};
             ~get_dds()
             {

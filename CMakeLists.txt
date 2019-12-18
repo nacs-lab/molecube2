@@ -16,7 +16,7 @@ set(SYSTEMD_TMPFILES_DIR "${CMAKE_INSTALL_LIBDIR}/tmpfiles.d"
   CACHE PATH "Systemd tmpfiles file install dir")
 
 find_package(PkgConfig REQUIRED)
-set(MCDEP_PKGS nacs-utils>=10.0 nacs-seq libzmq>=4.0)
+set(MCDEP_PKGS nacs-utils>=10.1 nacs-seq libzmq>=4.0)
 pkg_check_modules(NACS_KERNEL nacs-kernel)
 if(NACS_KERNEL_FOUND)
   set(MCDEP_PKGS ${MCDEP_PKGS} nacs-kernel)
