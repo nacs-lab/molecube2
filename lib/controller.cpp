@@ -468,14 +468,14 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         uint32_t val = cmd->val;
         assert(chn < 22);
         auto &ovr = m_dds_ovr[chn];
-        if (!is_override && !has_res)
+        // If override is on, treat all set command as override command.
+        if (!is_override && ovr.freq != uint32_t(-1))
             is_override = true;
         if (is_override) {
             // Should be handled by the cache in ctrl_iface.
             assert(!has_res);
-            if (val == ovr.freq) {
+            if (val == ovr.freq)
                 return {0, false};
-            }
             ovr.freq = val;
             if (val == uint32_t(-1)) {
                 return {0, false};
@@ -500,12 +500,15 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         uint16_t val16 = uint16_t(val);
         assert(chn < 22);
         auto &ovr = m_dds_ovr[chn];
-        if (!is_override && !has_res)
+        // If override is on, treat all set command as override command.
+        if (!is_override && ovr.amp_enable)
             is_override = true;
         if (is_override) {
             // Should be handled by the cache in ctrl_iface.
             assert(!has_res);
-            if (val16 == ovr.amp) {
+            // val16 == ovr.amp does not imply the override is on
+            // so we need to check that separately.
+            if (val16 == ovr.amp && ovr.amp_enable) {
                 return {0, false};
             }
             else if (val == uint32_t(-1)) {
@@ -535,12 +538,15 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         uint16_t val16 = uint16_t(val);
         assert(chn < 22);
         auto &ovr = m_dds_ovr[chn];
-        if (!is_override && !has_res)
+        // If override is on, treat all set command as override command.
+        if (!is_override && ovr.phase_enable)
             is_override = true;
         if (is_override) {
             // Should be handled by the cache in ctrl_iface.
             assert(!has_res);
-            if (val16 == ovr.phase) {
+            // val16 == ovr.phase does not imply the override is on
+            // so we need to check that separately.
+            if (val16 == ovr.phase && ovr.phase_enable) {
                 return {0, false};
             }
             else if (val == uint32_t(-1)) {
