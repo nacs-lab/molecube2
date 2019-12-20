@@ -234,7 +234,15 @@ bool Server::process_set_dds(zmq::message_t &msg, bool is_ovr)
     // First check if all the channels are valid
     for (size_t i = 0; i < msgsz; i += 5) {
         auto chn = data[i];
-        if ((chn >> 6) >= 3 || (chn & 0x3f) >= 22) {
+        // Channel id out of bound.
+        if ((chn >> 6) >= 3 || (chn & 0x3f) >= 22)
+            return false;
+        if (is_ovr)
+            continue;
+        uint32_t val;
+        memcpy(&val, &data[i + 1], 4);
+        // channel value out of bound
+        if (val == uint32_t(-1)) {
             return false;
         }
     }
