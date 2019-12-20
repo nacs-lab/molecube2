@@ -27,14 +27,25 @@ namespace Molecube {
 
 void CtrlIFace::CmdCache::set(ReqOP op, uint32_t operand, bool is_override, uint32_t val)
 {
-    auto key = cache_key(op, operand, is_override);
     auto t = getTime();
+    auto update_entry = [&] (auto &entry) {
+        entry.t = t;
+        entry.val = val;
+        for (auto &cb: entry.cbs)
+            cb(val);
+        entry.cbs.clear();
+    };
+    auto key = cache_key(op, operand, is_override);
     auto &entry = m_cache[key];
-    entry.t = t;
-    entry.val = val;
-    for (auto &cb: entry.cbs)
-        cb(val);
-    entry.cbs.clear();
+    update_entry(entry);
+    // If this is a normal set command for DDS, we need to update the override value as well.
+    if (!is_override && (op == DDSFreq || op == DDSAmp || op == DDSPhase)) {
+        key = cache_key(op, operand, true);
+        auto it = m_cache.find(key);
+        if (it != m_cache.end()) {
+            update_entry(it->second);
+        }
+    }
 }
 
 bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override, callback_t cb)
