@@ -138,8 +138,11 @@ elif cmd == 'get_dds':
             msg += parse_ddschn(sys.argv[i]).to_bytes(1, byteorder=sys.byteorder, signed=False)
         sock.send(msg)
     msg = sock.recv()
-    assert len(msg) % 15 == 0
-    print("%d x 3 channels" % (len(msg) / 15))
+    if len(sys.argv) == 3:
+        assert len(msg) % 15 == 0
+        print("%d x 3 channels" % (len(msg) / 15))
+    else:
+        print("%d channels" % (len(msg) / 5))
     for i in range(0, len(msg), 5):
         print("  {0} = {1:#0{2}x}".format(print_ddschn(msg[i]),
                                           struct.unpack('I', msg[i + 1:i + 5])[0], 10))
