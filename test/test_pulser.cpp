@@ -235,6 +235,26 @@ void test_pulser(P &p)
     loopback_finished();
     check_inst();
     assert(p.timing_ok());
+
+    // Test auto release
+    printf("  Testing auto release\n");
+    p.toggle_init();
+    reset_count();
+    p.set_hold();
+    for (int i = 0; i < 4100; i++) {
+        p.template wait<true>(3);
+        inst_queued();
+        wait_finished(3);
+    }
+    p.template wait<false>(3);
+    wait_finished(3);
+    assert(p.timing_ok());
+    assert(p.underflow_cycle() == 0);
+    while (!p.is_finished()) {
+    }
+    check_inst();
+    assert(p.timing_ok());
+    assert(p.underflow_cycle() == 0);
 }
 
 int main()
