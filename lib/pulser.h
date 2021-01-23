@@ -38,11 +38,11 @@ class Pulser {
     // Read and write pulse controller registers.
     inline uint32_t read(uint32_t reg) const
     {
-        return Mem::read<uint32_t>(m_addr, reg);
+        return Mem::read<uint32_t>(&m_addr, reg);
     }
     inline void write(uint32_t reg, uint32_t val)
     {
-        Mem::write<uint32_t>(m_addr, val, reg);
+        Mem::write<uint32_t>(&m_addr, val, reg);
     }
     struct Bits {
         enum {
@@ -298,7 +298,7 @@ public:
     }
 
     Pulser(volatile void *const addr)
-        : m_addr(addr)
+        : m_addr(*static_cast<volatile uint32_t*>(addr))
     {}
     Pulser(Pulser &&other)
         : m_addr(other.m_addr)
@@ -326,7 +326,8 @@ public:
 
 private:
     static constexpr uint32_t magic_bytes = 0xf00f0000;
-    volatile void *const m_addr;
+    // Guarantees that `&m_addr` is a constant.
+    volatile uint32_t &m_addr;
 };
 
 }
