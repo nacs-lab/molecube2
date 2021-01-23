@@ -152,9 +152,9 @@ NACS_EXPORT() void Pulser::check_hw_version() const
     auto major_ver_hw = read(6);
     auto minor_ver_hw = read(7);
     if (major_ver_hw != major_ver || minor_ver_hw < minor_ver) {
-        throw std::runtime_error("Incompatible hardware version: expect " +
+        throw std::runtime_error("Incompatible hardware version: require " +
                                  std::to_string(major_ver) + "." + std::to_string(minor_ver) +
-                                 ", got" + std::to_string(major_ver_hw) + "." +
+                                 ", got " + std::to_string(major_ver_hw) + "." +
                                  std::to_string(minor_ver_hw));
     }
 }
