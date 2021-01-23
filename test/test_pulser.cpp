@@ -24,6 +24,7 @@
 #include <thread>
 
 #include <nacs-utils/log.h>
+#include <nacs-seq/seq.h>
 
 template<typename P>
 void test_pulser(P &p)
@@ -63,12 +64,16 @@ void test_pulser(P &p)
     uint32_t loopback_count = 0;
     uint32_t wait_count = 0;
     uint32_t clock_count = 0;
-    auto inst_queued = [&] (uint32_t n=1) {
-        inst_word_count += n * 2;
+    uint32_t inst_cycle = 0;
+    uint32_t ttl_cycle = 0;
+    uint32_t wait_cycle = 0;
+    auto inst_queued = [&] () {
+        inst_word_count += 2;
         assert(p.inst_word_count() == inst_word_count);
     };
-    auto inst_finished = [&] (uint32_t n) {
-        inst_count += n;
+    auto inst_finished = [&] (uint32_t cycle) {
+        inst_count += 1;
+        inst_cycle += cycle;
     };
     auto check_inst = [&] {
         assert(p.inst_count() == inst_count);
@@ -76,22 +81,26 @@ void test_pulser(P &p)
         assert(p.loopback_count() == loopback_count);
         assert(p.wait_count() == wait_count);
         assert(p.clock_count() == clock_count);
+        assert(p.inst_cycle() == inst_cycle);
+        assert(p.ttl_cycle() == ttl_cycle);
+        assert(p.wait_cycle() == wait_cycle);
     };
-    auto ttl_finished = [&] (uint32_t n=1) {
-        ttl_count += n;
-        inst_finished(n);
+    auto ttl_finished = [&] (uint32_t cycle) {
+        ttl_count += 1;
+        ttl_cycle += cycle;
+        inst_finished(cycle);
     };
-    auto loopback_finished = [&] (uint32_t n=1) {
-        loopback_count += n;
-        inst_finished(n);
+    auto loopback_finished = [&] () {
+        loopback_count += 1;
+        inst_finished(NaCs::Seq::PulseTime::LoopBack);
     };
-    auto wait_finished = [&] (uint32_t n=1) {
-        wait_count += n;
-        inst_finished(n);
+    auto wait_finished = [&] (uint32_t cycle) {
+        wait_count += 1;
+        inst_finished(cycle);
     };
-    auto clock_finished = [&] (uint32_t n=1) {
-        clock_count += n;
-        inst_finished(n);
+    auto clock_finished = [&] () {
+        clock_count += 1;
+        inst_finished(NaCs::Seq::PulseTime::Clock);
     };
     auto reset_count = [&] {
         inst_word_count = 0;
@@ -117,7 +126,7 @@ void test_pulser(P &p)
         inst_queued();
         assert(p.get_result() == vl);
         assert(p.cur_ttl() == v);
-        ttl_finished();
+        ttl_finished(10);
         loopback_finished();
         check_inst();
     }
@@ -127,7 +136,7 @@ void test_pulser(P &p)
     inst_queued();
     assert(p.get_result() == 0);
     assert(p.cur_ttl() == 0xffffffff);
-    ttl_finished();
+    ttl_finished(10);
     loopback_finished();
     check_inst();
     p.template ttl<false>(0, 10);
@@ -136,7 +145,7 @@ void test_pulser(P &p)
     inst_queued();
     assert(p.get_result() == 0xffffffff);
     assert(p.cur_ttl() == 0);
-    ttl_finished();
+    ttl_finished(10);
     loopback_finished();
     check_inst();
 
@@ -156,7 +165,7 @@ void test_pulser(P &p)
     p.release_hold();
     assert(p.get_result() == 888);
     assert(p.cur_ttl() == 345);
-    ttl_finished();
+    ttl_finished(10);
     loopback_finished();
     check_inst();
 
@@ -167,7 +176,7 @@ void test_pulser(P &p)
 
     while (!p.is_finished()) {
     }
-    ttl_finished();
+    ttl_finished(10);
     check_inst();
 
     // Test loopback and clock
@@ -194,15 +203,15 @@ void test_pulser(P &p)
     printf("  Testing timing error\n");
     assert(p.timing_ok());
     assert(p.underflow_cycle() == 0);
-    p.template wait<true>(1);
+    p.template wait<true>(3);
     inst_queued();
     std::this_thread::sleep_for(10ms);
-    wait_finished();
+    wait_finished(3);
     check_inst();
-    p.template wait<true>(1);
+    p.template wait<true>(3);
     inst_queued();
     std::this_thread::sleep_for(10ms);
-    wait_finished();
+    wait_finished(3);
     check_inst();
     assert(!p.timing_ok());
     assert(p.underflow_cycle() > 1000000);
