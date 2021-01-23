@@ -61,8 +61,9 @@ void test_pulser(P &p)
     uint32_t inst_word_count = 0;
     uint32_t inst_count = 0;
     uint32_t ttl_count = 0;
-    uint32_t loopback_count = 0;
     uint32_t wait_count = 0;
+    uint32_t clear_error_count = 0;
+    uint32_t loopback_count = 0;
     uint32_t clock_count = 0;
     uint32_t inst_cycle = 0;
     uint32_t ttl_cycle = 0;
@@ -78,8 +79,9 @@ void test_pulser(P &p)
     auto check_inst = [&] {
         assert(p.inst_count() == inst_count);
         assert(p.ttl_count() == ttl_count);
-        assert(p.loopback_count() == loopback_count);
         assert(p.wait_count() == wait_count);
+        assert(p.clear_error_count() == clear_error_count);
+        assert(p.loopback_count() == loopback_count);
         assert(p.clock_count() == clock_count);
         assert(p.inst_cycle() == inst_cycle);
         assert(p.ttl_cycle() == ttl_cycle);
@@ -90,13 +92,17 @@ void test_pulser(P &p)
         ttl_cycle += cycle;
         inst_finished(cycle);
     };
-    auto loopback_finished = [&] () {
-        loopback_count += 1;
-        inst_finished(NaCs::Seq::PulseTime::LoopBack);
-    };
     auto wait_finished = [&] (uint32_t cycle) {
         wait_count += 1;
         inst_finished(cycle);
+    };
+    auto clear_error_finished = [&] () {
+        clear_error_count += 1;
+        inst_finished(NaCs::Seq::PulseTime::Clear);
+    };
+    auto loopback_finished = [&] () {
+        loopback_count += 1;
+        inst_finished(NaCs::Seq::PulseTime::LoopBack);
     };
     auto clock_finished = [&] () {
         clock_count += 1;
@@ -106,8 +112,9 @@ void test_pulser(P &p)
         inst_word_count = 0;
         inst_count = 0;
         ttl_count = 0;
-        loopback_count = 0;
         wait_count = 0;
+        clear_error_count = 0;
+        loopback_count = 0;
         clock_count = 0;
         assert(p.inst_word_count() == 0);
         check_inst();
@@ -220,6 +227,9 @@ void test_pulser(P &p)
     p.template loopback<false>(1);
     inst_queued();
     assert(p.get_result() == 1);
+    clear_error_finished();
+    loopback_finished();
+    check_inst();
     assert(p.timing_ok());
 }
 
