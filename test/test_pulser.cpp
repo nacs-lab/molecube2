@@ -57,12 +57,37 @@ void test_pulser(P &p)
 
     p.toggle_init();
 
-    // Test TTL pulse
-    printf("Testing TTL pulse\n");
+    assert(p.inst_word_count() == 0);
+    uint32_t inst_word_count = 0;
+    auto inst_queued = [&] (uint32_t n) {
+        inst_word_count += n * 2;
+        assert(p.inst_word_count() == inst_word_count);
+    };
+
+    // Test TTL and loopback pulse
+    printf("Testing TTL and loopback pulse\n");
     p.release_hold();
+    for (int i = 0; i < 32; i++) {
+        uint32_t v = 1u << i;
+        uint32_t vl = v * 15 + 0x12345678;
+        p.template ttl<false>(v, 10);
+        inst_queued(1);
+        p.template loopback<false>(vl);
+        inst_queued(1);
+        assert(p.get_result() == vl);
+        assert(p.cur_ttl() == v);
+    }
+    p.template ttl<false>(0xffffffff, 10);
+    inst_queued(1);
+    p.template loopback<false>(0);
+    inst_queued(1);
+    assert(p.get_result() == 0);
+    assert(p.cur_ttl() == 0xffffffff);
     p.template ttl<false>(0, 10);
-    p.template loopback<false>(123);
-    assert(p.get_result() == 123);
+    inst_queued(1);
+    p.template loopback<false>(0xffffffff);
+    inst_queued(1);
+    assert(p.get_result() == 0xffffffff);
     assert(p.cur_ttl() == 0);
 
     // Test hold and release
