@@ -242,16 +242,17 @@ void test_pulser(P &p)
     reset_count();
     p.set_hold();
     for (int i = 0; i < 4090; i++) {
-        p.template wait<true>(3);
+        p.template wait<true>(5);
         inst_queued();
-        wait_finished(3);
+        wait_finished(5);
     }
     for (int i = 0; i < 8; i++) {
-        p.template wait<true>(10);
+        p.template wait<true>(1000);
         inst_queued();
-        wait_finished(10);
+        wait_finished(1000);
     }
     p.template wait<false>(3);
+    inst_queued();
     wait_finished(3);
     assert(p.timing_ok());
     assert(p.underflow_cycle() == 0);
