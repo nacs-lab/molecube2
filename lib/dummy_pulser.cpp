@@ -146,6 +146,7 @@ NACS_EXPORT() void DummyPulser::toggle_init()
     m_timing_check.store(false, std::memory_order_release);
 
     m_inst_word_count.store(0, std::memory_order_relaxed);
+    m_inst_count.store(0, std::memory_order_relaxed);
 }
 
 NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)
