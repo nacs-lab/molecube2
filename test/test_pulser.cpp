@@ -57,7 +57,6 @@ void test_pulser(P &p)
 
     p.toggle_init();
 
-    assert(p.inst_word_count() == 0);
     uint32_t inst_word_count = 0;
     uint32_t inst_count = 0;
     auto inst_queued = [&] (uint32_t n=1) {
@@ -76,6 +75,13 @@ void test_pulser(P &p)
     auto loopback_finished = [&] (uint32_t n=1) {
         inst_finished(n);
     };
+    auto reset_count = [&] {
+        inst_word_count = 0;
+        inst_count = 0;
+        assert(p.inst_word_count() == 0);
+        check_inst();
+    };
+    reset_count();
 
     // Test TTL and loopback pulse
     printf("Testing TTL and loopback pulse\n");
@@ -116,25 +122,36 @@ void test_pulser(P &p)
     printf("Testing hold and release\n");
     p.set_hold();
     p.template ttl<false>(345, 10);
+    inst_queued();
     p.template loopback<false>(888);
+    inst_queued();
+    check_inst();
     std::this_thread::sleep_for(10ms);
+    check_inst();
     uint32_t res0;
     assert(!p.try_get_result(res0));
     assert(p.cur_ttl() == 0);
     p.release_hold();
     assert(p.get_result() == 888);
     assert(p.cur_ttl() == 345);
+    ttl_finished();
+    loopback_finished();
+    check_inst();
 
     assert(p.is_finished());
 
     p.template ttl<false>(0, 10);
+    inst_queued();
 
     while (!p.is_finished()) {
     }
+    ttl_finished();
+    check_inst();
 
     // Test loopback and clock
     printf("Testing loopback and clock\n");
     p.toggle_init();
+    reset_count();
     p.release_hold();
     assert(p.cur_clock() == 255);
     p.template clock<false>(128);
