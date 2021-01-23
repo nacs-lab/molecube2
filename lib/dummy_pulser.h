@@ -258,6 +258,21 @@ public:
         const_cast<DummyPulser*>(this)->forward_time();
         return m_underflow_cycle.load(std::memory_order_relaxed);
     }
+    inline uint32_t inst_cycle()
+    {
+        const_cast<DummyPulser*>(this)->forward_time();
+        return m_inst_cycle.load(std::memory_order_relaxed);
+    }
+    inline uint32_t ttl_cycle()
+    {
+        const_cast<DummyPulser*>(this)->forward_time();
+        return m_ttl_cycle.load(std::memory_order_relaxed);
+    }
+    inline uint32_t wait_cycle()
+    {
+        const_cast<DummyPulser*>(this)->forward_time();
+        return m_wait_cycle.load(std::memory_order_relaxed);
+    }
 
     DummyPulser();
     DummyPulser(DummyPulser &&other);
@@ -322,6 +337,9 @@ private:
     std::atomic<uint32_t> m_clock_count{0};
     std::atomic<uint32_t> m_spi_count{0};
     std::atomic<uint32_t> m_underflow_cycle{0};
+    std::atomic<uint32_t> m_inst_cycle{0};
+    std::atomic<uint32_t> m_ttl_cycle{0};
+    std::atomic<uint32_t> m_wait_cycle{0};
 
     std::mutex m_cmds_lock;
 

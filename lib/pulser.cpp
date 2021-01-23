@@ -145,7 +145,7 @@ NACS_EXPORT() bool Pulser::check_dds(int chn, bool force)
 }
 
 constexpr uint32_t major_ver = 5;
-constexpr uint32_t minor_ver = 0;
+constexpr uint32_t minor_ver = 1;
 
 NACS_EXPORT() void Pulser::check_hw_version() const
 {

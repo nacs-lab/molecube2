@@ -155,6 +155,9 @@ NACS_EXPORT() void DummyPulser::toggle_init()
     m_clock_count.store(0, std::memory_order_relaxed);
     m_spi_count.store(0, std::memory_order_relaxed);
     m_underflow_cycle.store(0, std::memory_order_relaxed);
+    m_inst_cycle.store(0, std::memory_order_relaxed);
+    m_ttl_cycle.store(0, std::memory_order_relaxed);
+    m_wait_cycle.store(0, std::memory_order_relaxed);
 }
 
 NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)
@@ -200,6 +203,7 @@ NACS_INTERNAL bool DummyPulser::run_past_cmds(time_point_t cur_t)
         cmd_run = true;
         m_timing_check.store(cmd.timing, std::memory_order_release);
         auto steps = run_cmd(cmd);
+        m_inst_cycle.fetch_add(steps, std::memory_order_relaxed);
         m_release_time = startt + std::chrono::nanoseconds(steps * 10);
         m_cmds.pop();
     }
@@ -214,6 +218,7 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
     case OP::TTL:
         m_ttl_count.fetch_add(1, std::memory_order_relaxed);
         m_ttl.store(cmd.v2, std::memory_order_release);
+        m_ttl_cycle.fetch_add(cmd.v1, std::memory_order_relaxed);
         return cmd.v1;
     case OP::Clock:
         m_clock_count.fetch_add(1, std::memory_order_relaxed);
@@ -224,6 +229,7 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
         return Seq::PulseTime::DAC;
     case OP::Wait:
         m_wait_count.fetch_add(1, std::memory_order_relaxed);
+        m_wait_cycle.fetch_add(cmd.v1, std::memory_order_relaxed);
         return cmd.v1;
     case OP::ClearErr:
         m_clear_error_count.fetch_add(1, std::memory_order_relaxed);
