@@ -61,6 +61,7 @@ void test_pulser(P &p)
     uint32_t inst_word_count = 0;
     uint32_t inst_count = 0;
     uint32_t ttl_count = 0;
+    uint32_t dds_count = 0;
     uint32_t wait_count = 0;
     uint32_t clear_error_count = 0;
     uint32_t loopback_count = 0;
@@ -79,6 +80,7 @@ void test_pulser(P &p)
     auto check_inst = [&] {
         assert(p.inst_count() == inst_count);
         assert(p.ttl_count() == ttl_count);
+        assert(p.dds_count() == dds_count);
         assert(p.wait_count() == wait_count);
         assert(p.clear_error_count() == clear_error_count);
         assert(p.loopback_count() == loopback_count);
@@ -91,6 +93,10 @@ void test_pulser(P &p)
         ttl_count += 1;
         ttl_cycle += cycle;
         inst_finished(cycle);
+    };
+    auto dds_finished = [&] () {
+        dds_count += 1;
+        inst_finished(NaCs::Seq::PulseTime::DDSAmp);
     };
     auto wait_finished = [&] (uint32_t cycle) {
         wait_count += 1;
@@ -113,6 +119,7 @@ void test_pulser(P &p)
         inst_word_count = 0;
         inst_count = 0;
         ttl_count = 0;
+        dds_count = 0;
         wait_count = 0;
         clear_error_count = 0;
         loopback_count = 0;
@@ -261,6 +268,38 @@ void test_pulser(P &p)
     check_inst();
     assert(p.timing_ok());
     assert(p.underflow_cycle() == 0);
+
+    // Test DDS controller read/write/timing (does not require a working DDS)
+    printf("  Testing DDS controller read/write/timing\n");
+    p.template dds_set_freq<false>(0, 0);
+    inst_queued();
+    dds_finished();
+    p.template dds_set_amp<false>(0, 0);
+    inst_queued();
+    dds_finished();
+    while (!p.is_finished()) {
+    }
+    check_inst();
+    for (int i = 0; i < 256; i++) {
+        uint32_t vl = (i << 20) | i;
+        p.template dds_get_freq<false>(0);
+        inst_queued();
+        dds_finished();
+        p.template loopback<false>(vl);
+        inst_queued();
+        loopback_finished();
+        p.template dds_get_amp<false>(0);
+        inst_queued();
+        dds_finished();
+        p.template loopback<false>(vl);
+        inst_queued();
+        loopback_finished();
+        assert(p.get_result() == 0);
+        assert(p.get_result() == vl);
+        assert(p.get_result() == 0);
+        assert(p.get_result() == vl);
+        check_inst();
+    }
 }
 
 int main()
