@@ -221,6 +221,38 @@ public:
     {
         return m_inst_count.load(std::memory_order_relaxed);
     }
+    inline uint32_t ttl_count()
+    {
+        return m_ttl_count.load(std::memory_order_relaxed);
+    }
+    inline uint32_t dds_count()
+    {
+        return m_dds_count.load(std::memory_order_relaxed);
+    }
+    inline uint32_t wait_count()
+    {
+        return m_wait_count.load(std::memory_order_relaxed);
+    }
+    inline uint32_t clear_error_count()
+    {
+        return m_clear_error_count.load(std::memory_order_relaxed);
+    }
+    inline uint32_t loopback_count()
+    {
+        return m_loopback_count.load(std::memory_order_relaxed);
+    }
+    inline uint32_t clock_count()
+    {
+        return m_clock_count.load(std::memory_order_relaxed);
+    }
+    inline uint32_t spi_count()
+    {
+        return m_spi_count.load(std::memory_order_relaxed);
+    }
+    inline uint32_t underflow_cycle()
+    {
+        return m_underflow_cycle.load(std::memory_order_relaxed);
+    }
 
     DummyPulser();
     DummyPulser(DummyPulser &&other);
@@ -275,6 +307,14 @@ private:
     std::atomic<uint32_t> m_loopback_reg{0};
     std::atomic<uint32_t> m_inst_word_count{0};
     std::atomic<uint32_t> m_inst_count{0};
+    std::atomic<uint32_t> m_ttl_count{0};
+    std::atomic<uint32_t> m_dds_count{0};
+    std::atomic<uint32_t> m_wait_count{0};
+    std::atomic<uint32_t> m_clear_error_count{0};
+    std::atomic<uint32_t> m_loopback_count{0};
+    std::atomic<uint32_t> m_clock_count{0};
+    std::atomic<uint32_t> m_spi_count{0};
+    std::atomic<uint32_t> m_underflow_cycle{0};
 
     std::mutex m_cmds_lock;
 

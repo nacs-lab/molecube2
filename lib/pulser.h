@@ -226,7 +226,6 @@ public:
     }
 
     // Pulses with results
-    // clear timing check (clear failures)
     template<bool checked>
     inline void loopback(uint32_t data)
     {
@@ -264,6 +263,38 @@ public:
     inline uint32_t inst_count()
     {
         return read(0x21);
+    }
+    inline uint32_t ttl_count()
+    {
+        return read(0x22);
+    }
+    inline uint32_t dds_count()
+    {
+        return read(0x23);
+    }
+    inline uint32_t wait_count()
+    {
+        return read(0x24);
+    }
+    inline uint32_t clear_error_count()
+    {
+        return read(0x25);
+    }
+    inline uint32_t loopback_count()
+    {
+        return read(0x26);
+    }
+    inline uint32_t clock_count()
+    {
+        return read(0x27);
+    }
+    inline uint32_t spi_count()
+    {
+        return read(0x28);
+    }
+    inline uint32_t underflow_cycle()
+    {
+        return read(0x29);
     }
 
     Pulser(volatile void *const addr)

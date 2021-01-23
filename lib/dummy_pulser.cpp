@@ -147,6 +147,14 @@ NACS_EXPORT() void DummyPulser::toggle_init()
 
     m_inst_word_count.store(0, std::memory_order_relaxed);
     m_inst_count.store(0, std::memory_order_relaxed);
+    m_ttl_count.store(0, std::memory_order_relaxed);
+    m_dds_count.store(0, std::memory_order_relaxed);
+    m_wait_count.store(0, std::memory_order_relaxed);
+    m_clear_error_count.store(0, std::memory_order_relaxed);
+    m_loopback_count.store(0, std::memory_order_relaxed);
+    m_clock_count.store(0, std::memory_order_relaxed);
+    m_spi_count.store(0, std::memory_order_relaxed);
+    m_underflow_cycle.store(0, std::memory_order_relaxed);
 }
 
 NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)
@@ -177,8 +185,12 @@ NACS_INTERNAL bool DummyPulser::run_past_cmds(time_point_t cur_t)
         auto cmdt = cmd.t;
         auto startt = m_release_time;
         if (cmdt > startt) {
-            if (m_timing_check.load(std::memory_order_acquire))
+            if (m_timing_check.load(std::memory_order_acquire)) {
                 m_timing_ok.store(false, std::memory_order_release);
+                auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(cmdt - startt);
+                m_underflow_cycle.fetch_add(uint32_t(dt.count() / 10 + 1),
+                                            std::memory_order_relaxed);
+            }
             startt = cmdt;
             assert(cmdt <= cur_t);
         }
@@ -200,42 +212,56 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
     m_inst_count.fetch_add(1, std::memory_order_relaxed);
     switch (cmd.op) {
     case OP::TTL:
+        m_ttl_count.fetch_add(1, std::memory_order_relaxed);
         m_ttl.store(cmd.v2, std::memory_order_release);
         return cmd.v1;
     case OP::Clock:
+        m_clock_count.fetch_add(1, std::memory_order_relaxed);
         m_clock.store(uint8_t(cmd.v1), std::memory_order_release);
         return Seq::PulseTime::Clock;
     case OP::DAC:
+        m_spi_count.fetch_add(1, std::memory_order_relaxed);
         return Seq::PulseTime::DAC;
     case OP::Wait:
+        m_wait_count.fetch_add(1, std::memory_order_relaxed);
         return cmd.v1;
     case OP::ClearErr:
+        m_clear_error_count.fetch_add(1, std::memory_order_relaxed);
         m_timing_ok.store(true, std::memory_order_release);
+        m_underflow_cycle.store(0, std::memory_order_relaxed);
         return Seq::PulseTime::Clear;
     case OP::DDSSetFreq:
+        m_dds_count.fetch_add(1, std::memory_order_relaxed);
         m_dds[cmd.v1].freq = cmd.v2;
         return Seq::PulseTime::DDSFreq;
     case OP::DDSSetAmp:
+        m_dds_count.fetch_add(1, std::memory_order_relaxed);
         m_dds[cmd.v1].amp = uint16_t(cmd.v2);
         return Seq::PulseTime::DDSAmp;
     case OP::DDSSetPhase:
+        m_dds_count.fetch_add(1, std::memory_order_relaxed);
         m_dds[cmd.v1].phase = uint16_t(cmd.v2);
         return Seq::PulseTime::DDSPhase;
     case OP::DDSReset:
+        m_dds_count.fetch_add(1, std::memory_order_relaxed);
         m_dds[cmd.v1].amp = 0;
         m_dds[cmd.v1].phase = 0;
         m_dds[cmd.v1].freq = 0;
         return Seq::PulseTime::DDSReset;
     case OP::LoopBack:
+        m_loopback_count.fetch_add(1, std::memory_order_relaxed);
         add_result(cmd.v1);
         return Seq::PulseTime::LoopBack;
     case OP::DDSGetFreq:
+        m_dds_count.fetch_add(1, std::memory_order_relaxed);
         add_result(m_dds[cmd.v1].freq);
         return Seq::PulseTime::DDSFreq;
     case OP::DDSGetAmp:
+        m_dds_count.fetch_add(1, std::memory_order_relaxed);
         add_result(m_dds[cmd.v1].amp);
         return Seq::PulseTime::DDSAmp;
     case OP::DDSGetPhase:
+        m_dds_count.fetch_add(1, std::memory_order_relaxed);
         add_result(m_dds[cmd.v1].phase);
         return Seq::PulseTime::DDSPhase;
     default:
