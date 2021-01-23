@@ -61,6 +61,7 @@ void test_pulser(P &p)
     uint32_t inst_count = 0;
     uint32_t ttl_count = 0;
     uint32_t loopback_count = 0;
+    uint32_t wait_count = 0;
     uint32_t clock_count = 0;
     auto inst_queued = [&] (uint32_t n=1) {
         inst_word_count += n * 2;
@@ -73,6 +74,7 @@ void test_pulser(P &p)
         assert(p.inst_count() == inst_count);
         assert(p.ttl_count() == ttl_count);
         assert(p.loopback_count() == loopback_count);
+        assert(p.wait_count() == wait_count);
         assert(p.clock_count() == clock_count);
     };
     auto ttl_finished = [&] (uint32_t n=1) {
@@ -81,6 +83,10 @@ void test_pulser(P &p)
     };
     auto loopback_finished = [&] (uint32_t n=1) {
         loopback_count += n;
+        inst_finished(n);
+    };
+    auto wait_finished = [&] (uint32_t n=1) {
+        wait_count += n;
         inst_finished(n);
     };
     auto clock_finished = [&] (uint32_t n=1) {
@@ -92,6 +98,7 @@ void test_pulser(P &p)
         inst_count = 0;
         ttl_count = 0;
         loopback_count = 0;
+        wait_count = 0;
         clock_count = 0;
         assert(p.inst_word_count() == 0);
         check_inst();
@@ -185,13 +192,24 @@ void test_pulser(P &p)
 
     // Timing error
     printf("Testing timing error\n");
+    assert(p.timing_ok());
+    assert(p.underflow_cycle() == 0);
     p.template wait<true>(1);
+    inst_queued();
     std::this_thread::sleep_for(10ms);
+    wait_finished();
+    check_inst();
     p.template wait<true>(1);
+    inst_queued();
     std::this_thread::sleep_for(10ms);
+    wait_finished();
+    check_inst();
     assert(!p.timing_ok());
+    assert(p.underflow_cycle() > 1000000);
     p.clear_error();
+    inst_queued();
     p.template loopback<false>(1);
+    inst_queued();
     assert(p.get_result() == 1);
     assert(p.timing_ok());
 }
