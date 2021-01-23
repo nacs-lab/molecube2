@@ -94,6 +94,7 @@ void test_pulser(P &p)
     };
     auto wait_finished = [&] (uint32_t cycle) {
         wait_count += 1;
+        wait_cycle += cycle;
         inst_finished(cycle);
     };
     auto clear_error_finished = [&] () {
@@ -116,6 +117,9 @@ void test_pulser(P &p)
         clear_error_count = 0;
         loopback_count = 0;
         clock_count = 0;
+        inst_cycle = 0;
+        ttl_cycle = 0;
+        wait_cycle = 0;
         assert(p.inst_word_count() == 0);
         check_inst();
     };
