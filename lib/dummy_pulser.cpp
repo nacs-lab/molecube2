@@ -31,7 +31,10 @@ NACS_EXPORT() DummyPulser::DummyPulser()
 
 NACS_EXPORT() void DummyPulser::init_dds(int chn)
 {
-    if (!dds_exists(chn))
+    const int cmd_count = 7 + 46;
+    m_inst_word_count.fetch_add(cmd_count * 2, std::memory_order_relaxed);
+
+    if (!dds_exists_internal(chn))
         return;
     dds_reset<false>(chn);
     m_dds[chn].init = true;
@@ -39,18 +42,21 @@ NACS_EXPORT() void DummyPulser::init_dds(int chn)
 
 NACS_EXPORT() bool DummyPulser::check_dds(int chn, bool force)
 {
-    if (!dds_exists(chn))
-        return true;
-    if (force || !m_dds[chn].init) {
-        init_dds(chn);
-        return true;
+    if (!force) {
+        m_inst_word_count.fetch_add(2, std::memory_order_relaxed);
+        if (dds_exists_internal(chn) && m_dds[chn].init) {
+            return false;
+        }
     }
-    return false;
+    init_dds(chn);
+    return true;
 }
 
 NACS_EXPORT() bool DummyPulser::dds_exists(int chn)
 {
-    return 0 <= chn && chn < NDDS;
+    const int cmd_count = 4;
+    m_inst_word_count.fetch_add(cmd_count * 2, std::memory_order_relaxed);
+    return dds_exists_internal(chn);
 }
 
 NACS_EXPORT() void DummyPulser::dump_dds(std::ostream &stm, int chn)
@@ -58,6 +64,8 @@ NACS_EXPORT() void DummyPulser::dump_dds(std::ostream &stm, int chn)
     stm << "*******************************" << std::endl;
     stm << "Dummy DDS board: " << chn << std::endl;
     stm << "*******************************" << std::endl;
+    const int cmd_count = 32;
+    m_inst_word_count.fetch_add(cmd_count * 2, std::memory_order_relaxed);
 }
 
 NACS_EXPORT() bool DummyPulser::try_get_result(uint32_t &res)
@@ -94,6 +102,7 @@ NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
 NACS_EXPORT() void DummyPulser::add_cmd(OP op, bool timing, uint32_t v1, uint32_t v2)
 {
     Cmd cmd{op, timing, std::chrono::steady_clock::now(), v1, v2};
+    m_inst_word_count.fetch_add(2, std::memory_order_relaxed);
     std::unique_lock<std::mutex> lock(m_cmds_lock);
     while (m_cmds.size() >= 4096) {
         if (!m_force_release) {
@@ -135,6 +144,8 @@ NACS_EXPORT() void DummyPulser::toggle_init()
     m_force_release = false;
     m_timing_ok.store(true, std::memory_order_release);
     m_timing_check.store(false, std::memory_order_release);
+
+    m_inst_word_count.store(0, std::memory_order_relaxed);
 }
 
 NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)
@@ -185,6 +196,7 @@ NACS_INTERNAL bool DummyPulser::run_past_cmds(time_point_t cur_t)
 
 NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
 {
+    m_inst_word_count.fetch_add(2, std::memory_order_relaxed);
     switch (cmd.op) {
     case OP::TTL:
         m_ttl.store(cmd.v2, std::memory_order_release);

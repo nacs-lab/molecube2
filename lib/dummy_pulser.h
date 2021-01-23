@@ -203,6 +203,21 @@ public:
         assert(i < NDDS);
         add_cmd(OP::DDSGetFreq, checked, i);
     }
+
+    // Debug registers
+    inline uint32_t loopback_reg()
+    {
+        return m_loopback_reg.load(std::memory_order_relaxed);
+    }
+    inline void set_loopback_reg(uint32_t val)
+    {
+        m_loopback_reg.store(val, std::memory_order_relaxed);
+    }
+    inline uint32_t inst_word_count()
+    {
+        return m_inst_word_count.load(std::memory_order_relaxed);
+    }
+
     DummyPulser();
     DummyPulser(DummyPulser &&other);
 
@@ -215,6 +230,12 @@ public:
     void dump_dds(std::ostream &stm, int chn);
 
 private:
+    // check dds existance without changing debug registers.
+    bool dds_exists_internal(int chn)
+    {
+        return 0 <= chn && chn < NDDS;
+    }
+
     // Push a result to the result queue. Check if there's overflow
     void add_result(uint32_t v);
     // Add a command to the command queue.
@@ -245,6 +266,10 @@ private:
     std::atomic<bool> m_cmds_empty{true};
     std::atomic<bool> m_timing_ok{true};
     std::atomic<bool> m_timing_check{false};
+
+    // Debug registers
+    std::atomic<uint32_t> m_loopback_reg{0};
+    std::atomic<uint32_t> m_inst_word_count{0};
 
     std::mutex m_cmds_lock;
 

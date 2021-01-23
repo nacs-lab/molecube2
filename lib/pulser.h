@@ -247,6 +247,21 @@ public:
     {
         dds_get_4bytes<checked>(i, 0x2c);
     }
+
+    // Debug registers
+    inline uint32_t loopback_reg()
+    {
+        return read(0x1e);
+    }
+    inline void set_loopback_reg(uint32_t val)
+    {
+        write(0x1e, val);
+    }
+    inline uint32_t inst_word_count()
+    {
+        return read(0x20);
+    }
+
     Pulser(volatile void *const addr)
         : m_addr(addr)
     {}
