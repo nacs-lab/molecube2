@@ -48,7 +48,7 @@ int main(int argc, char **argv)
     while (!p.is_finished()) {
     }
     auto new_ttl = p.cur_ttl();
-    printf("New TTL value: %08x\n" new_ttl);
+    printf("New TTL value: %08x\n", new_ttl);
     assert(p.cur_ttl() == new_ttl);
     return 0;
 }
