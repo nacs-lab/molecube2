@@ -19,6 +19,7 @@
 #include "pulser.h"
 
 #include <chrono>
+#include <stdexcept>
 #include <thread>
 
 #if __has_include(<nacs-kernel/devctl.h>)
@@ -141,6 +142,21 @@ NACS_EXPORT() bool Pulser::check_dds(int chn, bool force)
     }
     init_dds(chn);
     return true;
+}
+
+constexpr uint32_t major_ver = 5;
+constexpr uint32_t minor_ver = 0;
+
+NACS_EXPORT() void Pulser::check_hw_version() const
+{
+    auto major_ver_hw = read(6);
+    auto minor_ver_hw = read(7);
+    if (major_ver_hw != major_ver || minor_ver_hw < minor_ver) {
+        throw std::runtime_error("Incompatible hardware version: expect " +
+                                 std::to_string(major_ver) + "." + std::to_string(minor_ver) +
+                                 ", got" + std::to_string(major_ver_hw) + "." +
+                                 std::to_string(minor_ver_hw));
+    }
 }
 
 }

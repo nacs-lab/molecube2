@@ -299,7 +299,9 @@ public:
 
     Pulser(volatile void *const addr)
         : m_addr(*static_cast<volatile uint32_t*>(addr))
-    {}
+    {
+        check_hw_version();
+    }
     Pulser(Pulser &&other)
         : m_addr(other.m_addr)
     {}
@@ -325,6 +327,7 @@ public:
     static void *address();
 
 private:
+    void check_hw_version() const;
     static constexpr uint32_t magic_bytes = 0xf00f0000;
     // Guarantees that `&m_addr` is a constant.
     volatile uint32_t &m_addr;
