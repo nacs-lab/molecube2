@@ -11,6 +11,9 @@ target_link_libraries(test_set_ttl libmolecube)
 add_executable(test_set_clock test_set_clock.cpp)
 target_link_libraries(test_set_clock libmolecube)
 
+add_executable(test_set_dds test_set_dds.cpp)
+target_link_libraries(test_set_dds libmolecube)
+
 add_executable(test_controller test_controller.cpp)
 target_link_libraries(test_controller libmolecube)
 
