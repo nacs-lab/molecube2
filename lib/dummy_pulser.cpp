@@ -196,7 +196,7 @@ NACS_INTERNAL bool DummyPulser::run_past_cmds(time_point_t cur_t)
 
 NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
 {
-    // m_inst_count.fetch_add(1, std::memory_order_relaxed);
+    m_inst_count.fetch_add(1, std::memory_order_relaxed);
     switch (cmd.op) {
     case OP::TTL:
         m_ttl.store(cmd.v2, std::memory_order_release);

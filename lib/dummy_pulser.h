@@ -217,6 +217,10 @@ public:
     {
         return m_inst_word_count.load(std::memory_order_relaxed);
     }
+    inline uint32_t inst_count()
+    {
+        return m_inst_count.load(std::memory_order_relaxed);
+    }
 
     DummyPulser();
     DummyPulser(DummyPulser &&other);
@@ -270,6 +274,7 @@ private:
     // Debug registers
     std::atomic<uint32_t> m_loopback_reg{0};
     std::atomic<uint32_t> m_inst_word_count{0};
+    std::atomic<uint32_t> m_inst_count{0};
 
     std::mutex m_cmds_lock;
 

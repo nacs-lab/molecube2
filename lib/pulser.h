@@ -261,6 +261,10 @@ public:
     {
         return read(0x20);
     }
+    inline uint32_t inst_count()
+    {
+        return read(0x21);
+    }
 
     Pulser(volatile void *const addr)
         : m_addr(addr)
