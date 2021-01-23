@@ -31,14 +31,29 @@ void test_pulser(P &p)
     using namespace std::literals;
 
     // Test TTL masks
-    printf("TTL masks\n");
-    p.set_ttl_himask(0);
-    assert(p.ttl_himask() == 0);
-    p.set_ttl_himask(123);
-    assert(p.ttl_himask() == 123);
+    printf("TTL masks and loopback register\n");
+    for (int i = 0; i < 32; i++) {
+        uint32_t v = 1u << i;
+        p.set_loopback_reg(v);
+        assert(p.loopback_reg() == v);
+        p.set_ttl_himask(v);
+        assert(p.ttl_himask() == v);
+        p.set_ttl_lomask(v);
+        assert(p.ttl_lomask() == v);
+    }
     std::this_thread::sleep_for(1ms);
+    p.set_loopback_reg(0xffffffff);
+    assert(p.loopback_reg() == 0xffffffff);
+    p.set_loopback_reg(0);
+    assert(p.loopback_reg() == 0);
+    p.set_ttl_himask(0xffffffff);
+    assert(p.ttl_himask() == 0xffffffff);
     p.set_ttl_himask(0);
     assert(p.ttl_himask() == 0);
+    p.set_ttl_lomask(0xffffffff);
+    assert(p.ttl_lomask() == 0xffffffff);
+    p.set_ttl_lomask(0);
+    assert(p.ttl_lomask() == 0);
 
     p.toggle_init();
 
