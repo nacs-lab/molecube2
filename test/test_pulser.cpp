@@ -31,7 +31,7 @@ void test_pulser(P &p)
     using namespace std::literals;
 
     // Test TTL masks
-    printf("TTL masks and loopback register\n");
+    printf("  Testing TTL masks and loopback register\n");
     for (int i = 0; i < 32; i++) {
         uint32_t v = 1u << i;
         p.set_loopback_reg(v);
@@ -106,7 +106,7 @@ void test_pulser(P &p)
     reset_count();
 
     // Test TTL and loopback pulse
-    printf("Testing TTL and loopback pulse\n");
+    printf("  Testing TTL and loopback pulse\n");
     p.release_hold();
     for (int i = 0; i < 32; i++) {
         uint32_t v = 1u << i;
@@ -141,7 +141,7 @@ void test_pulser(P &p)
     check_inst();
 
     // Test hold and release
-    printf("Testing hold and release\n");
+    printf("  Testing hold and release\n");
     p.set_hold();
     p.template ttl<false>(345, 10);
     inst_queued();
@@ -171,7 +171,7 @@ void test_pulser(P &p)
     check_inst();
 
     // Test loopback and clock
-    printf("Testing loopback and clock\n");
+    printf("  Testing loopback and clock\n");
     p.toggle_init();
     reset_count();
     p.release_hold();
@@ -191,7 +191,7 @@ void test_pulser(P &p)
     }
 
     // Timing error
-    printf("Testing timing error\n");
+    printf("  Testing timing error\n");
     assert(p.timing_ok());
     assert(p.underflow_cycle() == 0);
     p.template wait<true>(1);
@@ -217,6 +217,7 @@ void test_pulser(P &p)
 int main()
 {
     if (auto addr = Molecube::Pulser::address()) {
+        printf("Real pulser:\n");
         Molecube::Pulser p(addr);
         test_pulser(p);
     }
@@ -224,6 +225,7 @@ int main()
         NaCs::Log::warn("Pulse not enabled!\n");
     }
 
+    printf("Dummy pulser:\n");
     Molecube::DummyPulser dp;
     test_pulser(dp);
 
