@@ -59,9 +59,22 @@ void test_pulser(P &p)
 
     assert(p.inst_word_count() == 0);
     uint32_t inst_word_count = 0;
-    auto inst_queued = [&] (uint32_t n) {
+    uint32_t inst_count = 0;
+    auto inst_queued = [&] (uint32_t n=1) {
         inst_word_count += n * 2;
         assert(p.inst_word_count() == inst_word_count);
+    };
+    auto inst_finished = [&] (uint32_t n) {
+        inst_count += n;
+    };
+    auto check_inst = [&] {
+        assert(p.inst_count() == inst_count);
+    };
+    auto ttl_finished = [&] (uint32_t n=1) {
+        inst_finished(n);
+    };
+    auto loopback_finished = [&] (uint32_t n=1) {
+        inst_finished(n);
     };
 
     // Test TTL and loopback pulse
@@ -71,24 +84,33 @@ void test_pulser(P &p)
         uint32_t v = 1u << i;
         uint32_t vl = v * 15 + 0x12345678;
         p.template ttl<false>(v, 10);
-        inst_queued(1);
+        inst_queued();
         p.template loopback<false>(vl);
-        inst_queued(1);
+        inst_queued();
         assert(p.get_result() == vl);
         assert(p.cur_ttl() == v);
+        ttl_finished();
+        loopback_finished();
+        check_inst();
     }
     p.template ttl<false>(0xffffffff, 10);
-    inst_queued(1);
+    inst_queued();
     p.template loopback<false>(0);
-    inst_queued(1);
+    inst_queued();
     assert(p.get_result() == 0);
     assert(p.cur_ttl() == 0xffffffff);
+    ttl_finished();
+    loopback_finished();
+    check_inst();
     p.template ttl<false>(0, 10);
-    inst_queued(1);
+    inst_queued();
     p.template loopback<false>(0xffffffff);
-    inst_queued(1);
+    inst_queued();
     assert(p.get_result() == 0xffffffff);
     assert(p.cur_ttl() == 0);
+    ttl_finished();
+    loopback_finished();
+    check_inst();
 
     // Test hold and release
     printf("Testing hold and release\n");
