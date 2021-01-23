@@ -94,21 +94,17 @@ public:
     }
     inline bool is_finished() const
     {
-        if (m_cmds_empty.load(std::memory_order_acquire))
-            return true;
         const_cast<DummyPulser*>(this)->forward_time();
         return m_cmds_empty.load(std::memory_order_acquire);
     }
     inline uint32_t cur_ttl() const
     {
-        if (!m_cmds_empty.load(std::memory_order_acquire))
-            const_cast<DummyPulser*>(this)->forward_time();
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_ttl.load(std::memory_order_acquire);
     }
     inline uint8_t cur_clock() const
     {
-        if (!m_cmds_empty.load(std::memory_order_acquire))
-            const_cast<DummyPulser*>(this)->forward_time();
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_clock.load(std::memory_order_acquire);
     }
 
@@ -219,38 +215,47 @@ public:
     }
     inline uint32_t inst_count()
     {
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_inst_count.load(std::memory_order_relaxed);
     }
     inline uint32_t ttl_count()
     {
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_ttl_count.load(std::memory_order_relaxed);
     }
     inline uint32_t dds_count()
     {
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_dds_count.load(std::memory_order_relaxed);
     }
     inline uint32_t wait_count()
     {
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_wait_count.load(std::memory_order_relaxed);
     }
     inline uint32_t clear_error_count()
     {
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_clear_error_count.load(std::memory_order_relaxed);
     }
     inline uint32_t loopback_count()
     {
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_loopback_count.load(std::memory_order_relaxed);
     }
     inline uint32_t clock_count()
     {
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_clock_count.load(std::memory_order_relaxed);
     }
     inline uint32_t spi_count()
     {
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_spi_count.load(std::memory_order_relaxed);
     }
     inline uint32_t underflow_cycle()
     {
+        const_cast<DummyPulser*>(this)->forward_time();
         return m_underflow_cycle.load(std::memory_order_relaxed);
     }
 
@@ -282,6 +287,8 @@ private:
     // Throw an error if `block` is `true` and the command queue is empty.
     void forward_time(bool block=false)
     {
+        if (m_cmds_empty.load(std::memory_order_acquire))
+            return;
         std::unique_lock<std::mutex> lock(m_cmds_lock);
         forward_time(block, lock);
     }
