@@ -31,6 +31,7 @@ void test_pulser(P &p)
     using namespace std::literals;
 
     // Test TTL masks
+    printf("TTL masks\n");
     p.set_ttl_himask(0);
     assert(p.ttl_himask() == 0);
     p.set_ttl_himask(123);
@@ -42,6 +43,7 @@ void test_pulser(P &p)
     p.toggle_init();
 
     // Test TTL pulse
+    printf("Testing TTL pulse\n");
     p.release_hold();
     p.template ttl<false>(0, 10);
     p.template loopback<false>(123);
@@ -49,6 +51,7 @@ void test_pulser(P &p)
     assert(p.cur_ttl() == 0);
 
     // Test hold and release
+    printf("Testing hold and release\n");
     p.set_hold();
     p.template ttl<false>(345, 10);
     p.template loopback<false>(888);
@@ -67,7 +70,8 @@ void test_pulser(P &p)
     while (!p.is_finished()) {
     }
 
-    // Test TTL pulse
+    // Test loopback and clock
+    printf("Testing loopback and clock\n");
     p.toggle_init();
     p.release_hold();
     assert(p.cur_clock() == 255);
@@ -81,6 +85,7 @@ void test_pulser(P &p)
     assert(p.cur_clock() == 255);
 
     // Timing error
+    printf("Testing timing error\n");
     p.template wait<true>(1);
     std::this_thread::sleep_for(10ms);
     p.template wait<true>(1);
