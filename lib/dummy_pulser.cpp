@@ -70,14 +70,12 @@ NACS_EXPORT() void DummyPulser::dump_dds(std::ostream &stm, int chn)
 
 NACS_EXPORT() bool DummyPulser::try_get_result(uint32_t &res)
 {
-    if (m_results.empty()) {
-        forward_time();
-        if (m_results.empty()) {
-            return false;
-        }
-    }
+    forward_time();
+    if (m_results.empty())
+        return false;
     res = m_results.front();
     m_results.pop();
+    m_result_consumed.fetch_add(1, std::memory_order_relaxed);
     return true;
 }
 
@@ -94,8 +92,9 @@ NACS_EXPORT() uint32_t DummyPulser::get_result()
 
 NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
 {
-    if (m_results.size() >= 32)
-        throw std::overflow_error("Result number overflow.");
+    m_result_generated.fetch_add(1, std::memory_order_relaxed);
+    if (m_results.size() >= max_result_count)
+        v = 0;
     m_results.push(v);
 }
 
@@ -158,6 +157,8 @@ NACS_EXPORT() void DummyPulser::toggle_init()
     m_inst_cycle.store(0, std::memory_order_relaxed);
     m_ttl_cycle.store(0, std::memory_order_relaxed);
     m_wait_cycle.store(0, std::memory_order_relaxed);
+    m_result_generated.store(0, std::memory_order_relaxed);
+    m_result_consumed.store(0, std::memory_order_relaxed);
 }
 
 NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)

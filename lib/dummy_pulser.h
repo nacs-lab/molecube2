@@ -273,6 +273,25 @@ public:
         const_cast<DummyPulser*>(this)->forward_time();
         return m_wait_cycle.load(std::memory_order_relaxed);
     }
+    inline uint32_t result_overflow_count()
+    {
+        return result_count() - max_result_count;
+    }
+    inline uint32_t result_count()
+    {
+        const_cast<DummyPulser*>(this)->forward_time();
+        return uint32_t(m_results.size());
+    }
+    inline uint32_t result_generated()
+    {
+        const_cast<DummyPulser*>(this)->forward_time();
+        return m_result_generated.load(std::memory_order_relaxed);
+    }
+    inline uint32_t result_consumed()
+    {
+        const_cast<DummyPulser*>(this)->forward_time();
+        return m_result_consumed.load(std::memory_order_relaxed);
+    }
 
     DummyPulser();
     DummyPulser(DummyPulser &&other);
@@ -316,6 +335,7 @@ private:
     bool run_past_cmds(time_point_t t);
 
     static constexpr int NDDS = 22;
+    static constexpr uint32_t max_result_count = 4097;
 
     std::atomic<uint32_t> m_ttl_hi{0};
     std::atomic<uint32_t> m_ttl_lo{0};
@@ -340,6 +360,10 @@ private:
     std::atomic<uint32_t> m_inst_cycle{0};
     std::atomic<uint32_t> m_ttl_cycle{0};
     std::atomic<uint32_t> m_wait_cycle{0};
+    std::atomic<uint32_t> m_result_overflow_count{0};
+    std::atomic<uint32_t> m_result_count{0};
+    std::atomic<uint32_t> m_result_generated{0};
+    std::atomic<uint32_t> m_result_consumed{0};
 
     std::mutex m_cmds_lock;
 
