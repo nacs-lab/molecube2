@@ -308,6 +308,22 @@ public:
     {
         return read(0x2c);
     }
+    inline uint32_t result_overflow_count()
+    {
+        return read(0x2d);
+    }
+    inline uint32_t result_count()
+    {
+        return read(0x2e);
+    }
+    inline uint32_t result_generated()
+    {
+        return read(0x2f);
+    }
+    inline uint32_t result_consumed()
+    {
+        return read(0x30);
+    }
 
     Pulser(volatile void *const addr)
         : m_addr(*static_cast<volatile uint32_t*>(addr))
