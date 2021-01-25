@@ -22,6 +22,7 @@
 #include <chrono>
 #include <stdio.h>
 #include <thread>
+#include <vector>
 
 #include <nacs-utils/log.h>
 #include <nacs-seq/seq.h>
@@ -337,6 +338,36 @@ void test_pulser(P &p)
         consume_result();
         check_inst();
     }
+
+    // Test result counters and result overflow
+    printf("  Testing result counters and result overflow\n");
+    std::vector<uint32_t> expected;
+    assert(p.result_overflow_count() == 0);
+    p.toggle_init();
+    reset_count();
+    p.release_hold();
+    do {
+        for (int i = 0; i < 256; i++) {
+            uint32_t vl = (uint32_t)expected.size();
+            p.template loopback<false>(vl);
+            expected.push_back(vl);
+            inst_queued();
+            loopback_finished();
+            generate_result();
+        }
+        while (!p.is_finished()) {
+        }
+        check_inst();
+    } while (p.result_overflow_count() == 0);
+    for (uint32_t i = 0, novf = p.result_overflow_count(); i < novf; i++)
+        expected[expected.size() - 1 - i] = 0;
+    for (size_t i = 0; i < expected.size(); i++) {
+        assert(p.get_result() == expected[i]);
+        consume_result();
+        check_inst();
+    }
+    assert(p.result_count() == 0);
+    assert(p.result_overflow_count() == 0);
 }
 
 int main()

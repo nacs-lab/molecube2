@@ -275,7 +275,10 @@ public:
     }
     inline uint32_t result_overflow_count()
     {
-        return result_count() - max_result_count;
+        auto rc = result_count();
+        if (rc > max_result_count)
+            return rc - max_result_count;
+        return 0;
     }
     inline uint32_t result_count()
     {
@@ -360,8 +363,6 @@ private:
     std::atomic<uint32_t> m_inst_cycle{0};
     std::atomic<uint32_t> m_ttl_cycle{0};
     std::atomic<uint32_t> m_wait_cycle{0};
-    std::atomic<uint32_t> m_result_overflow_count{0};
-    std::atomic<uint32_t> m_result_count{0};
     std::atomic<uint32_t> m_result_generated{0};
     std::atomic<uint32_t> m_result_consumed{0};
 
