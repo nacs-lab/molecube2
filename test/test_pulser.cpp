@@ -69,6 +69,9 @@ void test_pulser(P &p)
     uint32_t inst_cycle = 0;
     uint32_t ttl_cycle = 0;
     uint32_t wait_cycle = 0;
+    uint32_t result_count = 0;
+    uint32_t result_generated = 0;
+    uint32_t result_consumed = 0;
     auto inst_queued = [&] () {
         inst_word_count += 2;
         assert(p.inst_word_count() == inst_word_count);
@@ -88,6 +91,9 @@ void test_pulser(P &p)
         assert(p.inst_cycle() == inst_cycle);
         assert(p.ttl_cycle() == ttl_cycle);
         assert(p.wait_cycle() == wait_cycle);
+        assert(p.result_count() == result_count);
+        assert(p.result_generated() == result_generated);
+        assert(p.result_consumed() == result_consumed);
     };
     auto ttl_finished = [&] (uint32_t cycle) {
         ttl_count += 1;
@@ -115,6 +121,15 @@ void test_pulser(P &p)
         clock_count += 1;
         inst_finished(NaCs::Seq::PulseTime::Clock);
     };
+    auto generate_result = [&] {
+        result_generated++;
+        result_count++;
+    };
+    auto consume_result = [&] {
+        result_consumed++;
+        assert(result_count > 0);
+        result_count--;
+    };
     auto reset_count = [&] {
         inst_word_count = 0;
         inst_count = 0;
@@ -127,6 +142,8 @@ void test_pulser(P &p)
         inst_cycle = 0;
         ttl_cycle = 0;
         wait_cycle = 0;
+        result_generated = 0;
+        result_consumed = 0;
         assert(p.inst_word_count() == 0);
         check_inst();
     };
@@ -142,7 +159,9 @@ void test_pulser(P &p)
         inst_queued();
         p.template loopback<false>(vl);
         inst_queued();
+        generate_result();
         assert(p.get_result() == vl);
+        consume_result();
         assert(p.cur_ttl() == v);
         ttl_finished(10);
         loopback_finished();
@@ -152,7 +171,9 @@ void test_pulser(P &p)
     inst_queued();
     p.template loopback<false>(0);
     inst_queued();
+    generate_result();
     assert(p.get_result() == 0);
+    consume_result();
     assert(p.cur_ttl() == 0xffffffff);
     ttl_finished(10);
     loopback_finished();
@@ -161,7 +182,9 @@ void test_pulser(P &p)
     inst_queued();
     p.template loopback<false>(0xffffffff);
     inst_queued();
+    generate_result();
     assert(p.get_result() == 0xffffffff);
+    consume_result();
     assert(p.cur_ttl() == 0);
     ttl_finished(10);
     loopback_finished();
@@ -181,7 +204,9 @@ void test_pulser(P &p)
     assert(!p.try_get_result(res0));
     assert(p.cur_ttl() == 0);
     p.release_hold();
+    generate_result();
     assert(p.get_result() == 888);
+    consume_result();
     assert(p.cur_ttl() == 345);
     ttl_finished(10);
     loopback_finished();
@@ -210,7 +235,9 @@ void test_pulser(P &p)
         inst_queued();
         p.template loopback<false>(vl);
         inst_queued();
+        generate_result();
         assert(p.get_result() == vl);
+        consume_result();
         clock_finished();
         loopback_finished();
         check_inst();
@@ -237,7 +264,9 @@ void test_pulser(P &p)
     inst_queued();
     p.template loopback<false>(1);
     inst_queued();
+    generate_result();
     assert(p.get_result() == 1);
+    consume_result();
     clear_error_finished();
     loopback_finished();
     check_inst();
@@ -285,19 +314,27 @@ void test_pulser(P &p)
         p.template dds_get_freq<false>(0);
         inst_queued();
         dds_finished();
+        generate_result();
         p.template loopback<false>(vl);
         inst_queued();
         loopback_finished();
+        generate_result();
         p.template dds_get_amp<false>(0);
         inst_queued();
         dds_finished();
+        generate_result();
         p.template loopback<false>(vl);
         inst_queued();
         loopback_finished();
+        generate_result();
         assert(p.get_result() == 0);
+        consume_result();
         assert(p.get_result() == vl);
+        consume_result();
         assert(p.get_result() == 0);
+        consume_result();
         assert(p.get_result() == vl);
+        consume_result();
         check_inst();
     }
 }
