@@ -346,8 +346,9 @@ void test_pulser(P &p)
     p.toggle_init();
     reset_count();
     p.release_hold();
-    do {
-        for (int i = 0; i < 256; i++) {
+    uint32_t max_res = 0;
+    auto gen_res = [&] (int n=256) {
+        for (int i = 0; i < n; i++) {
             uint32_t vl = (uint32_t)expected.size();
             p.template loopback<false>(vl);
             expected.push_back(vl);
@@ -358,13 +359,57 @@ void test_pulser(P &p)
         while (!p.is_finished()) {
         }
         check_inst();
-    } while (p.result_overflow_count() == 0);
-    for (uint32_t i = 0, novf = p.result_overflow_count(); i < novf; i++)
-        expected[expected.size() - 1 - i] = 0;
-    for (size_t i = 0; i < expected.size(); i++) {
-        assert(p.get_result() == expected[i]);
-        consume_result();
-        check_inst();
+        assert(p.result_count() > p.result_overflow_count());
+    };
+    auto mask_results = [&] {
+        auto novf = p.result_overflow_count();
+        auto nres = expected.size();
+        for (uint32_t i = 0; i < novf; i++) {
+            expected[nres - 1 - i] = 0;
+        }
+    };
+    auto gen_until_overflow = [&] (int n=256) {
+        do {
+            gen_res(n);
+        } while (p.result_overflow_count() == 0);
+        if (max_res > 0) {
+            assert(p.result_count() - p.result_overflow_count() == max_res);
+        }
+        else {
+            max_res = p.result_count() - p.result_overflow_count();
+            assert(max_res > 4096);
+        }
+        mask_results();
+    };
+    auto check_res = [&] (int maxn=256) {
+        for (int i = 0; i < maxn && !expected.empty(); i++) {
+            auto e = expected[0];
+            expected.erase(expected.begin());
+            assert(p.get_result() == e);
+            consume_result();
+            check_inst();
+        }
+        return !expected.empty();
+    };
+    gen_until_overflow();
+    check_res(512);
+    assert(p.result_overflow_count() == 0);
+    gen_until_overflow(512);
+    check_res(512);
+    assert(p.result_overflow_count() == 0);
+    gen_until_overflow(1024);
+    check_res(1024);
+    assert(p.result_overflow_count() == 0);
+    check_res(512);
+    gen_until_overflow(2048);
+    check_res(2048);
+    assert(p.result_overflow_count() == 0);
+    check_res(1024);
+    gen_until_overflow(4096);
+    check_res(4096);
+    assert(p.result_overflow_count() == 0);
+    check_res(2048);
+    while (check_res()) {
     }
     assert(p.result_count() == 0);
     assert(p.result_overflow_count() == 0);
