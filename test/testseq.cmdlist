@@ -1,0 +1,17 @@
+#
+ttl(0)=0 t=1us # set ttl0 to 0 and wait for 1 us (minimum and default wait time is 30ns)
+ttl(0)=1 t=1us
+ttl(0)=0 # 30ns
+ttl(1)=1 t=100ns
+ttl(1)=0 t=90ns
+ttl(1)=1 t=80ns
+ttl(1)=0 t=70ns
+ttl(1)=1 t=60ns
+ttl(1)=0 t=50ns
+freq(0)=1MHz # 0.5us
+amp(0)=0.1 # 0.5us
+wait(1.2us)
+amp(0)=0
+clock(49) # 50ns, clock period 1us
+wait(8us)
+clock(off)
