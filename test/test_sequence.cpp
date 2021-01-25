@@ -23,6 +23,7 @@
 #include <nacs-seq/cmdlist.h>
 
 #include <fstream>
+#include <iostream>
 
 #include <inttypes.h>
 
@@ -59,7 +60,7 @@ int main(int argc, char **argv)
         seq = parse_file(argv[1]);
     }
     catch (const SyntaxError &err) {
-        printf("Error parsing startup script: %s\n", err.what());
+        std::cerr << "Error parsing startup script:\n" << err;
         return 1;
     }
 
