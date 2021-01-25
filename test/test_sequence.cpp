@@ -83,6 +83,7 @@ int main(int argc, char **argv)
     while (!finished) {
         using namespace std::literals;
         std::this_thread::sleep_for(1ms);
+        ctrl->run_frontend();
     }
     printf("Sequence finished.\n");
 
