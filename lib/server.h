@@ -81,6 +81,7 @@ private:
     zmq::message_t m_empty{0};
     volatile std::atomic_bool m_running{false};
     std::vector<SeqStatus> m_seq_status{};
+    uint64_t m_name_id = 0;
     NamesConfig m_ttl_names;
     NamesConfig m_dds_names;
 };

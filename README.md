@@ -187,3 +187,10 @@ TODO
 * `get_ttl_names`
 
     Similar to `get_ttl_names`. Use the DDS instead of TTL channel number.
+
+* `name_id`
+
+    No argument and similar to `state_id`,
+    return an incrementing 64bit ID followed by a 64bit process ID.
+
+    The caller can use this to avoid polling for name.

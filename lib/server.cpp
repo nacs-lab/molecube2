@@ -417,8 +417,10 @@ bool Server::process_set_names(zmq::message_t &msg, NamesConfig &names)
         }
         p += n + 1;
     }
-    if (has_set)
+    if (has_set) {
         names.save();
+        m_name_id++;
+    }
 
     return has_set;
 }
@@ -565,6 +567,11 @@ void Server::process_zmq()
     else if (ZMQ::match(msg, "state_id")) {
         std::array<uint64_t,2> id{m_ctrl->get_state_id(), m_id};
         nacsDbg("state_id\n");
+        send_reply(addr, ZMQ::bits_msg(id));
+    }
+    else if (ZMQ::match(msg, "name_id")) {
+        std::array<uint64_t,2> id{m_name_id, m_id};
+        nacsDbg("name_id\n");
         send_reply(addr, ZMQ::bits_msg(id));
     }
     else if (ZMQ::match(msg, "override_ttl")) {
