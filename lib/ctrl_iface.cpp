@@ -53,8 +53,8 @@ bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override, call
     auto key = cache_key(op, operand, is_override);
     auto t = getTime();
     auto &entry = m_cache[key];
-    if (t - entry.t <= 500000000) {
-        // < 0.5s
+    if (t - entry.t <= 100000000) {
+        // < 0.1s
         cb(entry.val);
         return true;
     }
