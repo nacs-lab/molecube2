@@ -42,7 +42,7 @@ void CtrlIFace::CmdCache::set(ReqOP op, uint32_t operand, bool is_override, uint
     if (!is_override && (op == DDSFreq || op == DDSAmp || op == DDSPhase)) {
         key = cache_key(op, operand, true);
         auto it = m_cache.find(key);
-        if (it != m_cache.end()) {
+        if (it != m_cache.end() && it->second.val != uint32_t(-1)) {
             update_entry(it->second);
         }
     }
