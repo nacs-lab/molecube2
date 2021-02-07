@@ -658,13 +658,18 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     backend_event();
 
     Runner runner(*this, seq->ttl_mask, seq->seq_len_ns);
-    if (unlikely(seq->is_cmd)) {
-        Seq::CmdList::ExeState exestate;
-        exestate.run(runner, seq->code, seq->code_len);
+    try {
+        if (unlikely(seq->is_cmd)) {
+            Seq::CmdList::ExeState exestate;
+            exestate.run(runner, seq->code, seq->code_len);
+        }
+        else {
+            Seq::ByteCode::ExeState exestate;
+            exestate.run(runner, seq->code, seq->code_len);
+        }
     }
-    else {
-        Seq::ByteCode::ExeState exestate;
-        exestate.run(runner, seq->code, seq->code_len);
+    catch (const std::exception &err) {
+        Log::error("Error while running sequence: %s.\n", err.what());
     }
     // Stop the timing check with a short wait.
     // Do this before releasing the hold since the effect of the time check flag
