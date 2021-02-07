@@ -275,7 +275,8 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     // Not long enough
     if (!recv_more(msg) || msg.size() < 12)
         return false;
-    auto msg_data = (const uint8_t*)msg.data();
+    auto orig_msg_data = (const uint8_t*)msg.data();
+    auto msg_data = orig_msg_data;
     auto msg_sz = msg.size();
 
     Timer timer;
@@ -372,9 +373,15 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     };
 
     auto notify = new Notify(*this, std::move(addr), std::move(timer));
+    // Moving a ZMQ message **MAY** copy data and may change the valid address
+    // since for small message the data may be stored inline.
+    // Therefore, we need to update the pointer after we move the message...
+    auto offset = msg_data - orig_msg_data;
+    auto new_msg = new zmq::message_t;
+    new_msg->move(msg);
+    msg_data = (const uint8_t*)new_msg->data() + offset;
     auto id = m_ctrl->run_code(is_cmd, len_ns, ttl_mask, msg_data, msg_sz,
-                               std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify),
-                               std::move(msg));
+                               std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify), new_msg);
     notify->id = id;
     m_seq_status.push_back(SeqStatus{id});
     Log::info("Sequence %llu scheduled.\n", (unsigned long long)id);
