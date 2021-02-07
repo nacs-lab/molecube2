@@ -361,18 +361,23 @@ inline void CtrlIFace::set_observed()
 NACS_EXPORT() uint64_t CtrlIFace::get_state_id()
 {
     bool has_seq = m_seq_queue.peek().second;
+    bool new_id = false;
     if (has_seq != m_had_seq) {
         // If we started or stopped running sequences since the last query,
         // always increase the state id.
         m_had_seq = has_seq;
         ++m_state_cnt;
+        new_id = true;
     }
     else if (m_dirty) {
         // And if the state changed since the last time someone looked, increase the id.
         ++m_state_cnt;
+        new_id = true;
     }
     m_dirty = false;
-    m_observed = false;
+    // We've created a new state ID which has never been observed yet.
+    if (new_id)
+        m_observed = false;
     return (uint64_t(has_seq) << 63) | m_state_cnt;
 }
 
