@@ -40,11 +40,11 @@ zmq protocol.
     Wait for a sequence to reach a specific `state`.
     Allowed values and their meanings for the `state` are,
 
-    * `0` for flushed
+    * `1` for flushed
 
         i.e. all commands sent to FPGA for execution.
 
-    * `1` for finished
+    * `2` for finished
 
         i.e. all commands has finished execution.
 
