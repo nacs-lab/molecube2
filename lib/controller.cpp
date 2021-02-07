@@ -469,7 +469,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         assert(chn < 22);
         auto &ovr = m_dds_ovr[chn];
         // If override is on, treat all set command as override command.
-        if (!is_override && ovr.freq != uint32_t(-1))
+        if (!is_override && ovr.freq != uint32_t(-1) && !has_res)
             is_override = true;
         if (is_override) {
             // Should be handled by the cache in ctrl_iface.
@@ -501,7 +501,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         assert(chn < 22);
         auto &ovr = m_dds_ovr[chn];
         // If override is on, treat all set command as override command.
-        if (!is_override && ovr.amp_enable)
+        if (!is_override && ovr.amp_enable && !has_res)
             is_override = true;
         if (is_override) {
             // Should be handled by the cache in ctrl_iface.
@@ -539,7 +539,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         assert(chn < 22);
         auto &ovr = m_dds_ovr[chn];
         // If override is on, treat all set command as override command.
-        if (!is_override && ovr.phase_enable)
+        if (!is_override && ovr.phase_enable && !has_res)
             is_override = true;
         if (is_override) {
             // Should be handled by the cache in ctrl_iface.
