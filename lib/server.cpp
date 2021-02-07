@@ -302,13 +302,11 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
             (void)_id;
             assert(id == _id);
             Log::info("Start time: %.1f ms\n", (double)timer.elapsed() / 1000000.0);
-            send_reply();
         }
         void flushed(uint64_t _id) override
         {
             (void)_id;
             assert(id == _id);
-            send_reply();
             auto status = server.find_seqstatus(id);
             assert(status);
             status->flushed = true;
@@ -322,7 +320,6 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
         {
             (void)_id;
             assert(id == _id);
-            send_reply();
             Log::info("Finish time: %.1f ms\n", (double)timer.elapsed() / 1000000.0);
             finalize(false);
         }
@@ -330,31 +327,16 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
         {
             (void)_id;
             assert(id == _id);
-            send_reply();
             finalize(true);
         }
-        Notify(Server &server, std::vector<zmq::message_t> addr, Timer timer)
+        Notify(Server &server, Timer timer)
             : server(server),
-              addr(std::move(addr)),
               timer(std::move(timer))
         {
         }
         ~Notify() override
         {
-            send_reply();
             finalize(true);
-        }
-        void send_reply()
-        {
-            if (replied)
-                return;
-            replied = true;
-            std::array<uint8_t,18> res;
-            memcpy(&res[0], &id, 8);
-            memcpy(&res[8], &server.m_id, 8);
-            res[16] = server.m_ctrl->has_ttl_ovr();
-            res[17] = server.m_ctrl->has_dds_ovr();
-            server.send_reply(addr, ZMQ::bits_msg(res));
         }
         void finalize(bool cancel)
         {
@@ -370,13 +352,11 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
             server.m_seq_status.erase(server.m_seq_status.begin() + idx);
         }
         Server &server;
-        std::vector<zmq::message_t> addr;
         Timer timer;
-        bool replied = false;
         uint64_t id = -1;
     };
 
-    auto notify = new Notify(*this, std::move(addr), std::move(timer));
+    auto notify = new Notify(*this, std::move(timer));
     // Moving a ZMQ message **MAY** copy data and may change the valid address
     // since for small message the data may be stored inline.
     // Therefore, we need to update the pointer after we move the message...
@@ -388,6 +368,12 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
                                std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify), new_msg);
     m_seq_status.push_back(SeqStatus{id});
     Log::info("Sequence %llu scheduled.\n", (unsigned long long)id);
+    std::array<uint8_t,18> res;
+    memcpy(&res[0], &id, 8);
+    memcpy(&res[8], &m_id, 8);
+    res[16] = m_ctrl->has_ttl_ovr();
+    res[17] = m_ctrl->has_dds_ovr();
+    send_reply(addr, ZMQ::bits_msg(res));
     return true;
 }
 
