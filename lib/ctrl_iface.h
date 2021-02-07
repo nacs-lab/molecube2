@@ -72,6 +72,8 @@ public:
     class ReqSeqNotify {
         // All the virtual functions are called with the request id.
     public:
+        virtual void set_id(uint64_t)
+        {}
         // Right before the sequence starts
         virtual void start(uint64_t)
         {}

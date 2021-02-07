@@ -134,6 +134,7 @@ NACS_EXPORT() uint64_t CtrlIFace::_run_code(bool is_cmd, uint64_t seq_len_ns,
 {
     set_dirty();
     auto id = ++m_seq_cnt;
+    notify->set_id(id);
     auto seq = m_seq_alloc.alloc(id, seq_len_ns, code, code_len, ttl_mask, is_cmd,
                                  std::move(notify), std::move(storage));
     {

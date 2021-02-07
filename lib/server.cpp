@@ -293,6 +293,10 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     msg_sz -= 4;
 
     struct Notify: CtrlIFace::ReqSeqNotify {
+        void set_id(uint64_t _id) override
+        {
+            id = _id;
+        }
         void start(uint64_t _id) override
         {
             (void)_id;
@@ -382,7 +386,6 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     msg_data = (const uint8_t*)new_msg->data() + offset;
     auto id = m_ctrl->run_code(is_cmd, len_ns, ttl_mask, msg_data, msg_sz,
                                std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify), new_msg);
-    notify->id = id;
     m_seq_status.push_back(SeqStatus{id});
     Log::info("Sequence %llu scheduled.\n", (unsigned long long)id);
     return true;
