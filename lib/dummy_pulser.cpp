@@ -161,7 +161,7 @@ NACS_EXPORT() void DummyPulser::toggle_init()
     m_result_consumed.store(0, std::memory_order_relaxed);
 }
 
-NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex>&)
+NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex> &locker)
 {
     if (m_cmds.empty() || (m_hold && !m_force_release)) {
         if (block)
@@ -171,7 +171,9 @@ NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::m
     do {
         auto cur_t = std::chrono::steady_clock::now();
         if (cur_t < m_release_time) {
+            locker.unlock();
             std::this_thread::sleep_until(m_release_time);
+            locker.lock();
             cur_t = std::chrono::steady_clock::now();
         }
         if (run_past_cmds(cur_t))
