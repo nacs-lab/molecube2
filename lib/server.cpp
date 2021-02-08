@@ -362,7 +362,11 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     // Therefore, we need to update the pointer after we move the message...
     auto offset = msg_data - orig_msg_data;
     auto new_msg = new zmq::message_t;
+#if CPPZMQ_VERSION >= 40301
     new_msg->move(msg);
+#else
+    new_msg->move(&msg);
+#endif
     msg_data = (const uint8_t*)new_msg->data() + offset;
     auto id = m_ctrl->run_code(is_cmd, len_ns, ttl_mask, msg_data, msg_sz,
                                std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify), new_msg);
