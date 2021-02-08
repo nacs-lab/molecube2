@@ -527,7 +527,7 @@ void Server::process_zmq()
             goto err;
         uint8_t what = ((uint8_t*)msg.data())[16];
         // Reserve what == 0 for sequence start. FIXME: implement waiting for sequence start.
-        what -= 1;
+        what = uint8_t(what - 1);
         if (what != 0 && what != 1)
             goto err;
         Log::info("Waiting for sequence %llu\n", (unsigned long long)id);
