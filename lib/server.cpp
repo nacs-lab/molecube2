@@ -372,12 +372,35 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
                                std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify), new_msg);
     m_seq_status.push_back(SeqStatus{id});
     Log::info("Sequence %llu scheduled.\n", (unsigned long long)id);
-    std::array<uint8_t,18> res;
-    memcpy(&res[0], &id, 8);
-    memcpy(&res[8], &m_id, 8);
-    res[16] = m_ctrl->has_ttl_ovr();
-    res[17] = m_ctrl->has_dds_ovr();
-    send_reply(addr, ZMQ::bits_msg(res));
+    if (is_cmd) {
+        std::array<uint8_t,18> res;
+        memcpy(&res[0], &id, 8);
+        memcpy(&res[8], &m_id, 8);
+        res[16] = m_ctrl->has_ttl_ovr();
+        res[17] = m_ctrl->has_dds_ovr();
+        send_reply(addr, ZMQ::bits_msg(res));
+    }
+    else {
+        std::vector<uint8_t> res(16 + 8);
+        memcpy(&res[0], &id, 8);
+        memcpy(&res[8], &m_id, 8);
+        get_override_dds([addr{std::move(addr)}, res{std::move(res)}, this]
+                         (auto dds_res) mutable {
+            res.insert(res.end(), dds_res.begin(), dds_res.end());
+            m_ctrl->get_ttl_ovrlo([addr{std::move(addr)}, res{std::move(res)}, this]
+                                  (uint32_t lo) mutable {
+                memcpy(&res[16], &lo, 4);
+                m_ctrl->get_ttl_ovrhi([addr{std::move(addr)}, res{std::move(res)}, this]
+                                      (uint32_t hi) mutable {
+                    memcpy(&res[20], &hi, 4);
+                    auto sz = res.size();
+                    zmq::message_t msg(sz);
+                    memcpy(msg.data(), &res[0], sz);
+                    send_reply(addr, msg);
+                });
+            });
+        });
+    }
     return true;
 }
 
@@ -506,6 +529,31 @@ void Server::process_set_startup(std::vector<zmq::message_t> &addr, zmq::message
     send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
 }
 
+template<typename CB>
+void Server::get_override_dds(CB cb)
+{
+    struct get_override_dds {
+        CB cb;
+        std::vector<uint8_t> res{};
+        ~get_override_dds()
+        {
+            // This should be called after everyone is done with the callback.
+            cb(std::move(res));
+        }
+    };
+    std::shared_ptr<get_override_dds> info(new get_override_dds{std::move(cb)});
+    for (int i: m_ctrl->get_active_dds()) {
+        for (int typ = 0; typ < 3; typ++) {
+            m_ctrl->get_dds_ovr(dds_ops[typ], i,
+                                [info, typ, i] (uint32_t v) {
+                                    if (v == uint32_t(-1))
+                                        return;
+                                    push_dds_res(info->res, uint8_t((typ << 6) | i), v);
+                                });
+        }
+    }
+}
+
 void Server::process_zmq()
 {
     auto addr = ZMQ::recv_addr(m_zmqsock);
@@ -627,31 +675,13 @@ void Server::process_zmq()
         send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
     }
     else if (ZMQ::match(msg, "get_override_dds")) {
-        struct get_override_dds {
-            Server *server;
-            std::vector<zmq::message_t> addr;
-            std::vector<uint8_t> res{};
-            ~get_override_dds()
-            {
-                // This should be called after everyone is done with the callback.
-                auto sz = res.size();
-                zmq::message_t msg(sz);
-                memcpy(msg.data(), &res[0], sz);
-                server->send_reply(addr, msg);
-            }
-        };
         nacsDbg("get_override_dds\n");
-        std::shared_ptr<get_override_dds> info(new get_override_dds{this, std::move(addr)});
-        for (int i: m_ctrl->get_active_dds()) {
-            for (int typ = 0; typ < 3; typ++) {
-                m_ctrl->get_dds_ovr(dds_ops[typ], i,
-                                    [info, typ, i] (uint32_t v) {
-                                        if (v == uint32_t(-1))
-                                            return;
-                                        push_dds_res(info->res, uint8_t((typ << 6) | i), v);
-                                    });
-            }
-        }
+        get_override_dds([addr{std::move(addr)}, this] (const auto &res) mutable {
+            auto sz = res.size();
+            zmq::message_t msg(sz);
+            memcpy(msg.data(), &res[0], sz);
+            send_reply(addr, msg);
+        });
     }
     else if (ZMQ::match(msg, "set_dds")) {
         if (!recv_more(msg) || !process_set_dds(msg, false))

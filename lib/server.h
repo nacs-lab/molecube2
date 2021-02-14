@@ -72,6 +72,9 @@ private:
     void run_startup();
     void process_set_startup(std::vector<zmq::message_t> &addr, zmq::message_t &msg);
 
+    template<typename CB>
+    void get_override_dds(CB cb);
+
     const Config &m_conf;
     const uint64_t m_id;
     std::unique_ptr<CtrlIFace> m_ctrl;
