@@ -362,6 +362,7 @@ bool Controller<Pulser>::concurrent_get(ReqOP op, uint32_t operand, bool is_over
 template<typename Pulser>
 bool Controller<Pulser>::check_dds(int chn)
 {
+    assert(!m_cmd_waiting);
     if (m_dds_pending_reset[chn]) {
         auto &ovr = m_dds_ovr[chn];
         ovr.phase_enable = 0;
@@ -377,6 +378,7 @@ bool Controller<Pulser>::check_dds(int chn)
 template<typename Pulser>
 void Controller<Pulser>::dump_dds(int i)
 {
+    assert(!m_cmd_waiting);
     string_ostream stm;
     m_p.dump_dds(stm, i);
     auto str = stm.get_buf();
@@ -395,6 +397,7 @@ void Controller<Pulser>::dump_dds(int i)
 template<typename Pulser>
 void Controller<Pulser>::detect_dds(bool force)
 {
+    assert(!m_cmd_waiting);
     const auto t = getCoarseTime();
     auto has_pending_reset = [&] () {
         for (auto v: m_dds_pending_reset) {
@@ -700,14 +703,16 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
         Log::warn("Timing failures: %u cycles.\n", m_p.underflow_cycle());
     m_p.clear_error();
 
-    // Doing this check before this sequence will make the current sequence
-    // more likely to work. However, that increase the latency and the DDS
-    // reset only happen very infrequently so let's do it after the sequence
-    // for better efficiency.
-    for (int i = 0; i < NDDS; i++) {
-        if (m_dds_exist[i].load(std::memory_order_relaxed) && check_dds(i)) {
-            Log::info("DDS %d reinit\n", i);
-            dump_dds(i);
+    if (!m_cmd_waiting) {
+        // Doing this check before this sequence will make the current sequence
+        // more likely to work. However, that increase the latency and the DDS
+        // reset only happen very infrequently so let's do it after the sequence
+        // for better efficiency.
+        for (int i = 0; i < NDDS; i++) {
+            if (m_dds_exist[i].load(std::memory_order_relaxed) && check_dds(i)) {
+                Log::info("DDS %d reinit\n", i);
+                dump_dds(i);
+            }
         }
     }
 }
@@ -727,9 +732,13 @@ void Controller<Pulser>::worker()
         }
         if (m_p.is_finished())
             sync_ttl();
-        detect_dds();
+        if (!m_cmd_waiting) {
+            detect_dds();
+        }
         process_reqcmd<false>();
-        detect_dds();
+        if (!m_cmd_waiting) {
+            detect_dds();
+        }
     }
 }
 
