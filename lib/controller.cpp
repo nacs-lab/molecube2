@@ -101,7 +101,7 @@ private:
     bool m_dds_pending_reset[NDDS] = {false};
     std::atomic<bool> m_dds_exist[NDDS] = {};
     uint64_t m_dds_check_time = 0;
-    FixedQueue<ReqCmd*,16> m_cmd_waiting;
+    ReqCmd *m_cmd_waiting = nullptr;
 
     std::thread m_worker;
 };
@@ -590,10 +590,10 @@ template<typename Pulser>
 template<bool checked>
 std::pair<bool,bool> Controller<Pulser>::try_get_result()
 {
-    if (!m_cmd_waiting.empty()) {
-        if (!m_p.try_get_result(m_cmd_waiting.front()->val))
+    if (m_cmd_waiting) {
+        if (!m_p.try_get_result(m_cmd_waiting->val))
             return {true, false};
-        m_cmd_waiting.pop();
+        m_cmd_waiting = nullptr;
         finish_cmd();
         if (!checked) {
             // The time is not very important, notify the frontend.
@@ -613,14 +613,14 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_reqcmd(Runner *runner)
     std::tie(processed, res_read) = try_get_result<checked>();
     if (res_read)
         return {0, true};
+    // Already has a command waiting for result.
+    // We need to wait for it to finished before being able to process the next one.
+    if (m_cmd_waiting)
+        return {0, true};
     if (auto cmd = get_cmd()) {
-        // If the command potentially have a result
-        // and if the result queue is already full, wait until the queue has space.
-        if (cmd->has_res && m_cmd_waiting.full())
-            return {0, true};
         auto res = run_cmd<checked>(cmd, runner);
         if (res.second) {
-            m_cmd_waiting.push(cmd);
+            m_cmd_waiting = cmd;
         }
         else {
             finish_cmd();
