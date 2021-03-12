@@ -34,7 +34,7 @@ add_definitions(-Wall -Wextra -g -pthread -faligned-new -fvisibility=hidden
 include_directories(${MCDEP_INCLUDE_DIRS} ${YAML_CPP_INCLUDE_DIR})
 
 set(LINKER_FLAGS -Wl,--as-needed -Wl,--no-undefined -Wl,--gc-sections
-  -pthread -fno-math-errno -Wl,-Bsymbolic)
+  -pthread -fno-math-errno -Wl,-Bsymbolic-functions)
 
 cmake_c_add_flags(CMAKE_C_FLAGS -std=gnu11)
 cmake_c_add_flags(CMAKE_CXX_FLAGS -std=gnu++17 -fno-rtti)
