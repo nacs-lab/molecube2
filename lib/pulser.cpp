@@ -144,6 +144,15 @@ NACS_EXPORT() bool Pulser::check_dds(int chn, bool force)
     return true;
 }
 
+NACS_EXPORT() void Pulser::clear_results()
+{
+    // In case the previous server crashed and left some results unread
+    // clear then so they won't mess us up.
+    while (num_results()) {
+        pop_result();
+    }
+}
+
 constexpr uint32_t major_ver = 5;
 constexpr uint32_t minor_ver = 2;
 
