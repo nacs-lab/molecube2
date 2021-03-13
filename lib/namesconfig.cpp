@@ -30,7 +30,7 @@ NACS_EXPORT() void NamesConfig::save()
 {
     std::ofstream fstm(m_fname);
     if (!fstm.good()) {
-        Log::error("Cannot open %s for saving.", m_fname.c_str());
+        Log::error("Cannot open %s for saving.\n", m_fname.c_str());
         return;
     }
     YAML::Emitter yaml;
