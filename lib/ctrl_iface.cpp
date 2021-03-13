@@ -361,7 +361,8 @@ inline void CtrlIFace::set_observed()
 
 NACS_EXPORT() uint64_t CtrlIFace::get_state_id()
 {
-    bool has_seq = m_seq_queue.peek().second;
+    auto [seq, done] = m_seq_queue.peek();
+    bool has_seq = seq && !done;
     bool new_id = false;
     if (has_seq != m_had_seq) {
         // If we started or stopped running sequences since the last query,
