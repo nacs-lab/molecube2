@@ -11,6 +11,8 @@ Restart=always
 RestartSec=1
 KillMode=process
 KillSignal=SIGINT
+User=molecube
+Group=molecube
 
 [Install]
 WantedBy=multi-user.target
