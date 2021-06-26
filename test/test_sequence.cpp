@@ -20,7 +20,7 @@
 
 #include <nacs-utils/errors.h>
 #include <nacs-utils/streams.h>
-#include <nacs-seq/cmdlist.h>
+#include <nacs-seq/zynq/cmdlist.h>
 
 #include <fstream>
 #include <iostream>
@@ -41,9 +41,10 @@ static sequence parse_file(const char *name)
     std::ifstream istm(name);
     string_ostream sstm;
     sequence res;
-    res.ttl_mask = Seq::CmdList::parse(sstm, istm);
+    res.ttl_mask = Seq::Zynq::CmdList::parse(sstm, istm, 1);
     res.seq = sstm.get_buf();
-    res.len_ns = Seq::CmdList::total_time((uint8_t*)res.seq.data(), res.seq.size()) * 10;
+    res.len_ns = Seq::Zynq::CmdList::total_time((uint8_t*)res.seq.data(),
+                                                res.seq.size(), 1) * 10;
     printf("Sequence length: %" PRIu64 " ns\n", res.len_ns);
     return res;
 }

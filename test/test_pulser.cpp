@@ -25,7 +25,7 @@
 #include <vector>
 
 #include <nacs-utils/log.h>
-#include <nacs-seq/seq.h>
+#include <nacs-seq/zynq/pulse_time.h>
 
 template<typename P>
 void test_pulser(P &p)
@@ -103,7 +103,7 @@ void test_pulser(P &p)
     };
     auto dds_finished = [&] () {
         dds_count += 1;
-        inst_finished(NaCs::Seq::PulseTime::DDSAmp);
+        inst_finished(NaCs::Seq::Zynq::PulseTime::DDSAmp);
     };
     auto wait_finished = [&] (uint32_t cycle) {
         wait_count += 1;
@@ -112,15 +112,15 @@ void test_pulser(P &p)
     };
     auto clear_error_finished = [&] () {
         clear_error_count += 1;
-        inst_finished(NaCs::Seq::PulseTime::Clear);
+        inst_finished(NaCs::Seq::Zynq::PulseTime::Clear);
     };
     auto loopback_finished = [&] () {
         loopback_count += 1;
-        inst_finished(NaCs::Seq::PulseTime::LoopBack);
+        inst_finished(NaCs::Seq::Zynq::PulseTime::LoopBack);
     };
     auto clock_finished = [&] () {
         clock_count += 1;
-        inst_finished(NaCs::Seq::PulseTime::Clock);
+        inst_finished(NaCs::Seq::Zynq::PulseTime::Clock);
     };
     auto generate_result = [&] {
         result_generated++;

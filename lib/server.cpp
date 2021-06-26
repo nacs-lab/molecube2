@@ -24,7 +24,7 @@
 #include <nacs-utils/streams.h>
 #include <nacs-utils/timer.h>
 
-#include <nacs-seq/cmdlist.h>
+#include <nacs-seq/zynq/cmdlist.h>
 
 #include <chrono>
 #include <fstream>
@@ -478,8 +478,9 @@ void Server::process_set_startup(std::vector<zmq::message_t> &addr, zmq::message
     const_istream istm(data, data + size);
     string_ostream sstm;
     uint32_t ttl_mask;
+    uint32_t ver = 1;
     try {
-        ttl_mask = Seq::CmdList::parse(sstm, istm);
+        ttl_mask = Seq::Zynq::CmdList::parse(sstm, istm, ver);
     }
     catch (const SyntaxError &err) {
         Log::error("Error parsing startup script: %s\n", err.what());
@@ -508,10 +509,10 @@ void Server::process_set_startup(std::vector<zmq::message_t> &addr, zmq::message
     std::ofstream otstm(ttmpname);
     std::ofstream obstm(btmpname);
     otstm.write(data, size);
-    uint32_t ver = 1;
     obstm.write((char*)&ver, 4);
     auto bstr = sstm.get_buf();
-    uint64_t len_ns = Seq::CmdList::total_time((uint8_t*)bstr.data(), bstr.size()) * 10;
+    uint64_t len_ns = Seq::Zynq::CmdList::total_time((uint8_t*)bstr.data(),
+                                                     bstr.size(), ver) * 10;
     obstm.write((char*)&len_ns, 8);
     obstm.write((char*)&ttl_mask, 4);
     obstm.write(bstr.data(), bstr.size());
