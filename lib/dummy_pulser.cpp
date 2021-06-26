@@ -18,7 +18,7 @@
 
 #include "dummy_pulser.h"
 
-#include <nacs-seq/seq.h>
+#include <nacs-seq/zynq/pulse_time.h>
 
 #include <stdexcept>
 #include <thread>
@@ -226,10 +226,10 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
     case OP::Clock:
         m_clock_count.fetch_add(1, std::memory_order_relaxed);
         m_clock.store(uint8_t(cmd.v1), std::memory_order_release);
-        return Seq::PulseTime::Clock;
+        return Seq::Zynq::PulseTime::Clock;
     case OP::DAC:
         m_spi_count.fetch_add(1, std::memory_order_relaxed);
-        return Seq::PulseTime::DAC;
+        return Seq::Zynq::PulseTime::DAC;
     case OP::Wait:
         m_wait_count.fetch_add(1, std::memory_order_relaxed);
         m_wait_cycle.fetch_add(cmd.v1, std::memory_order_relaxed);
@@ -238,41 +238,41 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
         m_clear_error_count.fetch_add(1, std::memory_order_relaxed);
         m_timing_ok.store(true, std::memory_order_release);
         m_underflow_cycle.store(0, std::memory_order_relaxed);
-        return Seq::PulseTime::Clear;
+        return Seq::Zynq::PulseTime::Clear;
     case OP::DDSSetFreq:
         m_dds_count.fetch_add(1, std::memory_order_relaxed);
         m_dds[cmd.v1].freq = cmd.v2;
-        return Seq::PulseTime::DDSFreq;
+        return Seq::Zynq::PulseTime::DDSFreq;
     case OP::DDSSetAmp:
         m_dds_count.fetch_add(1, std::memory_order_relaxed);
         m_dds[cmd.v1].amp = uint16_t(cmd.v2);
-        return Seq::PulseTime::DDSAmp;
+        return Seq::Zynq::PulseTime::DDSAmp;
     case OP::DDSSetPhase:
         m_dds_count.fetch_add(1, std::memory_order_relaxed);
         m_dds[cmd.v1].phase = uint16_t(cmd.v2);
-        return Seq::PulseTime::DDSPhase;
+        return Seq::Zynq::PulseTime::DDSPhase;
     case OP::DDSReset:
         m_dds_count.fetch_add(1, std::memory_order_relaxed);
         m_dds[cmd.v1].amp = 0;
         m_dds[cmd.v1].phase = 0;
         m_dds[cmd.v1].freq = 0;
-        return Seq::PulseTime::DDSReset;
+        return Seq::Zynq::PulseTime::DDSReset;
     case OP::LoopBack:
         m_loopback_count.fetch_add(1, std::memory_order_relaxed);
         add_result(cmd.v1);
-        return Seq::PulseTime::LoopBack;
+        return Seq::Zynq::PulseTime::LoopBack;
     case OP::DDSGetFreq:
         m_dds_count.fetch_add(1, std::memory_order_relaxed);
         add_result(m_dds[cmd.v1].freq);
-        return Seq::PulseTime::DDSFreq;
+        return Seq::Zynq::PulseTime::DDSFreq;
     case OP::DDSGetAmp:
         m_dds_count.fetch_add(1, std::memory_order_relaxed);
         add_result(m_dds[cmd.v1].amp);
-        return Seq::PulseTime::DDSAmp;
+        return Seq::Zynq::PulseTime::DDSAmp;
     case OP::DDSGetPhase:
         m_dds_count.fetch_add(1, std::memory_order_relaxed);
         add_result(m_dds[cmd.v1].phase);
-        return Seq::PulseTime::DDSPhase;
+        return Seq::Zynq::PulseTime::DDSPhase;
     default:
         throw std::runtime_error("Invalid command.");
     }
