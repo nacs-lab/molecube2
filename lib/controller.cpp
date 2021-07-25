@@ -662,12 +662,18 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
 
     Runner runner(*this, seq->ttl_mask, seq->seq_len_ns);
     try {
+        auto ver = seq->ver;
+        assert(ver == 1 || ver == 2);
         if (unlikely(seq->is_cmd)) {
             Seq::Zynq::CmdList::ExeState exestate;
+            if (ver == 2)
+                exestate.min_time = Seq::Zynq::PulseTime::Min2;
             exestate.run(runner, seq->code, seq->code_len);
         }
         else {
             Seq::Zynq::ByteCode::ExeState exestate;
+            if (ver == 2)
+                exestate.min_time = Seq::Zynq::PulseTime::Min2;
             exestate.run(runner, seq->code, seq->code_len);
         }
     }

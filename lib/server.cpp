@@ -140,7 +140,7 @@ void Server::run_startup()
     memcpy(&ver, str_data, 4);
     str_data += 4;
     str_sz -= 4;
-    if (ver != 1) {
+    if (ver != 1 && ver != 2) {
         Log::error("Wrong startup file version.\n");
         return;
     }
@@ -167,7 +167,7 @@ void Server::run_startup()
         }
         bool *finished;
     };
-    m_ctrl->run_code(true, len_ns, ttl_mask, str_data, str_sz,
+    m_ctrl->run_code(true, ver, len_ns, ttl_mask, str_data, str_sz,
                      std::make_unique<Notify>(&finished));
     while (!finished) {
         using namespace std::literals;
@@ -270,7 +270,7 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
         return false;
     uint32_t ver;
     memcpy(&ver, msg.data(), 4);
-    if (ver != 1)
+    if (ver != 1 && ver != 2)
         return false;
     // Not long enough
     if (!recv_more(msg) || msg.size() < 12)
@@ -368,7 +368,7 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     new_msg->move(&msg);
 #endif
     msg_data = (const uint8_t*)new_msg->data() + offset;
-    auto id = m_ctrl->run_code(is_cmd, len_ns, ttl_mask, msg_data, msg_sz,
+    auto id = m_ctrl->run_code(is_cmd, ver, len_ns, ttl_mask, msg_data, msg_sz,
                                std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify), new_msg);
     m_seq_status.push_back(SeqStatus{id});
     Log::info("Sequence %llu scheduled.\n", (unsigned long long)id);
