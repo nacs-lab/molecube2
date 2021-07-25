@@ -79,7 +79,7 @@ int main(int argc, char **argv)
         }
         bool *finished;
     };
-    ctrl->run_code(true, seq.len_ns, seq.ttl_mask, (const uint8_t*)seq.seq.data(),
+    ctrl->run_code(true, 1, seq.len_ns, seq.ttl_mask, (const uint8_t*)seq.seq.data(),
                    seq.seq.size(), std::make_unique<Notify>(&finished));
     while (!finished) {
         using namespace std::literals;

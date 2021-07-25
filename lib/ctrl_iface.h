@@ -195,6 +195,8 @@ protected:
         size_t code_len;
         // TTL's used in the sequence. Only these TTL's will be changed in the sequence.
         uint32_t ttl_mask;
+        // version
+        uint32_t ver;
         // Whether this is a command list or not. (`false` for bytecode).
         bool is_cmd;
         std::atomic<bool> cancel{false};
@@ -202,10 +204,10 @@ protected:
         // Only `SeqEnd` event is guaranteed to have a accompanied event fd notification.
         std::atomic<ReqSeqState> state{SeqInit};
         ReqSeq(uint64_t id, uint64_t seq_len_ns, const uint8_t *code, size_t code_len,
-               uint32_t ttl_mask, bool is_cmd,
+               uint32_t ttl_mask, uint32_t ver, bool is_cmd,
                std::unique_ptr<ReqSeqNotify> _notify, AnyPtr storage)
             : id(id), seq_len_ns(seq_len_ns), code(code), code_len(code_len),
-              ttl_mask(ttl_mask), is_cmd(is_cmd),
+              ttl_mask(ttl_mask), ver(ver), is_cmd(is_cmd),
               notify(std::move(_notify)), storage(std::move(storage))
         {
         }
@@ -306,11 +308,11 @@ public:
     void run_frontend();
 
     template<typename... Args>
-    uint64_t run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
+    uint64_t run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns, uint32_t ttl_mask,
                       const uint8_t *code, size_t code_len,
                       std::unique_ptr<ReqSeqNotify> notify, Args&&... args)
     {
-        return _run_code(is_cmd, seq_len_ns, ttl_mask, code, code_len,
+        return _run_code(is_cmd, ver, seq_len_ns, ttl_mask, code, code_len,
                          std::move(notify), AnyPtr(std::forward<Args>(args)...));
     }
     // Cancel the sequence determined by the `id`. `id == 0` means cancel all sequences.
@@ -355,7 +357,7 @@ public:
     static std::unique_ptr<CtrlIFace> create(bool dummy=false);
 
 private:
-    uint64_t _run_code(bool is_cmd, uint64_t seq_len_ns, uint32_t ttl_mask,
+    uint64_t _run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns, uint32_t ttl_mask,
                        const uint8_t *code, size_t code_len,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
