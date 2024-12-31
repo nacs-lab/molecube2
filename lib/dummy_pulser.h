@@ -23,6 +23,7 @@
 
 #include <assert.h>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <mutex>
@@ -375,7 +376,7 @@ private:
     bool m_hold{false};
     bool m_force_release{false};
 
-    DDS m_dds[NDDS];
+    std::array<DDS,NDDS> m_dds;
 
     time_point_t m_release_time{std::chrono::steady_clock::now()};
 };
