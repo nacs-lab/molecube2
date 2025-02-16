@@ -54,6 +54,7 @@ class Pulser {
             Hold = 1 << 7,
             Init = 1 << 8,
             // Control
+            TTL = 0x00000000,
             DDS = 0x10000000,
             Wait = 0x20000000,
             ClearErr = 0x30000000,
@@ -181,7 +182,7 @@ public:
     inline void ttl(uint32_t ttl, uint32_t t)
     {
         assert(t <= max_wait_t);
-        pulse<checked>(t, ttl);
+        pulse<checked>(Bits::TTL | t, ttl);
     }
     template<bool checked>
     inline void clock(uint8_t div)
