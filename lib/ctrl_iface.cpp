@@ -208,7 +208,7 @@ void CtrlIFace::send_ttl_set_cmd(uint32_t operand, bool is_override, uint32_t va
     }
 }
 
-void CtrlIFace::send_ttl_get_cmd(uint32_t operand, bool is_override, callback_t cb)
+uint32_t CtrlIFace::send_ttl_get_cmd(uint32_t operand, bool is_override)
 {
     set_observed();
     // Unsupported for now
@@ -216,36 +216,36 @@ void CtrlIFace::send_ttl_get_cmd(uint32_t operand, bool is_override, callback_t 
     uint32_t val = 0;
     if (!concurrent_get(TTL, operand, is_override, val))
         abort();
-    cb(val);
+    return val;
 }
 
-NACS_EXPORT() void CtrlIFace::set_ttl(uint32_t mask, bool val)
+NACS_EXPORT() void CtrlIFace::set_ttl(int bank, uint32_t mask, bool val)
 {
     if (!mask)
         return;
-    send_ttl_set_cmd(uint32_t(val), false, mask);
+    send_ttl_set_cmd(uint32_t(val) | uint32_t(bank << 2), false, mask);
 }
 
-NACS_EXPORT() void CtrlIFace::set_ttl_ovr(uint32_t mask, int val)
+NACS_EXPORT() void CtrlIFace::set_ttl_ovr(int bank, uint32_t mask, int val)
 {
     if (!mask)
         return;
-    send_ttl_set_cmd(uint32_t(val), true, mask);
+    send_ttl_set_cmd(uint32_t(val) | uint32_t(bank << 2), true, mask);
 }
 
-NACS_EXPORT() void CtrlIFace::get_ttl(callback_t cb)
+NACS_EXPORT() uint32_t CtrlIFace::get_ttl(int bank)
 {
-    send_ttl_get_cmd(0, false, std::move(cb));
+    return send_ttl_get_cmd(uint32_t(bank << 2), false);
 }
 
-NACS_EXPORT() void CtrlIFace::get_ttl_ovrlo(callback_t cb)
+NACS_EXPORT() uint32_t CtrlIFace::get_ttl_ovrlo(int bank)
 {
-    send_ttl_get_cmd(0, true, std::move(cb));
+    return send_ttl_get_cmd(uint32_t(bank << 2), true);
 }
 
-NACS_EXPORT() void CtrlIFace::get_ttl_ovrhi(callback_t cb)
+NACS_EXPORT() uint32_t CtrlIFace::get_ttl_ovrhi(int bank)
 {
-    send_ttl_get_cmd(1, true, std::move(cb));
+    return send_ttl_get_cmd(uint32_t(bank << 2) | 1, true);
 }
 
 NACS_EXPORT() void CtrlIFace::set_dds(ReqOP op, int chn, uint32_t val)

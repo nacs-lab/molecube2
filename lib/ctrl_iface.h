@@ -331,15 +331,15 @@ public:
     // may not response to the cancellation.
     bool cancel_seq(uint64_t id);
 
-    void set_ttl(uint32_t mask, bool val);
+    void set_ttl(int bank, uint32_t mask, bool val);
     // val = 0 => low
     // val = 1 => high
     // val = 2 => default
-    void set_ttl_ovr(uint32_t mask, int val);
+    void set_ttl_ovr(int bank, uint32_t mask, int val);
 
-    void get_ttl(callback_t cb);
-    void get_ttl_ovrlo(callback_t cb);
-    void get_ttl_ovrhi(callback_t cb);
+    uint32_t get_ttl(int bank);
+    uint32_t get_ttl_ovrlo(int bank);
+    uint32_t get_ttl_ovrhi(int bank);
 
     void set_dds(ReqOP op, int chn, uint32_t val);
     void set_dds_ovr(ReqOP op, int chn, uint32_t val);
@@ -380,7 +380,7 @@ private:
     void send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
 
     void send_ttl_set_cmd(uint32_t operand, bool is_override, uint32_t val);
-    void send_ttl_get_cmd(uint32_t operand, bool is_override, callback_t cb);
+    uint32_t send_ttl_get_cmd(uint32_t operand, bool is_override);
 
     bool m_quit{false};
 

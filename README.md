@@ -21,7 +21,10 @@ zmq protocol.
 
     Return 16 bytes ID that can be waited/operated on by `wait_seq` and `cancel_seq`.
     An ID of all bits set indicates error.
-    The ID will be followed by 2 bytes indicating if there's any TTL and DDS overrides.
+    The ID will be followed by two numbers (each `32 * nbanks` bits long)
+    indicating the current low and hi ttl override,
+    and then one byte for each DDS override (TODO DDS override info format).
+    The TTL bank number is read from the sequence itself (1 for sequence version < 3).
     The reply will be sent right away indicating that the sequence is ready to start
     or has started.
 
@@ -32,6 +35,8 @@ zmq protocol.
 
     This is similar to `run_seq` but uses an uncompressed and simpler format which
     supports all operations.
+    Also, the returned ID's will contain two bytes  indicating if there's any TTL
+    and DDS overrides instead of returning the full info for the overridden channels.
 
 * `wait_seq`
 
@@ -73,19 +78,21 @@ zmq protocol.
 
 * `override_ttl`
 
-    `[low mask: 4bytes][high mask: 4bytes][normal mask: 4bytes]`
+    `[low mask: 4bytes][high mask: 4bytes][normal mask: 4bytes][bank: 4bytes (optional)]`
 
     The three masks specify the changes to the high and low override masks to be made.
     The new high and low masks will be returned.
+    If bank number is missing, it is assumed to be 0.
     `[0: 4bytes][0: 4bytes][0: 4bytes]` is an no-op and can be used to get the current masks.
 
 * `set_ttl`
 
-    `[low mask: 4bytes][high mask: 4bytes]`
+    `[low mask: 4bytes][high mask: 4bytes][bank: 4bytes (optional)]`
 
     The two masks specify the channels to be turned on or off.
     This should have the same effect as running a sequence to turn a channel on/off.
     The new values will be returned including the override.
+    If bank number is missing, it is assumed to be 0.
     `[0: 4bytes][0: 4bytes]` is an no-op and can be used to get the current values.
 
 ### DDS

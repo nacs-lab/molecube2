@@ -418,24 +418,24 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
         send_reply(addr, ZMQ::bits_msg(res));
     }
     else {
-        std::vector<uint8_t> res(16 + 8);
+        std::vector<uint8_t> res(16 + 8 * ttl_banks);
         memcpy(&res[0], &id, 8);
         memcpy(&res[8], &m_id, 8);
-        get_override_dds([addr{std::move(addr)}, res{std::move(res)}, this]
+        get_override_dds([addr{std::move(addr)}, res{std::move(res)}, ttl_banks, this]
                          (auto dds_res) mutable {
             res.insert(res.end(), dds_res.begin(), dds_res.end());
-            m_ctrl->get_ttl_ovrlo([addr{std::move(addr)}, res{std::move(res)}, this]
-                                  (uint32_t lo) mutable {
-                memcpy(&res[16], &lo, 4);
-                m_ctrl->get_ttl_ovrhi([addr{std::move(addr)}, res{std::move(res)}, this]
-                                      (uint32_t hi) mutable {
-                    memcpy(&res[20], &hi, 4);
-                    auto sz = res.size();
-                    zmq::message_t msg(sz);
-                    memcpy(msg.data(), &res[0], sz);
-                    send_reply(addr, msg);
-                });
-            });
+            auto lo_start = &res[16];
+            auto hi_start = &res[16 + 4 * ttl_banks];
+            for (uint32_t bank = 0; bank < ttl_banks; bank++) {
+                auto lo = m_ctrl->get_ttl_ovrlo(bank);
+                auto hi = m_ctrl->get_ttl_ovrhi(bank);
+                memcpy(&lo_start[bank * 4], &lo, 4);
+                memcpy(&hi_start[bank * 4], &hi, 4);
+            }
+            auto sz = res.size();
+            zmq::message_t msg(sz);
+            memcpy(msg.data(), &res[0], sz);
+            send_reply(addr, msg);
         });
     }
     return true;
@@ -663,9 +663,20 @@ void Server::process_zmq()
         send_reply(addr, ZMQ::bits_msg(id));
     }
     else if (ZMQ::match(msg, "override_ttl")) {
-        if (!recv_more(msg) || msg.size() != 12)
+        if (!recv_more(msg))
             goto err;
+        auto msg_sz = msg.size();
         uint32_t masks[3];
+        uint32_t bank;
+        if (msg_sz == 12) {
+            bank = 0;
+        }
+        else if (msg_sz == 16) {
+            memcpy(&bank, (char*)msg.data() + 12, 4);
+        }
+        else {
+            goto err;
+        }
         memcpy(masks, msg.data(), 12);
         if (masks[0] || masks[1] || masks[2]) {
             Log::info("Override TTLs, [%08x, %08x, %08x]\n",
@@ -675,21 +686,26 @@ void Server::process_zmq()
             nacsDbg("get_override_ttl\n");
         }
         for (int i = 0; i < 3; i++)
-            m_ctrl->set_ttl_ovr(masks[i], i);
-        // get_ttl_ovr* returns immediately and we only have two functions to call
-        // so it's just as fast to do the two calls in series
-        // and it's also easier to implement this way.
-        m_ctrl->get_ttl_ovrlo([addr{std::move(addr)}, this] (uint32_t lo) mutable {
-            m_ctrl->get_ttl_ovrhi([addr{std::move(addr)}, lo, this] (uint32_t hi) mutable {
-                std::array<uint32_t,2> masks{lo, hi};
-                send_reply(addr, ZMQ::bits_msg(masks));
-            });
-        });
+            m_ctrl->set_ttl_ovr(bank, masks[i], i);
+        std::array<uint32_t,2> new_masks{m_ctrl->get_ttl_ovrlo(bank),
+            m_ctrl->get_ttl_ovrhi(bank)};
+        send_reply(addr, ZMQ::bits_msg(new_masks));
     }
     else if (ZMQ::match(msg, "set_ttl")) {
-        if (!recv_more(msg) || msg.size() != 8)
+        if (!recv_more(msg))
             goto err;
+        auto msg_sz = msg.size();
         uint32_t masks[2];
+        uint32_t bank;
+        if (msg_sz == 8) {
+            bank = 0;
+        }
+        else if (msg_sz == 12) {
+            memcpy(&bank, (char*)msg.data() + 8, 4);
+        }
+        else {
+            goto err;
+        }
         memcpy(masks, msg.data(), 8);
         if (masks[0] || masks[1]) {
             Log::info("Set TTLs, [%08x, %08x]\n", masks[0], masks[1]);
@@ -697,14 +713,13 @@ void Server::process_zmq()
         else {
             nacsDbg("get_ttl\n");
         }
-        m_ctrl->set_ttl(masks[0], false);
-        m_ctrl->set_ttl(masks[1], true);
-        m_ctrl->get_ttl([addr{std::move(addr)}, masks, this] (uint32_t v) mutable {
-            // The get can arrive faster than the set so manually mask the
-            // value to avoid confusion.
-            v = (v & ~masks[0]) | masks[1];
-            send_reply(addr, ZMQ::bits_msg(v));
-        });
+        m_ctrl->set_ttl(bank, masks[0], false);
+        m_ctrl->set_ttl(bank, masks[1], true);
+        auto new_mask = m_ctrl->get_ttl(bank);
+        // The get can arrive faster than the set so manually mask the
+        // value to avoid confusion.
+        new_mask = (new_mask & ~masks[0]) | masks[1];
+        send_reply(addr, ZMQ::bits_msg(new_mask));
     }
     else if (ZMQ::match(msg, "override_dds")) {
         if (!recv_more(msg) || !process_set_dds(msg, true))
