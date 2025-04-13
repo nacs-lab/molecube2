@@ -32,7 +32,7 @@ using namespace Molecube;
 
 struct sequence {
     std::string seq;
-    uint32_t ttl_mask;
+    std::array<uint32_t,NUM_TTL_BANKS> ttl_mask{};
     uint64_t len_ns;
 };
 
@@ -41,7 +41,7 @@ static sequence parse_file(const char *name)
     std::ifstream istm(name);
     string_ostream sstm;
     sequence res;
-    res.ttl_mask = Seq::Zynq::CmdList::parse(sstm, istm, 1);
+    res.ttl_mask[0] = Seq::Zynq::CmdList::parse(sstm, istm, 1);
     res.seq = sstm.get_buf();
     res.len_ns = Seq::Zynq::CmdList::total_time((uint8_t*)res.seq.data(),
                                                 res.seq.size(), 1) * 10;

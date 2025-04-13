@@ -19,6 +19,8 @@
 #ifndef LIBMOLECUBE_CTRL_IFACE_H
 #define LIBMOLECUBE_CTRL_IFACE_H
 
+#include "pulser_common.h"
+
 #include <nacs-utils/container.h>
 #include <nacs-utils/mem.h>
 #include <nacs-utils/utils.h>
@@ -148,6 +150,13 @@ protected:
         uint8_t has_res: 1;
         uint8_t is_override: 1; // The value set/get is override
         uint32_t operand: 26; // opcode specific encoding (e.g. channel number)
+        // DDSFreq/Phase/Amp: operand is channel number
+        // TTL/TTLOveride:
+        // * last two bits specify the type of override:
+        //    * 0: low
+        //    * 1: high
+        //    * 2: clear (set override only)
+        // * 3 bits before that specify the bank number
         uint32_t val; // opcode specific encoding of value.
     };
 
@@ -194,7 +203,7 @@ protected:
         // Length of `code`
         size_t code_len;
         // TTL's used in the sequence. Only these TTL's will be changed in the sequence.
-        uint32_t ttl_mask;
+        std::array<uint32_t,NUM_TTL_BANKS> ttl_mask;
         // version
         uint32_t ver;
         // Whether this is a command list or not. (`false` for bytecode).
@@ -204,7 +213,7 @@ protected:
         // Only `SeqEnd` event is guaranteed to have a accompanied event fd notification.
         std::atomic<ReqSeqState> state{SeqInit};
         ReqSeq(uint64_t id, uint64_t seq_len_ns, const uint8_t *code, size_t code_len,
-               uint32_t ttl_mask, uint32_t ver, bool is_cmd,
+               const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask, uint32_t ver, bool is_cmd,
                std::unique_ptr<ReqSeqNotify> _notify, AnyPtr storage)
             : id(id), seq_len_ns(seq_len_ns), code(code), code_len(code_len),
               ttl_mask(ttl_mask), ver(ver), is_cmd(is_cmd),
@@ -308,7 +317,8 @@ public:
     void run_frontend();
 
     template<typename... Args>
-    uint64_t run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns, uint32_t ttl_mask,
+    uint64_t run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns,
+                      const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask,
                       const uint8_t *code, size_t code_len,
                       std::unique_ptr<ReqSeqNotify> notify, Args&&... args)
     {
@@ -357,7 +367,8 @@ public:
     static std::unique_ptr<CtrlIFace> create(bool dummy=false);
 
 private:
-    uint64_t _run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns, uint32_t ttl_mask,
+    uint64_t _run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns,
+                       const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask,
                        const uint8_t *code, size_t code_len,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 

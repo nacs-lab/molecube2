@@ -218,11 +218,14 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
 {
     m_inst_count.fetch_add(1, std::memory_order_relaxed);
     switch (cmd.op) {
-    case OP::TTL:
+    case OP::TTL: {
+        auto t = cmd.v1 & ((uint32_t(1) << 24) - 1);
+        auto bank = cmd.v1 >> 24;
         m_ttl_count.fetch_add(1, std::memory_order_relaxed);
-        m_ttl.store(cmd.v2, std::memory_order_release);
-        m_ttl_cycle.fetch_add(cmd.v1, std::memory_order_relaxed);
-        return cmd.v1;
+        m_ttl[bank].store(cmd.v2, std::memory_order_release);
+        m_ttl_cycle.fetch_add(t, std::memory_order_relaxed);
+        return t;
+    }
     case OP::Clock:
         m_clock_count.fetch_add(1, std::memory_order_relaxed);
         m_clock.store(uint8_t(cmd.v1), std::memory_order_release);
@@ -282,10 +285,7 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
 
 _NACS_EXPORT
 DummyPulser::DummyPulser(DummyPulser &&o)
-    : m_ttl_hi(o.m_ttl_hi.load(std::memory_order_relaxed)),
-      m_ttl_lo(o.m_ttl_lo.load(std::memory_order_relaxed)),
-      m_ttl(o.m_ttl.load(std::memory_order_relaxed)),
-      m_clock(o.m_clock.load(std::memory_order_relaxed)),
+    : m_clock(o.m_clock.load(std::memory_order_relaxed)),
       m_cmds_empty(o.m_cmds_empty.load(std::memory_order_relaxed)),
       m_timing_ok(o.m_timing_ok.load(std::memory_order_relaxed)),
       m_timing_check(o.m_timing_check.load(std::memory_order_relaxed)),
@@ -296,6 +296,14 @@ DummyPulser::DummyPulser(DummyPulser &&o)
       m_dds(o.m_dds),
       m_release_time(o.m_release_time)
 {
+    for (int i = 0; i < NUM_TTL_BANKS; i++) {
+        m_ttl_hi[i].store(o.m_ttl_hi[i].load(std::memory_order_relaxed),
+                          std::memory_order_relaxed);
+        m_ttl_lo[i].store(o.m_ttl_lo[i].load(std::memory_order_relaxed),
+                          std::memory_order_relaxed);
+        m_ttl[i].store(o.m_ttl[i].load(std::memory_order_relaxed),
+                       std::memory_order_relaxed);
+    }
 }
 
 }

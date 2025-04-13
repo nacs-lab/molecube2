@@ -140,7 +140,7 @@ void Server::run_startup()
     memcpy(&ver, str_data, 4);
     str_data += 4;
     str_sz -= 4;
-    if (ver != 1 && ver != 2) {
+    if (ver != 1 && ver != 2 && ver != 3) {
         Log::error("Wrong startup file version.\n");
         return;
     }
@@ -150,10 +150,30 @@ void Server::run_startup()
     str_data += 8;
     str_sz -= 8;
 
-    uint32_t ttl_mask;
-    memcpy(&ttl_mask, str_data, 4);
-    str_data += 4;
-    str_sz -= 4;
+    std::array<uint32_t,NUM_TTL_BANKS> ttl_mask;
+    ttl_mask.fill(0);
+    if (ver <= 3) {
+        memcpy(&ttl_mask, str_data, 4);
+        str_data += 4;
+        str_sz -= 4;
+    }
+    else {
+        uint32_t ttl_banks;
+        memcpy(&ttl_banks, str_data, 4);
+        str_data += 4;
+        str_sz -= 4;
+        if (ttl_banks == 0 || ttl_banks > NUM_TTL_BANKS) {
+            Log::error("`startup.cmdbin` TTL_BANK number out of range.\n");
+            return;
+        }
+        if (str_sz < ttl_banks * 4) {
+            Log::error("`startup.cmdbin` too short.\n");
+            return;
+        }
+        memcpy(&ttl_mask, str_data, 4 * ttl_banks);
+        str_data += 4 * ttl_banks;
+        str_sz -= 4 * ttl_banks;
+    }
 
     bool finished = false;
     struct Notify: CtrlIFace::ReqSeqNotify {
@@ -270,7 +290,7 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
         return false;
     uint32_t ver;
     memcpy(&ver, msg.data(), 4);
-    if (ver != 1 && ver != 2)
+    if (ver != 1 && ver != 2 && ver != 3)
         return false;
     // Not long enough
     if (!recv_more(msg) || msg.size() < 12)
@@ -287,10 +307,27 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     msg_data += 8;
     msg_sz -= 8;
 
-    uint32_t ttl_mask;
-    memcpy(&ttl_mask, msg_data, 4);
-    msg_data += 4;
-    msg_sz -= 4;
+    std::array<uint32_t,NUM_TTL_BANKS> ttl_mask;
+    uint32_t ttl_banks;
+    ttl_mask.fill(0);
+    if (ver <= 3) {
+        ttl_banks = 1;
+        memcpy(&ttl_mask, msg_data, 4);
+        msg_data += 4;
+        msg_sz -= 4;
+    }
+    else {
+        memcpy(&ttl_banks, msg_data, 4);
+        msg_data += 4;
+        msg_sz -= 4;
+        if (ttl_banks == 0 || ttl_banks > NUM_TTL_BANKS)
+            return false;
+        if (msg_sz < ttl_banks * 4)
+            return false;
+        memcpy(&ttl_mask, msg_data, 4 * ttl_banks);
+        msg_data += 4 * ttl_banks;
+        msg_sz -= 4 * ttl_banks;
+    }
 
     struct Notify: CtrlIFace::ReqSeqNotify {
         void set_id(uint64_t _id) override

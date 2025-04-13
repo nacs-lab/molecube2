@@ -127,7 +127,7 @@ void CtrlIFace::finish_cmd()
 }
 
 NACS_EXPORT() uint64_t CtrlIFace::_run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns,
-                                            uint32_t ttl_mask,
+                                            const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask,
                                             const uint8_t *code, size_t code_len,
                                             std::unique_ptr<ReqSeqNotify> notify,
                                             AnyPtr storage)

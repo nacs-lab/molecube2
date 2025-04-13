@@ -19,6 +19,8 @@
 #ifndef LIBMOLECUBE_PULSER_H
 #define LIBMOLECUBE_PULSER_H
 
+#include "pulser_common.h"
+
 #include <nacs-utils/mem.h>
 
 #include <assert.h>
@@ -124,13 +126,19 @@ public:
     }
 
     // Read
-    inline uint32_t ttl_himask() const
+    inline uint32_t ttl_himask(int bank) const
     {
-        return read(0);
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        if (bank == 0)
+            return read(0);
+        return read((bank - 1) * 2 + 0x10);
     }
-    inline uint32_t ttl_lomask() const
+    inline uint32_t ttl_lomask(int bank) const
     {
-        return read(1);
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        if (bank == 0)
+            return read(1);
+        return read((bank - 1) * 2 + 0x11);
     }
     inline bool timing_ok() const
     {
@@ -140,9 +148,12 @@ public:
     {
         return read(2) & Bits::Finished;
     }
-    inline uint32_t cur_ttl() const
+    inline uint32_t cur_ttl(int bank) const
     {
-        return read(4);
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        if (bank == 0)
+            return read(4);
+        return read((bank - 1) + 0x40);
     }
     inline uint8_t cur_clock() const
     {
@@ -151,13 +162,25 @@ public:
 
     // Write
     // TTL functions: pulse_io = (ttl_out | high_mask) & (~low_mask);
-    inline void set_ttl_himask(uint32_t high_mask)
+    inline void set_ttl_himask(uint32_t high_mask, int bank)
     {
-        write(0, high_mask);
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        if (bank == 0) {
+            write(0, high_mask);
+        }
+        else {
+            write((bank - 1) * 2 + 0x10, high_mask);
+        }
     }
-    inline void set_ttl_lomask(uint32_t low_mask)
+    inline void set_ttl_lomask(uint32_t low_mask, int bank)
     {
-        write(1, low_mask);
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        if (bank == 0) {
+            write(1, low_mask);
+        }
+        else {
+            write((bank - 1) * 2 + 0x11, low_mask);
+        }
     }
     // release hold.  pulses can run
     inline void release_hold()
@@ -179,10 +202,11 @@ public:
 
     // Pulses
     template<bool checked>
-    inline void ttl(uint32_t ttl, uint32_t t)
+    inline void ttl(uint32_t ttl, uint32_t t, int bank)
     {
         assert(t <= max_wait_t);
-        pulse<checked>(Bits::TTL | t, ttl);
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        pulse<checked>(Bits::TTL | t | (uint32_t(bank) << 24), ttl);
     }
     template<bool checked>
     inline void clock(uint8_t div)

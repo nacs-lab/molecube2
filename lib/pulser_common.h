@@ -16,42 +16,13 @@
  *   see <http://www.gnu.org/licenses/>.                                 *
  *************************************************************************/
 
-#include "../lib/pulser.h"
+#ifndef LIBMOLECUBE_PULSER_COMMON_H
+#define LIBMOLECUBE_PULSER_COMMON_H
 
-#include <nacs-utils/number.h>
+namespace Molecube {
 
-#include <stdio.h>
+static constexpr int NUM_TTL_BANKS = 8;
 
-int main(int argc, char **argv)
-{
-    using namespace Molecube;
-    if (argc != 3) {
-        printf("Require two arguments: test_set_ttl chn val\n");
-        return 1;
-    }
-    int fullchn = atoi(argv[1]);
-    bool val = atoi(argv[2]) != 0;
-    if (fullchn >= 32 * NUM_TTL_BANKS || fullchn < 0) {
-        printf("Channel number %d out of range.\n", fullchn);
-        return 1;
-    }
-    auto chn = fullchn % 32;
-    auto bank = fullchn / 32;
-
-    auto addr = Pulser::address();
-    if (!addr) {
-        printf("Cannot find pulser\n");
-        return 1;
-    }
-
-    Pulser p(addr);
-    auto old_ttl = p.cur_ttl(bank);
-    uint32_t set_ttl = NaCs::setBit(old_ttl, (uint8_t)chn, val);
-    p.template ttl<false>(set_ttl, 3, bank);
-    while (!p.is_finished()) {
-    }
-    auto new_ttl = p.cur_ttl(bank);
-    printf("New TTL value: %08x\n", new_ttl);
-    assert(p.cur_ttl(bank) == new_ttl);
-    return 0;
 }
+
+#endif

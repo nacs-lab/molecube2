@@ -83,10 +83,12 @@ private:
         // This is called periodically in the main loop and also before the sequence start.
         // to make sure we don't accumulate errors even if we failed to keep track of
         // every changes.
-        auto ttl = m_p.cur_ttl();
-        if (ttl != m_ttl) {
-            Log::warn("TTL out of sync: has %04x, actual %04x\n", m_ttl, ttl);
-            m_ttl = ttl;
+        for (int i = 0; i < NUM_TTL_BANKS; i++) {
+            auto ttl = m_p.cur_ttl(i);
+            if (ttl != m_ttl[i]) {
+                Log::warn("TTL out of sync: has %04x, actual %04x\n", m_ttl[i], ttl);
+                m_ttl[i] = ttl;
+            }
         }
     }
 
@@ -94,7 +96,7 @@ private:
 
     Pulser m_p;
     DDSState m_dds_ovr[NDDS];
-    uint32_t m_ttl;
+    uint32_t m_ttl[NUM_TTL_BANKS];
     uint16_t m_dds_phase[NDDS] = {0};
     // Reinitialize is a complicated sequence and is rarely needed
     // so only do that after the sequence finishes.
@@ -109,28 +111,33 @@ private:
 template<typename Pulser>
 class Controller<Pulser>::Runner {
 public:
-    Runner(Controller &ctrl, uint32_t ttlmask, uint64_t seq_len_ns)
+    Runner(Controller &ctrl, const std::array<uint32_t,NUM_TTL_BANKS> &ttlmask,
+           uint64_t seq_len_ns)
         : m_ctrl(ctrl),
           m_ttlmask(ttlmask),
-          m_preserve_ttl((~ttlmask) & ctrl.m_ttl),
           m_process_cmd(seq_len_ns > 1000000000ul) // 1s
     {
+        for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+            m_preserve_ttl[bank] = (~ttlmask[bank]) & ctrl.m_ttl[bank];
+        }
     }
-    void ttl1(uint8_t chn, bool val, uint64_t t)
+    void ttl1(int full_chn, bool val, uint64_t t)
     {
-        ttl(setBit(m_ctrl.m_ttl, chn, val), t);
+        auto chn = uint8_t(full_chn & 31);
+        int bank = chn / 32;
+        ttl(setBit(m_ctrl.m_ttl[bank], chn, val), t, bank);
     }
-    void ttl(uint32_t ttl, uint64_t t)
+    void ttl(uint32_t ttl, uint64_t t, int bank=0) // TODO remove the default bank=0
     {
-        m_ctrl.m_ttl = ttl | m_preserve_ttl;
+        m_ctrl.m_ttl[bank] = ttl | m_preserve_ttl[bank];
         if (t <= 1000) {
             // 10us
             m_t += t;
-            m_ctrl.m_p.template ttl<true>(m_ctrl.m_ttl, (uint32_t)t);
+            m_ctrl.m_p.template ttl<true>(m_ctrl.m_ttl[bank], (uint32_t)t, bank);
         }
         else {
             m_t += 100;
-            m_ctrl.m_p.template ttl<true>(m_ctrl.m_ttl, 100);
+            m_ctrl.m_p.template ttl<true>(m_ctrl.m_ttl[bank], 100, bank);
             wait(t - 100);
         }
     }
@@ -266,9 +273,9 @@ public:
             }
         }
     }
-    void update_preserve_ttl(uint32_t ttl)
+    void update_preserve_ttl(uint32_t ttl, int bank)
     {
-        m_preserve_ttl = ttl & m_ttlmask;
+        m_preserve_ttl[bank] = ttl & ~m_ttlmask[bank];
     }
     void enable_process_cmd()
     {
@@ -277,8 +284,8 @@ public:
 
 private:
     Controller &m_ctrl;
-    const uint32_t m_ttlmask;
-    uint32_t m_preserve_ttl;
+    const std::array<uint32_t,NUM_TTL_BANKS> m_ttlmask;
+    std::array<uint32_t,NUM_TTL_BANKS> m_preserve_ttl;
     uint64_t m_t{0};
 
     const uint64_t m_start_t{getCoarseTime()};
@@ -292,9 +299,10 @@ private:
 template<typename Pulser>
 Controller<Pulser>::Controller(Pulser &&p)
     : m_p(std::move(p)),
-      m_ttl(m_p.cur_ttl()),
       m_worker(&Controller<Pulser>::worker, this)
 {
+    for (int i = 0; i < NUM_TTL_BANKS; i++)
+        m_ttl[i] = m_p.cur_ttl(i);
     detect_dds(true);
     m_p.clear_error();
 }
@@ -312,19 +320,22 @@ bool Controller<Pulser>::concurrent_set(ReqOP op, uint32_t operand, bool is_over
 {
     if (op != TTL || !is_override)
         return false;
-    auto lomask = m_p.ttl_lomask();
-    auto himask = m_p.ttl_himask();
-    if (operand == 0) {
-        m_p.set_ttl_lomask((lomask | val));
-        m_p.set_ttl_himask((himask & ~val));
+    auto type = operand & 3;
+    auto bank = int(operand >> 2);
+    assert(0 <= bank && bank < NUM_TTL_BANKS);
+    auto lomask = m_p.ttl_lomask(bank);
+    auto himask = m_p.ttl_himask(bank);
+    if (type == 0) {
+        m_p.set_ttl_lomask((lomask | val), bank);
+        m_p.set_ttl_himask((himask & ~val), bank);
     }
-    else if (operand == 1) {
-        m_p.set_ttl_lomask((lomask & ~val));
-        m_p.set_ttl_himask((himask | val));
+    else if (type == 1) {
+        m_p.set_ttl_lomask((lomask & ~val), bank);
+        m_p.set_ttl_himask((himask | val), bank);
     }
-    else if (operand == 2) {
-        m_p.set_ttl_lomask((lomask & ~val));
-        m_p.set_ttl_himask((himask & ~val));
+    else if (type == 2) {
+        m_p.set_ttl_lomask((lomask & ~val), bank);
+        m_p.set_ttl_himask((himask & ~val), bank);
     }
     else {
         return false;
@@ -342,18 +353,21 @@ bool Controller<Pulser>::concurrent_get(ReqOP op, uint32_t operand, bool is_over
     }
     if (op != TTL)
         return false;
+    auto type = operand & 3;
+    auto bank = int(operand >> 2);
+    assert(0 <= bank && bank < NUM_TTL_BANKS);
     if (!is_override) {
-        if (operand != 0)
+        if (type != 0)
             return false;
-        val = (m_p.cur_ttl() | m_p.ttl_himask()) & ~m_p.ttl_lomask();
+        val = (m_p.cur_ttl(bank) | m_p.ttl_himask(bank)) & ~m_p.ttl_lomask(bank);
         return true;
     }
-    if (operand == 0) {
-        val = m_p.ttl_lomask();
+    if (type == 0) {
+        val = m_p.ttl_lomask(bank);
         return true;
     }
-    else if (operand == 1) {
-        val = m_p.ttl_himask();
+    else if (type == 1) {
+        val = m_p.ttl_himask(bank);
         return true;
     }
     return false;
@@ -442,7 +456,12 @@ std::vector<int> Controller<Pulser>::get_active_dds()
 template<typename Pulser>
 bool Controller<Pulser>::has_ttl_ovr()
 {
-    return m_p.ttl_lomask() || m_p.ttl_himask();
+    for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+        if (m_p.ttl_lomask(bank) || m_p.ttl_himask(bank)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 template<typename Pulser>
@@ -453,15 +472,17 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
     case TTL: {
         // Should have been caught by concurrent_get/set.
         assert(!cmd->has_res && !cmd->is_override);
-        if (cmd->operand) {
-            m_ttl = m_ttl | cmd->val;
+        auto type = cmd->operand & 3;
+        auto bank = cmd->operand >> 2;
+        if (type) {
+            m_ttl[bank] = m_ttl[bank] | cmd->val;
         }
         else {
-            m_ttl = m_ttl & ~cmd->val;
+            m_ttl[bank] = m_ttl[bank] & ~cmd->val;
         }
         if (runner)
-            runner->update_preserve_ttl(m_ttl);
-        m_p.template ttl<checked>(m_ttl, Seq::Zynq::PulseTime::Min);
+            runner->update_preserve_ttl(m_ttl[bank], bank);
+        m_p.template ttl<checked>(m_ttl[bank], Seq::Zynq::PulseTime::Min, bank);
         return {Seq::Zynq::PulseTime::Min, false};
     }
     case DDSFreq: {

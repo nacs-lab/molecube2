@@ -19,6 +19,8 @@
 #ifndef LIBMOLECUBE_DUMMY_PULSER_H
 #define LIBMOLECUBE_DUMMY_PULSER_H
 
+#include "pulser_common.h"
+
 #include <nacs-utils/utils.h>
 
 #include <assert.h>
@@ -78,13 +80,15 @@ class DummyPulser {
 public:
     static constexpr uint32_t max_wait_t = (1 << 24) - 1;
     // Read
-    inline uint32_t ttl_himask() const
+    inline uint32_t ttl_himask(int bank) const
     {
-        return m_ttl_hi.load(std::memory_order_acquire);
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        return m_ttl_hi[bank].load(std::memory_order_acquire);
     }
-    inline uint32_t ttl_lomask() const
+    inline uint32_t ttl_lomask(int bank) const
     {
-        return m_ttl_lo.load(std::memory_order_acquire);
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        return m_ttl_lo[bank].load(std::memory_order_acquire);
     }
     inline bool timing_ok() const
     {
@@ -98,10 +102,11 @@ public:
         const_cast<DummyPulser*>(this)->forward_time();
         return m_cmds_empty.load(std::memory_order_acquire);
     }
-    inline uint32_t cur_ttl() const
+    inline uint32_t cur_ttl(int bank) const
     {
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
         const_cast<DummyPulser*>(this)->forward_time();
-        return m_ttl.load(std::memory_order_acquire);
+        return m_ttl[bank].load(std::memory_order_acquire);
     }
     inline uint8_t cur_clock() const
     {
@@ -110,13 +115,15 @@ public:
     }
 
     // Write
-    inline void set_ttl_himask(uint32_t high_mask)
+    inline void set_ttl_himask(uint32_t high_mask, int bank)
     {
-        m_ttl_hi.store(high_mask, std::memory_order_release);
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        m_ttl_hi[bank].store(high_mask, std::memory_order_release);
     }
-    inline void set_ttl_lomask(uint32_t low_mask)
+    inline void set_ttl_lomask(uint32_t low_mask, int bank)
     {
-        m_ttl_lo.store(low_mask, std::memory_order_release);
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        m_ttl_lo[bank].store(low_mask, std::memory_order_release);
     }
     void release_hold();
     void set_hold();
@@ -124,10 +131,11 @@ public:
 
     // Pulses
     template<bool checked>
-    inline void ttl(uint32_t ttl, uint32_t t)
+    inline void ttl(uint32_t ttl, uint32_t t, int bank)
     {
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
         assert(t <= max_wait_t);
-        add_cmd(OP::TTL, checked, t, ttl);
+        add_cmd(OP::TTL, checked, t | (uint32_t(bank) << 24), ttl);
     }
     template<bool checked>
     inline void clock(uint8_t div)
@@ -341,9 +349,9 @@ private:
     static constexpr int NDDS = 22;
     static constexpr uint32_t max_result_count = 4097;
 
-    std::atomic<uint32_t> m_ttl_hi{0};
-    std::atomic<uint32_t> m_ttl_lo{0};
-    std::atomic<uint32_t> m_ttl{0};
+    std::array<std::atomic<uint32_t>,NUM_TTL_BANKS> m_ttl_hi{0};
+    std::array<std::atomic<uint32_t>,NUM_TTL_BANKS> m_ttl_lo{0};
+    std::array<std::atomic<uint32_t>,NUM_TTL_BANKS> m_ttl{0};
     std::atomic<uint8_t> m_clock{255};
     std::atomic<bool> m_cmds_empty{true};
     std::atomic<bool> m_timing_ok{true};

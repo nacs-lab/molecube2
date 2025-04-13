@@ -31,6 +31,7 @@ template<typename P>
 void test_pulser(P &p)
 {
     using namespace std::literals;
+    using namespace Molecube;
 
     // Test TTL masks
     printf("  Testing TTL masks and loopback register\n");
@@ -38,24 +39,28 @@ void test_pulser(P &p)
         uint32_t v = 1u << i;
         p.set_loopback_reg(v);
         assert(p.loopback_reg() == v);
-        p.set_ttl_himask(v);
-        assert(p.ttl_himask() == v);
-        p.set_ttl_lomask(v);
-        assert(p.ttl_lomask() == v);
+        for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+            p.set_ttl_himask(v, bank);
+            assert(p.ttl_himask(bank) == v);
+            p.set_ttl_lomask(v, bank);
+            assert(p.ttl_lomask(bank) == v);
+        }
     }
     std::this_thread::sleep_for(1ms);
     p.set_loopback_reg(0xffffffff);
     assert(p.loopback_reg() == 0xffffffff);
     p.set_loopback_reg(0);
     assert(p.loopback_reg() == 0);
-    p.set_ttl_himask(0xffffffff);
-    assert(p.ttl_himask() == 0xffffffff);
-    p.set_ttl_himask(0);
-    assert(p.ttl_himask() == 0);
-    p.set_ttl_lomask(0xffffffff);
-    assert(p.ttl_lomask() == 0xffffffff);
-    p.set_ttl_lomask(0);
-    assert(p.ttl_lomask() == 0);
+    for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+        p.set_ttl_himask(0xffffffff, bank);
+        assert(p.ttl_himask(bank) == 0xffffffff);
+        p.set_ttl_himask(0, bank);
+        assert(p.ttl_himask(bank) == 0);
+        p.set_ttl_lomask(0xffffffff, bank);
+        assert(p.ttl_lomask(bank) == 0xffffffff);
+        p.set_ttl_lomask(0, bank);
+        assert(p.ttl_lomask(bank) == 0);
+    }
 
     p.toggle_init();
 
@@ -156,45 +161,57 @@ void test_pulser(P &p)
     for (int i = 0; i < 32; i++) {
         uint32_t v = 1u << i;
         uint32_t vl = v * 15 + 0x12345678;
-        p.template ttl<false>(v, 10);
-        inst_queued();
+        for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+            p.template ttl<false>(v, 10, bank);
+            inst_queued();
+        }
         p.template loopback<false>(vl);
         inst_queued();
         generate_result();
         assert(p.get_result() == vl);
         consume_result();
-        assert(p.cur_ttl() == v);
-        ttl_finished(10);
+        for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+            assert(p.cur_ttl(bank) == v);
+            ttl_finished(10);
+        }
         loopback_finished();
         check_inst();
     }
-    p.template ttl<false>(0xffffffff, 10);
-    inst_queued();
+    for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+        p.template ttl<false>(0xffffffff, 10, bank);
+        inst_queued();
+    }
     p.template loopback<false>(0);
     inst_queued();
     generate_result();
     assert(p.get_result() == 0);
     consume_result();
-    assert(p.cur_ttl() == 0xffffffff);
-    ttl_finished(10);
+    for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+        assert(p.cur_ttl(bank) == 0xffffffff);
+        ttl_finished(10);
+    }
     loopback_finished();
     check_inst();
-    p.template ttl<false>(0, 10);
-    inst_queued();
+    for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+        p.template ttl<false>(0, 10, bank);
+        inst_queued();
+    }
     p.template loopback<false>(0xffffffff);
     inst_queued();
     generate_result();
     assert(p.get_result() == 0xffffffff);
     consume_result();
-    assert(p.cur_ttl() == 0);
-    ttl_finished(10);
+    for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+        assert(p.cur_ttl(bank) == 0);
+        ttl_finished(10);
+    }
     loopback_finished();
     check_inst();
 
     // Test hold and release
     printf("  Testing hold and release\n");
     p.set_hold();
-    p.template ttl<false>(345, 10);
+    p.template ttl<false>(345, 10, 0);
     inst_queued();
     p.template loopback<false>(888);
     inst_queued();
@@ -203,19 +220,19 @@ void test_pulser(P &p)
     check_inst();
     uint32_t res0;
     assert(!p.try_get_result(res0));
-    assert(p.cur_ttl() == 0);
+    assert(p.cur_ttl(0) == 0);
     p.release_hold();
     generate_result();
     assert(p.get_result() == 888);
     consume_result();
-    assert(p.cur_ttl() == 345);
+    assert(p.cur_ttl(0) == 345);
     ttl_finished(10);
     loopback_finished();
     check_inst();
 
     assert(p.is_finished());
 
-    p.template ttl<false>(0, 10);
+    p.template ttl<false>(0, 10, 0);
     inst_queued();
 
     while (!p.is_finished()) {
