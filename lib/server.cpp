@@ -152,7 +152,7 @@ void Server::run_startup()
 
     std::array<uint32_t,NUM_TTL_BANKS> ttl_mask;
     ttl_mask.fill(0);
-    if (ver <= 3) {
+    if (ver < 3) {
         memcpy(&ttl_mask, str_data, 4);
         str_data += 4;
         str_sz -= 4;
@@ -310,7 +310,7 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     std::array<uint32_t,NUM_TTL_BANKS> ttl_mask;
     uint32_t ttl_banks;
     ttl_mask.fill(0);
-    if (ver <= 3) {
+    if (ver < 3) {
         ttl_banks = 1;
         memcpy(&ttl_mask, msg_data, 4);
         msg_data += 4;
@@ -514,10 +514,10 @@ void Server::process_set_startup(std::vector<zmq::message_t> &addr, zmq::message
     }
     const_istream istm(data, data + size);
     string_ostream sstm;
-    uint32_t ttl_mask;
-    uint32_t ver = 1;
+    Seq::Zynq::SeqMetadata meta;
+    uint32_t ver = 3;
     try {
-        ttl_mask = Seq::Zynq::CmdList::parse(sstm, istm, ver);
+        meta = Seq::Zynq::CmdList::parse(sstm, istm, ver);
     }
     catch (const SyntaxError &err) {
         Log::error("Error parsing startup script: %s\n", err.what());
@@ -551,7 +551,10 @@ void Server::process_set_startup(std::vector<zmq::message_t> &addr, zmq::message
     uint64_t len_ns = Seq::Zynq::CmdList::total_time((uint8_t*)bstr.data(),
                                                      bstr.size(), ver) * 10;
     obstm.write((char*)&len_ns, 8);
-    obstm.write((char*)&ttl_mask, 4);
+    assert(ver == 3);
+    auto nbanks = uint32_t(meta.ttl_masks.size());
+    obstm.write((char*)&nbanks, sizeof(uint32_t));
+    obstm.write((char*)meta.ttl_masks.data(), nbanks * sizeof(uint32_t));
     obstm.write(bstr.data(), bstr.size());
     if (!obstm.good() || !otstm.good()) {
         Log::error("Cannot save startup file.\n");

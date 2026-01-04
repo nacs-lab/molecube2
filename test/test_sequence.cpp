@@ -33,6 +33,7 @@ using namespace Molecube;
 struct sequence {
     std::string seq;
     std::array<uint32_t,NUM_TTL_BANKS> ttl_mask{};
+    uint32_t ver;
     uint64_t len_ns;
 };
 
@@ -41,10 +42,14 @@ static sequence parse_file(const char *name)
     std::ifstream istm(name);
     string_ostream sstm;
     sequence res;
-    res.ttl_mask[0] = Seq::Zynq::CmdList::parse(sstm, istm, 1);
+    auto meta = Seq::Zynq::CmdList::parse(sstm, istm, 3);
+    assert(meta.ttl_masks.size() <= NUM_TTL_BANKS);
+    memcpy(res.ttl_mask.data(), meta.ttl_masks.data(),
+           meta.ttl_masks.size() * sizeof(uint32_t));
     res.seq = sstm.get_buf();
+    res.ver = meta.version;
     res.len_ns = Seq::Zynq::CmdList::total_time((uint8_t*)res.seq.data(),
-                                                res.seq.size(), 1) * 10;
+                                                res.seq.size(), meta.version) * 10;
     printf("Sequence length: %" PRIu64 " ns\n", res.len_ns);
     return res;
 }
@@ -79,7 +84,7 @@ int main(int argc, char **argv)
         }
         bool *finished;
     };
-    ctrl->run_code(true, 1, seq.len_ns, seq.ttl_mask, (const uint8_t*)seq.seq.data(),
+    ctrl->run_code(true, seq.ver, seq.len_ns, seq.ttl_mask, (const uint8_t*)seq.seq.data(),
                    seq.seq.size(), std::make_unique<Notify>(&finished));
     while (!finished) {
         using namespace std::literals;
