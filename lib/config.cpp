@@ -33,6 +33,8 @@ NACS_EXPORT() Config Config::loadYAML(const char *fname)
 
     if (auto dummy_node = file["dummy"])
         conf.dummy = dummy_node.as<bool>();
+    if (auto max_ttl_chn_node = file["max_ttl_chn"])
+        conf.max_ttl_chn = max_ttl_chn_node.as<int>();
     if (auto listen_node = file["listen"])
         conf.listen = listen_node.as<std::string>();
     if (auto runtime_dir_node = file["runtime_dir"])

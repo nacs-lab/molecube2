@@ -1,3 +1,4 @@
 dummy: true
+max_chn_ttl: 69
 listen: "tcp://127.0.0.1:6666"
 runtime_dir: ./molecube_test

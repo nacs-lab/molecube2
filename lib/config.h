@@ -32,6 +32,7 @@ struct Config {
     static Config loadYAML(const char *fname);
 
     bool dummy = false;
+    int max_ttl_chn = 31;
     std::string listen{"tcp://*:7777"};
     std::string runtime_dir{"/var/lib/molecube/"};
 };

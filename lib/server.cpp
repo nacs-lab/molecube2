@@ -214,8 +214,8 @@ _NACS_EXPORT Server::Server(const Config &conf)
     // This shouldn't cause any major issue though since if the directory didn't exist,
     // the file in it won't exist either and the loading will fail no matter what.
     ensure_runtime_dir();
-    if (m_ttl_names.get().size() != 32) {
-        m_ttl_names.get().resize(32);
+    if (m_ttl_names.get().size() != conf.max_ttl_chn + 1) {
+        m_ttl_names.get().resize(conf.max_ttl_chn + 1);
         m_ttl_names.save();
     }
     if (m_dds_names.get().size() != 22) {
@@ -819,6 +819,9 @@ void Server::process_zmq()
         if (!recv_more(msg) || !process_set_names(msg, m_ttl_names))
             goto err;
         send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
+    }
+    else if (ZMQ::match(msg, "get_max_ttl")) {
+        send_reply(addr, ZMQ::bits_msg<uint8_t>(m_conf.max_ttl_chn));
     }
     else if (ZMQ::match(msg, "get_ttl_names")) {
         process_get_names(addr, m_ttl_names);
