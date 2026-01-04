@@ -127,7 +127,7 @@ public:
         int bank = chn / 32;
         ttl(setBit(m_ctrl.m_ttl[bank], chn, val), t, bank);
     }
-    void ttl(uint32_t ttl, uint64_t t, int bank=0) // TODO remove the default bank=0
+    void ttl(uint32_t ttl, uint64_t t, int bank)
     {
         m_ctrl.m_ttl[bank] = ttl | m_preserve_ttl[bank];
         if (t <= 1000) {
