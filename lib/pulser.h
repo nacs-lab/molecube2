@@ -224,6 +224,13 @@ public:
         assert(t <= max_wait_t);
         pulse<checked>(Bits::Wait | t, 0);
     }
+    template<bool checked>
+    inline void wait_trigger(uint8_t chn, bool trig_raise, uint32_t timeout)
+    {
+        assert(timeout <= max_wait_t);
+        uint32_t trig_type = trig_raise ? 1 : 2;
+        pulse<checked>(Bits::Wait | timeout, (uint32_t(chn) << 20) | (trig_type << 28));
+    }
     // clear timing check (clear failures)
     inline void clear_error()
     {

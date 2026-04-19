@@ -208,6 +208,11 @@ public:
         assert(i < NDDS);
         add_cmd(OP::DDSGetFreq, checked, i);
     }
+    template<bool checked>
+    inline void wait_trigger(uint8_t, bool, uint32_t timeout)
+    {
+        wait<checked>(timeout);
+    }
 
     // Debug registers
     inline uint32_t loopback_reg()

@@ -273,6 +273,14 @@ public:
             }
         }
     }
+    void wait_trigger(uint8_t chn, bool trig_raise, uint32_t timeout)
+    {
+        m_ctrl.m_p.template wait_trigger<true>(chn, trig_raise, timeout);
+        // Reset start time since the sequence will actually proceed when we
+        // received a trigger from this command.
+        m_t = 0;
+        m_start_t = getCoarseTime();
+    }
     void update_preserve_ttl(uint32_t ttl, int bank)
     {
         m_preserve_ttl[bank] = ttl & ~m_ttlmask[bank];
@@ -288,7 +296,7 @@ private:
     std::array<uint32_t,NUM_TTL_BANKS> m_preserve_ttl;
     uint64_t m_t{0};
 
-    const uint64_t m_start_t{getCoarseTime()};
+    uint64_t m_start_t{getCoarseTime()};
     // Minimum time we stay ahead of the sequence.
     const uint64_t m_min_t{max(getCoarseRes() * 20, 500000000)}; // 0.5s
     bool m_process_cmd;
