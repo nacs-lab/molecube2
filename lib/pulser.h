@@ -140,6 +140,10 @@ public:
             return read(1);
         return read((bank - 1) * 2 + 0x11);
     }
+    inline uint32_t timing_status() const
+    {
+        return read(2);
+    }
     inline bool timing_ok() const
     {
         return !(read(2) & Bits::TimeOK);

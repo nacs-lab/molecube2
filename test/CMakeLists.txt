@@ -8,6 +8,9 @@ target_link_libraries(test_pulser libmolecube)
 add_executable(test_set_ttl test_set_ttl.cpp)
 target_link_libraries(test_set_ttl libmolecube)
 
+add_executable(test_trigger test_trigger.cpp)
+target_link_libraries(test_trigger libmolecube)
+
 add_executable(test_set_clock test_set_clock.cpp)
 target_link_libraries(test_set_clock libmolecube)
 
