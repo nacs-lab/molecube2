@@ -46,3 +46,6 @@ target_link_libraries(test_DDS_full_ramp libmolecube)
 
 add_executable(test_sequence test_sequence.cpp)
 target_link_libraries(test_sequence libmolecube)
+
+add_executable(test_dma test_dma.cpp)
+target_link_libraries(test_dma libmolecube)
