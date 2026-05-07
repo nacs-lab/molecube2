@@ -295,7 +295,7 @@ void test_pulser(P &p)
     p.toggle_init();
     reset_count();
     p.set_hold();
-    for (int i = 0; i < 4090; i++) {
+    for (int i = 0; i < 4095; i++) {
         p.template wait<true>(5);
         inst_queued();
         wait_finished(5);
