@@ -36,26 +36,72 @@ using namespace NaCs;
 using namespace Molecube;
 using namespace std::literals;
 
-static void do_dma(Molecube::Pulser &p, void *buff1, void *buff2, int idx, int rep)
+struct DMABuff {
+    void *virt_addr;
+    void *phy_addr;
+    size_t size;
+    DMABuff(void *virt_addr, size_t size)
+        : virt_addr(virt_addr),
+          phy_addr(Kernel::bufferPhyAddr(virt_addr)),
+          size(size)
+    {
+    }
+
+    static DMABuff alloc_dma(size_t size)
+    {
+        return DMABuff{Kernel::allocDMABuffer(size), size};
+    }
+    static DMABuff alloc_ocm(size_t size)
+    {
+        return DMABuff{Kernel::allocOCMBuffer(size), size};
+    }
+
+    void run_dma(Molecube::Pulser &p, int idx, size_t size=-1) const
+    {
+        if (size == (size_t)-1)
+            size = this->size;
+        p.write(idx, (unsigned)phy_addr);
+        p.write(idx, size / (16 * 8) - 1);
+    }
+
+    void clear_cache()
+    {
+        __builtin___clear_cache(virt_addr, (char*)virt_addr + size);
+    }
+};
+
+static void dma_dbg_print(Molecube::Pulser &p, const char *name=nullptr)
 {
-    printf("pre-transfer: %d, %d, %d, %08x, %08x, %08x\n", p.read(0x31), p.read(0x32), p.read(0x33), p.read(0x34), p.read(0x35), p.read(0x36));
+    if (!name)
+        name = "dma status";
+    printf("%s: %d, %d, %d, %08x, %08x, %08x\n", name,
+           p.read(0x31), p.read(0x32), p.read(0x33),
+           p.read(0x34), p.read(0x35), p.read(0x36));
+}
+
+static void do_rep_dma(Molecube::Pulser &p, const std::vector<DMABuff> &buffs,
+                       int idx, int rep, size_t size = -1)
+{
+    for (int i = 0; i < rep; i++) {
+        for (auto &buff: buffs) {
+            buff.run_dma(p, idx, size);
+        }
+    }
+}
+
+static void bench_dma(Molecube::Pulser &p, const std::vector<DMABuff> &buffs,
+                       int idx, int rep, size_t size = -1)
+{
+    dma_dbg_print(p, "pre-transfer");
     auto start_count = p.read(0x31);
     std::this_thread::sleep_for(10ms);
     NaCs::Timer timer;
-    for (int i = 0; i < rep; i++) {
-        p.write(idx, (unsigned)buff1);
-        p.write(idx, 512 - 1);
-        p.write(idx, (unsigned)buff2);
-        p.write(idx, 512 - 1);
-    }
-    printf("post-transfer: %d, %d, %d, %08x, %08x, %08x\n", p.read(0x31), p.read(0x32), p.read(0x33), p.read(0x34), p.read(0x35), p.read(0x36));
-    // for (int i = 0; i < 5; i++) {
-    //     printf("post-transfer: %d, %d, %d, %08x, %08x, %08x\n", p.read(0x31), p.read(0x32), p.read(0x33), p.read(0x34), p.read(0x35), p.read(0x36));
-    // }
+    do_rep_dma(p, buffs, idx, rep, size);
+    dma_dbg_print(p, "post-transfer");
     while (p.read(0x31) != start_count + rep * 2)
         std::this_thread::yield();
     timer.print();
-    printf("post-wait: %d, %d, %d, %08x, %08x, %08x\n", p.read(0x31), p.read(0x32), p.read(0x33), p.read(0x34), p.read(0x35), p.read(0x36));
+    dma_dbg_print(p, "post-wait");
 }
 
 int main()
@@ -63,30 +109,28 @@ int main()
     auto addr = Molecube::Pulser::address();
     printf("%p\n", addr);
     Molecube::Pulser p(addr);
-    auto buff1 = Kernel::allocDMABuffer(16 * 4096);
-    auto buff2 = Kernel::allocDMABuffer(16 * 4096);
-    auto buff3 = Kernel::allocOCMBuffer(16 * 4096);
-    auto buff4 = Kernel::allocOCMBuffer(16 * 4096);
-    printf("%p, %p, %p, %p\n", buff1, buff2, buff3, buff4);
-    __builtin___clear_cache(buff1, (char*)buff1 + 4096 * 16);
-    __builtin___clear_cache(buff2, (char*)buff2 + 4096 * 16);
-    __builtin___clear_cache(buff3, (char*)buff3 + 4096 * 16);
-    __builtin___clear_cache(buff4, (char*)buff4 + 4096 * 16);
-    auto addr1 = Kernel::bufferPhyAddr(buff1);
-    auto addr2 = Kernel::bufferPhyAddr(buff2);
-    auto addr3 = Kernel::bufferPhyAddr(buff3);
-    auto addr4 = Kernel::bufferPhyAddr(buff4);
-    printf("%p, %p, %p, %p\n", addr1, addr2, addr3, addr4);
+    auto buff1 = DMABuff::alloc_dma(16 * 4096);
+    auto buff2 = DMABuff::alloc_dma(16 * 4096);
+    auto buff3 = DMABuff::alloc_ocm(16 * 4096);
+    auto buff4 = DMABuff::alloc_ocm(16 * 4096);
+    printf("%p, %p, %p, %p\n", buff1.virt_addr, buff2.virt_addr,
+           buff3.virt_addr, buff4.virt_addr);
+    buff1.clear_cache();
+    buff2.clear_cache();
+    buff3.clear_cache();
+    buff4.clear_cache();
+    printf("%p, %p, %p, %p\n", buff1.phy_addr, buff2.phy_addr,
+           buff3.phy_addr, buff4.phy_addr);
 
     printf("Main Memory HP\n");
-    do_dma(p, addr1, addr2, 0x20, 10);
+    bench_dma(p, {buff1, buff2}, 0x20, 10);
     printf("OCM HP\n");
-    do_dma(p, addr3, addr4, 0x20, 10);
+    bench_dma(p, {buff3, buff4}, 0x20, 10);
 
     printf("Main Memory HP\n");
-    do_dma(p, addr1, addr2, 0x20, 10);
+    bench_dma(p, {buff1, buff2}, 0x20, 10);
     printf("OCM HP\n");
-    do_dma(p, addr3, addr4, 0x20, 10);
+    bench_dma(p, {buff3, buff4}, 0x20, 10);
 
     // {
     //     printf("Get Version\n");
@@ -116,16 +160,16 @@ int main()
     // }
 
     // printf("Main Memory ACP\n");
-    // do_dma(p, addr1, addr2, 0x21, 1);
+    // bench_dma(p, {buff1, buff2}, 0x21, 10);
     // printf("OCM ACP\n");
-    // do_dma(p, addr3, addr4, 0x21, 1);
-    if (buff1)
-        Kernel::freeDMABuffer(buff1, 16 * 4096);
-    if (buff2)
-        Kernel::freeDMABuffer(buff2, 16 * 4096);
-    if (buff3)
-        Kernel::freeOCMBuffer(buff3, 16 * 4096);
-    if (buff4)
-        Kernel::freeOCMBuffer(buff4, 16 * 4096);
+    // bench_dma(p, {buff3, buff4}, 0x21, 10);
+    if (buff1.virt_addr)
+        Kernel::freeDMABuffer(buff1.virt_addr, 16 * 4096);
+    if (buff2.virt_addr)
+        Kernel::freeDMABuffer(buff2.virt_addr, 16 * 4096);
+    if (buff3.virt_addr)
+        Kernel::freeOCMBuffer(buff3.virt_addr, 16 * 4096);
+    if (buff4.virt_addr)
+        Kernel::freeOCMBuffer(buff4.virt_addr, 16 * 4096);
     return 0;
 }
