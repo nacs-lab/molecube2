@@ -275,7 +275,7 @@ public:
     inline uint32_t inst_cycle()
     {
         const_cast<DummyPulser*>(this)->forward_time();
-        return m_inst_cycle.load(std::memory_order_relaxed);
+        return m_inst_cycle.load(std::memory_order_relaxed) * 2;
     }
     inline uint32_t ttl_cycle()
     {

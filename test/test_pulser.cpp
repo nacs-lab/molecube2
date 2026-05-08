@@ -94,7 +94,7 @@ void test_pulser(P &p)
         assert(p.clear_error_count() == clear_error_count);
         assert(p.loopback_count() == loopback_count);
         assert(p.clock_count() == clock_count);
-        assert(p.inst_cycle() == inst_cycle);
+        assert(p.inst_cycle() == inst_cycle * 2);
         // assert(p.ttl_cycle() == ttl_cycle);
         // assert(p.wait_cycle() == wait_cycle);
         assert(p.result_count() == result_count);
