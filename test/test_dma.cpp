@@ -18,25 +18,102 @@
 
 #include "../lib/pulser.h"
 
+#include <nacs-utils/mem.h>
+#include <nacs-utils/timer.h>
 #include <nacs-kernel/devctl.h>
 
+#include <chrono>
 #include <fstream>
 #include <iostream>
+#include <thread>
+
+#include <sys/syscall.h>
 
 #include <inttypes.h>
+#include <unistd.h>
 
 using namespace NaCs;
 using namespace Molecube;
+using namespace std::literals;
 
-int main(int argc, char **argv)
+static void do_dma(Molecube::Pulser &p, void *buff1, void *buff2, int idx, int rep)
+{
+    printf("pre-transfer: %d, %d, %d\n", p.read(0x31), p.read(0x32), p.read(0x33));
+    auto start_count = p.read(0x31);
+    std::this_thread::sleep_for(10ms);
+    NaCs::Timer timer;
+    for (int i = 0; i < rep; i++) {
+        p.write(idx, (unsigned)buff1);
+        p.write(idx, 512 - 1);
+        p.write(idx, (unsigned)buff2);
+        p.write(idx, 512 - 1);
+    }
+    printf("post-transfer: %d, %d, %d\n", p.read(0x31), p.read(0x32), p.read(0x33));
+    // for (int i = 0; i < 5; i++) {
+    //     printf("post-transfer: %d, %d, %d\n", p.read(0x31), p.read(0x32), p.read(0x33));
+    // }
+    while (p.read(0x31) != start_count + rep * 2)
+        std::this_thread::yield();
+    timer.print();
+    printf("post-wait: %d, %d, %d\n", p.read(0x31), p.read(0x32), p.read(0x33));
+}
+
+int main()
 {
     auto addr = Molecube::Pulser::address();
     printf("%p\n", addr);
+    Molecube::Pulser p(addr);
     auto buff1 = Kernel::allocDMABuffer(16 * 4096);
     auto buff2 = Kernel::allocDMABuffer(16 * 4096);
     auto buff3 = Kernel::allocOCMBuffer(16 * 4096);
     auto buff4 = Kernel::allocOCMBuffer(16 * 4096);
-    printf("%p, %p, %p, %p\n", buff1, buff2, buff3, buff4);
+    printf("%p, %p, %p, %p\n",
+           buff1, buff2, buff3, buff4);
+    printf("%p, %p, %p, %p\n",
+           Kernel::bufferPhyAddr(buff1), Kernel::bufferPhyAddr(buff2),
+           Kernel::bufferPhyAddr(buff3), Kernel::bufferPhyAddr(buff4));
+
+    printf("Main Memory HP\n");
+    do_dma(p, buff1, buff2, 0x20, 1000);
+    printf("OCM HP\n");
+    do_dma(p, buff3, buff4, 0x20, 1000);
+
+    printf("Main Memory HP\n");
+    do_dma(p, buff1, buff2, 0x20, 1000);
+    printf("OCM HP\n");
+    do_dma(p, buff3, buff4, 0x20, 1000);
+
+    {
+        printf("Get Version\n");
+        Timer timer;
+        for (int i = 0; i < 1000000; i++) {
+            Kernel::getDriverVersion();
+        }
+        timer.print();
+    }
+
+    {
+        printf("Flush main memory\n");
+        Timer timer;
+        for (int i = 0; i < 1000000; i++) {
+            __builtin___clear_cache(buff1, (char*)buff1 + 4096 * 16);
+        }
+        timer.print();
+    }
+
+    {
+        printf("Flush OCM\n");
+        Timer timer;
+        for (int i = 0; i < 1000000; i++) {
+            __builtin___clear_cache(buff3, (char*)buff3 + 4096 * 16);
+        }
+        timer.print();
+    }
+
+    // printf("Main Memory ACP\n");
+    // do_dma(p, buff1, buff2, 0x21, 1);
+    // printf("OCM ACP\n");
+    // do_dma(p, buff3, buff4, 0x21, 1);
     if (buff1)
         Kernel::freeDMABuffer(buff1, 16 * 4096);
     if (buff2)

@@ -35,6 +35,7 @@ using namespace NaCs;
  * This class contains the stateless functions to communicate with the FPGA
  */
 class Pulser {
+public:
     Pulser(const Pulser&) = delete;
     void operator=(const Pulser&) = delete;
     // Read and write pulse controller registers.
