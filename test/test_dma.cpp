@@ -18,8 +18,10 @@
 
 #include "../lib/pulser.h"
 
+#include <nacs-utils/errors.h>
 #include <nacs-utils/mem.h>
 #include <nacs-utils/timer.h>
+#include <nacs-kernel/device.h>
 #include <nacs-kernel/devctl.h>
 
 #include <chrono>
@@ -30,14 +32,29 @@
 
 #include <sys/syscall.h>
 
+#include <fcntl.h>
 #include <inttypes.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 using namespace NaCs;
 using namespace Molecube;
 using namespace std::literals;
 
+typedef struct {
+    unsigned long addr;
+    unsigned long size;
+} _knacs_dma_buff_t;
+
 static std::random_device rd;
+
+static int knacs_fd = open("/dev/knacs", O_RDWR | O_SYNC);
+
+static void flush_dma_buff(void *addr, size_t size)
+{
+    _knacs_dma_buff_t buff{(unsigned long)addr, (unsigned long)size};
+    checkErrno(ioctl(knacs_fd, 3, &buff));
+}
 
 #include "crc32c_table.h"
 
@@ -129,6 +146,11 @@ struct DMABuff {
     {
         __builtin___clear_cache(virt_addr, (char*)virt_addr + size);
     }
+
+    void flush_dma()
+    {
+        flush_dma_buff(virt_addr, size);
+    }
 };
 
 static void dma_dbg_print(Molecube::Pulser &p, const char *name=nullptr)
@@ -168,6 +190,7 @@ static void bench_dma(Molecube::Pulser &p, const std::vector<DMABuff> &buffs,
 
 int main()
 {
+    Kernel::init(knacs_fd);
     auto addr = Molecube::Pulser::address();
     printf("%p\n", addr);
     Molecube::Pulser p(addr);
@@ -194,32 +217,41 @@ int main()
     // printf("OCM HP\n");
     // bench_dma(p, {buff3, buff4}, 0x20, 10);
 
-    // {
-    //     printf("Get Version\n");
-    //     Timer timer;
-    //     for (int i = 0; i < 1000000; i++) {
-    //         Kernel::getDriverVersion();
-    //     }
-    //     timer.print();
-    // }
+    {
+        printf("Get Version\n");
+        Timer timer;
+        for (int i = 0; i < 1000; i++) {
+            Kernel::getDriverVersion();
+        }
+        timer.print();
+    }
 
-    // {
-    //     printf("Flush main memory\n");
-    //     Timer timer;
-    //     for (int i = 0; i < 1000000; i++) {
-    //         __builtin___clear_cache(buff1, (char*)buff1 + 4096 * 16);
-    //     }
-    //     timer.print();
-    // }
+    {
+        printf("Flush main memory\n");
+        Timer timer;
+        for (int i = 0; i < 1000; i++) {
+            buff1.clear_cache();
+        }
+        timer.print();
+    }
 
-    // {
-    //     printf("Flush OCM\n");
-    //     Timer timer;
-    //     for (int i = 0; i < 1000000; i++) {
-    //         __builtin___clear_cache(buff3, (char*)buff3 + 4096 * 16);
-    //     }
-    //     timer.print();
-    // }
+    {
+        printf("Flush OCM\n");
+        Timer timer;
+        for (int i = 0; i < 1000; i++) {
+            buff3.clear_cache();
+        }
+        timer.print();
+    }
+
+    {
+        printf("Flush main memory dma\n");
+        Timer timer;
+        for (int i = 0; i < 1000; i++) {
+            buff1.flush_dma();
+        }
+        timer.print();
+    }
 
     // printf("Main Memory ACP\n");
     // bench_dma(p, {buff1, buff2}, 0x21, 10);
@@ -231,7 +263,6 @@ int main()
         buff1.rand_fill();
         auto crc = buff1.crc32c_sw();
         auto crc1 = buff1.crc32c_dma(p, 0x20);
-        buff1.clear_cache();
         buff1.clear_cache();
         auto crc2 = buff1.crc32c_dma(p, 0x20);
         printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
@@ -246,6 +277,26 @@ int main()
         auto crc2 = buff3.crc32c_dma(p, 0x20);
         printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
     }
+
+    {
+        printf("Main Memory CRC32C\n");
+        buff1.rand_fill();
+        auto crc = buff1.crc32c_sw();
+        auto crc1 = buff1.crc32c_dma(p, 0x20);
+        buff1.flush_dma();
+        auto crc2 = buff1.crc32c_dma(p, 0x20);
+        printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
+    }
+
+    // {
+    //     printf("OCM CRC32C\n");
+    //     buff3.rand_fill();
+    //     auto crc = buff3.crc32c_sw();
+    //     auto crc1 = buff3.crc32c_dma(p, 0x20);
+    //     buff3.flush_dma();
+    //     auto crc2 = buff3.crc32c_dma(p, 0x20);
+    //     printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
+    // }
 
 
     if (buff1.virt_addr)
