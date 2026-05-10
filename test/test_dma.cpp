@@ -31,32 +31,14 @@
 #include <random>
 #include <thread>
 
-#include <sys/syscall.h>
-
-#include <fcntl.h>
 #include <inttypes.h>
-#include <sys/ioctl.h>
 #include <unistd.h>
 
 using namespace NaCs;
 using namespace Molecube;
 using namespace std::literals;
 
-typedef struct {
-    unsigned long addr;
-    unsigned long size;
-    int l1_only: 1;
-} _knacs_dma_buff_t;
-
 static std::random_device rd;
-
-static int knacs_fd = open("/dev/knacs", O_RDWR | O_SYNC);
-
-static void flush_dma_buff(void *addr, size_t size, bool l1_only=false)
-{
-    _knacs_dma_buff_t buff{(unsigned long)addr, (unsigned long)size, l1_only};
-    checkErrno(ioctl(knacs_fd, _IOR('y', 2, _knacs_dma_buff_t), &buff));
-}
 
 #include "crc32c_table.h"
 
@@ -146,7 +128,7 @@ struct DMABuff {
 
     void flush_dma(bool l1_only=false)
     {
-        flush_dma_buff(virt_addr, size, l1_only);
+        Kernel::cleanCache(virt_addr, size, l1_only);
     }
 };
 
@@ -189,7 +171,6 @@ static void bench_dma(Molecube::Pulser &p, const std::vector<DMABuff> &buffs,
 
 int main()
 {
-    Kernel::init(knacs_fd);
     auto addr = Molecube::Pulser::address();
     printf("%p\n", addr);
     Molecube::Pulser p(addr);
