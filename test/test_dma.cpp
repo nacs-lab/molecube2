@@ -24,6 +24,7 @@
 #include <nacs-kernel/device.h>
 #include <nacs-kernel/devctl.h>
 
+#include <atomic>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -44,16 +45,17 @@ using namespace std::literals;
 typedef struct {
     unsigned long addr;
     unsigned long size;
+    int l1_only: 1;
 } _knacs_dma_buff_t;
 
 static std::random_device rd;
 
 static int knacs_fd = open("/dev/knacs", O_RDWR | O_SYNC);
 
-static void flush_dma_buff(void *addr, size_t size)
+static void flush_dma_buff(void *addr, size_t size, bool l1_only=false)
 {
-    _knacs_dma_buff_t buff{(unsigned long)addr, (unsigned long)size};
-    checkErrno(ioctl(knacs_fd, 3, &buff));
+    _knacs_dma_buff_t buff{(unsigned long)addr, (unsigned long)size, l1_only};
+    checkErrno(ioctl(knacs_fd, _IOR('y', 2, _knacs_dma_buff_t), &buff));
 }
 
 #include "crc32c_table.h"
@@ -139,17 +141,12 @@ struct DMABuff {
         run_dma(p, idx, size);
         while (p.read(0x31) != start_count + 1)
             std::this_thread::yield();
-        return p.read(0x34);
+        return p.read(idx + 0x14);
     }
 
-    void clear_cache()
+    void flush_dma(bool l1_only=false)
     {
-        __builtin___clear_cache(virt_addr, (char*)virt_addr + size);
-    }
-
-    void flush_dma()
-    {
-        flush_dma_buff(virt_addr, size);
+        flush_dma_buff(virt_addr, size, l1_only);
     }
 };
 
@@ -162,16 +159,6 @@ static void dma_dbg_print(Molecube::Pulser &p, const char *name=nullptr)
            p.read(0x34), p.read(0x35), p.read(0x36));
 }
 
-static void do_rep_dma(Molecube::Pulser &p, const std::vector<DMABuff> &buffs,
-                       int idx, int rep, size_t size = -1)
-{
-    for (int i = 0; i < rep; i++) {
-        for (auto &buff: buffs) {
-            buff.run_dma(p, idx, size);
-        }
-    }
-}
-
 __attribute__((unused))
 static void bench_dma(Molecube::Pulser &p, const std::vector<DMABuff> &buffs,
                        int idx, int rep, size_t size = -1)
@@ -180,7 +167,19 @@ static void bench_dma(Molecube::Pulser &p, const std::vector<DMABuff> &buffs,
     auto start_count = p.read(0x31);
     std::this_thread::sleep_for(10ms);
     NaCs::Timer timer;
-    do_rep_dma(p, buffs, idx, rep, size);
+    int j = 0;
+    auto last_count = start_count;
+    for (int i = 0; i < rep; i++) {
+        for (auto &buff: buffs) {
+            if (last_count + 8 < start_count + j) {
+                while ((last_count = p.read(0x31)) + 8 < start_count + j) {
+                    std::this_thread::yield();
+                }
+            }
+            j++;
+            buff.run_dma(p, idx, size);
+        }
+    }
     dma_dbg_print(p, "post-transfer");
     while (p.read(0x31) != start_count + rep * buffs.size())
         std::this_thread::yield();
@@ -200,22 +199,67 @@ int main()
     auto buff4 = DMABuff::alloc_ocm(16 * 4096);
     printf("%p, %p, %p, %p\n", buff1.virt_addr, buff2.virt_addr,
            buff3.virt_addr, buff4.virt_addr);
-    buff1.clear_cache();
-    buff2.clear_cache();
-    buff3.clear_cache();
-    buff4.clear_cache();
+    buff1.flush_dma();
+    buff2.flush_dma();
+    buff3.flush_dma();
+    buff4.flush_dma();
     printf("%p, %p, %p, %p\n", buff1.phy_addr, buff2.phy_addr,
            buff3.phy_addr, buff4.phy_addr);
 
-    // printf("Main Memory HP\n");
-    // bench_dma(p, {buff1, buff2}, 0x20, 10);
-    // printf("OCM HP\n");
-    // bench_dma(p, {buff3, buff4}, 0x20, 10);
+    printf("Main Memory HP\n");
+    bench_dma(p, {buff1}, 0x20, 1000);
+    printf("OCM HP\n");
+    bench_dma(p, {buff3}, 0x20, 1000);
 
-    // printf("Main Memory HP\n");
-    // bench_dma(p, {buff1, buff2}, 0x20, 10);
-    // printf("OCM HP\n");
-    // bench_dma(p, {buff3, buff4}, 0x20, 10);
+    printf("Main Memory ACP\n");
+    bench_dma(p, {buff1}, 0x21, 1000);
+    printf("OCM ACP\n");
+    bench_dma(p, {buff3}, 0x21, 1000);
+
+    // {
+    //     printf("Yield\n");
+    //     Timer timer;
+    //     for (int i = 0; i < 1000; i++) {
+    //         std::this_thread::yield();
+    //     }
+    //     timer.print();
+    // }
+
+    // {
+    //     printf("Sleep 1us\n");
+    //     Timer timer;
+    //     for (int i = 0; i < 1000; i++) {
+    //         std::this_thread::sleep_for(1us);
+    //     }
+    //     timer.print();
+    // }
+
+    // {
+    //     printf("Sleep 1ns\n");
+    //     Timer timer;
+    //     for (int i = 0; i < 1000; i++) {
+    //         std::this_thread::sleep_for(1ns);
+    //     }
+    //     timer.print();
+    // }
+
+    // {
+    //     printf("Yield\n");
+    //     Timer timer;
+    //     for (int i = 0; i < 1000; i++) {
+    //         __asm__ volatile ("yield" ::: "memory");
+    //     }
+    //     timer.print();
+    // }
+
+    // {
+    //     printf("Noop\n");
+    //     Timer timer;
+    //     for (int i = 0; i < 1000; i++) {
+    //         __asm__ volatile ("nop" ::: "memory");
+    //     }
+    //     timer.print();
+    // }
 
     {
         printf("Get Version\n");
@@ -230,7 +274,7 @@ int main()
         printf("Flush main memory\n");
         Timer timer;
         for (int i = 0; i < 1000; i++) {
-            buff1.clear_cache();
+            buff1.flush_dma();
         }
         timer.print();
     }
@@ -239,43 +283,27 @@ int main()
         printf("Flush OCM\n");
         Timer timer;
         for (int i = 0; i < 1000; i++) {
-            buff3.clear_cache();
+            buff3.flush_dma();
         }
         timer.print();
     }
 
     {
-        printf("Flush main memory dma\n");
+        printf("Flush main memory l1\n");
         Timer timer;
         for (int i = 0; i < 1000; i++) {
-            buff1.flush_dma();
+            buff1.flush_dma(true);
         }
         timer.print();
     }
 
-    // printf("Main Memory ACP\n");
-    // bench_dma(p, {buff1, buff2}, 0x21, 10);
-    // printf("OCM ACP\n");
-    // bench_dma(p, {buff3, buff4}, 0x21, 10);
-
     {
-        printf("Main Memory CRC32C\n");
-        buff1.rand_fill();
-        auto crc = buff1.crc32c_sw();
-        auto crc1 = buff1.crc32c_dma(p, 0x20);
-        buff1.clear_cache();
-        auto crc2 = buff1.crc32c_dma(p, 0x20);
-        printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
-    }
-
-    {
-        printf("OCM CRC32C\n");
-        buff3.rand_fill();
-        auto crc = buff3.crc32c_sw();
-        auto crc1 = buff3.crc32c_dma(p, 0x20);
-        buff3.clear_cache();
-        auto crc2 = buff3.crc32c_dma(p, 0x20);
-        printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
+        printf("Flush OCM l1\n");
+        Timer timer;
+        for (int i = 0; i < 1000; i++) {
+            buff3.flush_dma(true);
+        }
+        timer.print();
     }
 
     {
@@ -288,16 +316,39 @@ int main()
         printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
     }
 
-    // {
-    //     printf("OCM CRC32C\n");
-    //     buff3.rand_fill();
-    //     auto crc = buff3.crc32c_sw();
-    //     auto crc1 = buff3.crc32c_dma(p, 0x20);
-    //     buff3.flush_dma();
-    //     auto crc2 = buff3.crc32c_dma(p, 0x20);
-    //     printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
-    // }
+    {
+        printf("OCM CRC32C\n");
+        buff3.rand_fill();
+        auto crc = buff3.crc32c_sw();
+        auto crc1 = buff3.crc32c_dma(p, 0x20);
+        buff3.flush_dma();
+        auto crc2 = buff3.crc32c_dma(p, 0x20);
+        printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
+    }
 
+    {
+        printf("Main Memory ACP CRC32C\n");
+        buff1.rand_fill();
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        auto crc = buff1.crc32c_sw();
+        auto crc1 = buff1.crc32c_dma(p, 0x21);
+        buff1.flush_dma(true);
+        auto crc2 = buff1.crc32c_dma(p, 0x21);
+        printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
+    }
+
+    {
+        printf("OCM ACP CRC32C\n");
+        buff3.rand_fill();
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        auto crc = buff3.crc32c_sw();
+        auto crc1 = buff3.crc32c_dma(p, 0x21);
+        buff3.flush_dma(true);
+        auto crc2 = buff3.crc32c_dma(p, 0x21);
+        printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
+    }
+
+    dma_dbg_print(p, "final");
 
     if (buff1.virt_addr)
         Kernel::freeDMABuffer(buff1.virt_addr, 16 * 4096);
