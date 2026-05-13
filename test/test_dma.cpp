@@ -98,9 +98,11 @@ enum class DMAType : uint8_t {
     HP_OCM,
     HP_OCM_WC,
     ACP_DDR,
+    ACP_DDR_WC,
     ACP_OCM,
     ACP_OCM_WC,
     ACP_COH_DDR,
+    ACP_COH_DDR_WC,
     ACP_COH_OCM,
     ACP_COH_OCM_WC,
 };
@@ -121,6 +123,8 @@ struct DMABuff {
         case DMAType::ACP_COH_DDR:
             return Kernel::allocDMABuffer(size, false);
         case DMAType::HP_DDR_WC:
+        case DMAType::ACP_DDR_WC:
+        case DMAType::ACP_COH_DDR_WC:
             return Kernel::allocDMABuffer(size, true);
         case DMAType::HP_OCM:
         case DMAType::ACP_OCM:
@@ -177,6 +181,8 @@ struct DMABuff {
         case DMAType::ACP_DDR:
         case DMAType::ACP_COH_DDR:
         case DMAType::HP_DDR_WC:
+        case DMAType::ACP_DDR_WC:
+        case DMAType::ACP_COH_DDR_WC:
             Kernel::freeDMABuffer(virt_addr, size);
             return;
         case DMAType::HP_OCM:
@@ -205,10 +211,12 @@ struct DMABuff {
         case DMAType::HP_OCM_WC:
             return _queue(p, 0x20, 0);
         case DMAType::ACP_DDR:
+        case DMAType::ACP_DDR_WC:
         case DMAType::ACP_OCM:
         case DMAType::ACP_OCM_WC:
             return _queue(p, 0x21, 0);
         case DMAType::ACP_COH_DDR:
+        case DMAType::ACP_COH_DDR_WC:
         case DMAType::ACP_COH_OCM:
         case DMAType::ACP_COH_OCM_WC:
             return _queue(p, 0x21, 31);
@@ -228,8 +236,10 @@ struct DMABuff {
             return Kernel::cleanCache(virt_addr, size, true);
         case DMAType::HP_DDR_WC:
         case DMAType::HP_OCM_WC:
+        case DMAType::ACP_DDR_WC:
         case DMAType::ACP_OCM_WC:
         case DMAType::ACP_COH_DDR:
+        case DMAType::ACP_COH_DDR_WC:
         case DMAType::ACP_COH_OCM:
         case DMAType::ACP_COH_OCM_WC:
             asm volatile ("dmb ishst" ::: "memory");
@@ -260,8 +270,10 @@ struct DMABuff {
             return p.read(0x34);
         case DMAType::ACP_DDR:
         case DMAType::ACP_OCM:
+        case DMAType::ACP_DDR_WC:
         case DMAType::ACP_OCM_WC:
         case DMAType::ACP_COH_DDR:
+        case DMAType::ACP_COH_DDR_WC:
         case DMAType::ACP_COH_OCM:
         case DMAType::ACP_COH_OCM_WC:
             return p.read(0x35);
@@ -412,15 +424,21 @@ static void test_crc32c(Molecube::Pulser &p, size_t size, int rep)
 {
     DMABuff buff(type, size);
     std::vector<uint32_t> content_buff(size / 4);
+    int failed = 0;
     for (int i = 0; i < rep; i++) {
         rand_fill(std::span(content_buff));
         memcpy(buff.virt_addr, &content_buff[0], size);
         buff.prepare();
         auto crc_dma = buff.crc32c_dma(p);
         auto crc_sw = crc32c(0, (const char*)&content_buff[0], size);
-        if (crc_dma != crc_sw)
-            printf("%d: %x, %x\n", i, crc_dma, crc_sw);
-        // assert(crc_dma == crc_sw);
+        if (crc_dma != crc_sw) {
+            if (failed == 0)
+                printf("  First failed@%d: %08x != %08x\n", i, crc_dma, crc_sw);
+            failed += 1;
+        }
+    }
+    if (failed != 0) {
+        printf("  Total failed: %d/%d\n", failed, rep);
     }
 }
 
@@ -442,6 +460,8 @@ int main()
 
     printf("ACP DDR\n");
     bench_dma_only<DMAType::ACP_DDR>(p, 4, 16 * 4096, 1000);
+    printf("ACP DDR WC\n");
+    bench_dma_only<DMAType::ACP_DDR_WC>(p, 4, 16 * 4096, 1000);
     printf("ACP OCM\n");
     bench_dma_only<DMAType::ACP_OCM>(p, 4, 16 * 4096, 1000);
     printf("ACP OCM WC\n");
@@ -449,6 +469,8 @@ int main()
 
     printf("ACP COH DDR\n");
     bench_dma_only<DMAType::ACP_COH_DDR>(p, 4, 16 * 4096, 1000);
+    printf("ACP COH DDR WC\n");
+    bench_dma_only<DMAType::ACP_COH_DDR_WC>(p, 4, 16 * 4096, 1000);
     printf("ACP COH OCM\n");
     bench_dma_only<DMAType::ACP_COH_OCM>(p, 4, 16 * 4096, 1000);
     printf("ACP COH OCM WC\n");
@@ -467,6 +489,8 @@ int main()
 
     printf("ACP DDR\n");
     bench_pipe<DMAType::ACP_DDR>(p, 4, 16 * 4096, 1000);
+    printf("ACP DDR WC\n");
+    bench_pipe<DMAType::ACP_DDR_WC>(p, 4, 16 * 4096, 1000);
     printf("ACP OCM\n");
     bench_pipe<DMAType::ACP_OCM>(p, 4, 16 * 4096, 1000);
     printf("ACP OCM WC\n");
@@ -474,6 +498,8 @@ int main()
 
     printf("ACP COH DDR\n");
     bench_pipe<DMAType::ACP_COH_DDR>(p, 4, 16 * 4096, 1000);
+    printf("ACP COH DDR WC\n");
+    bench_pipe<DMAType::ACP_COH_DDR_WC>(p, 4, 16 * 4096, 1000);
     printf("ACP COH OCM\n");
     bench_pipe<DMAType::ACP_COH_OCM>(p, 4, 16 * 4096, 1000);
     printf("ACP COH OCM WC\n");
@@ -514,6 +540,8 @@ int main()
 
     printf("ACP DDR\n");
     bench_flush<DMAType::ACP_DDR>(4, 16 * 4096, 1000);
+    printf("ACP DDR WC\n");
+    bench_flush<DMAType::ACP_DDR_WC>(4, 16 * 4096, 1000);
     printf("ACP OCM\n");
     bench_flush<DMAType::ACP_OCM>(4, 16 * 4096, 1000);
     printf("ACP OCM WC\n");
@@ -521,6 +549,8 @@ int main()
 
     printf("ACP COH DDR\n");
     bench_flush<DMAType::ACP_COH_DDR>(4, 16 * 4096, 1000);
+    printf("ACP COH DDR WC\n");
+    bench_flush<DMAType::ACP_COH_DDR_WC>(4, 16 * 4096, 1000);
     printf("ACP COH OCM\n");
     bench_flush<DMAType::ACP_COH_OCM>(4, 16 * 4096, 1000);
     printf("ACP COH OCM WC\n");
@@ -539,6 +569,8 @@ int main()
 
     printf("ACP DDR\n");
     test_crc32c<DMAType::ACP_DDR>(p, 16 * 4096, 10000);
+    printf("ACP DDR WC\n");
+    test_crc32c<DMAType::ACP_DDR_WC>(p, 16 * 4096, 10000);
     printf("ACP OCM\n");
     test_crc32c<DMAType::ACP_OCM>(p, 16 * 4096, 10000);
     printf("ACP OCM WC\n");
@@ -546,6 +578,8 @@ int main()
 
     printf("ACP COH DDR\n");
     test_crc32c<DMAType::ACP_COH_DDR>(p, 16 * 4096, 10000);
+    printf("ACP COH DDR WC\n");
+    test_crc32c<DMAType::ACP_COH_DDR_WC>(p, 16 * 4096, 10000);
     printf("ACP COH OCM\n");
     test_crc32c<DMAType::ACP_COH_OCM>(p, 16 * 4096, 10000);
     printf("ACP COH OCM WC\n");
