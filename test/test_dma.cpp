@@ -107,13 +107,13 @@ enum class DMAType : uint8_t {
     ACP_COH_OCM_WC,
 };
 
+template<DMAType type>
 struct DMABuff {
     void *virt_addr;
     void *phy_addr;
     size_t size;
-    DMAType type;
 
-    static void *alloc_buff(DMAType type, size_t size)
+    static void *alloc_buff(size_t size)
     {
         switch (type) {
         default:
@@ -142,20 +142,17 @@ struct DMABuff {
         std::swap(b1.virt_addr, b2.virt_addr);
         std::swap(b1.phy_addr, b2.phy_addr);
         std::swap(b1.size, b2.size);
-        std::swap(b1.type, b2.type);
     }
 
-    DMABuff(DMAType type, size_t size)
-        : virt_addr(alloc_buff(type, size)),
+    DMABuff(size_t size)
+        : virt_addr(alloc_buff(size)),
           phy_addr(Kernel::bufferPhyAddr(virt_addr)),
-          size(size),
-          type(type)
+          size(size)
     {}
     DMABuff()
         : virt_addr(nullptr),
           phy_addr(nullptr),
-          size(0),
-          type(DMAType::HP_DDR)
+          size(0)
     {}
     DMABuff(DMABuff &&other)
         : DMABuff()
@@ -242,7 +239,7 @@ struct DMABuff {
         case DMAType::ACP_COH_DDR_WC:
         case DMAType::ACP_COH_OCM:
         case DMAType::ACP_COH_OCM_WC:
-            asm volatile ("dmb ishst" ::: "memory");
+            asm volatile ("dmb st" ::: "memory");
             return;
         }
     }
@@ -311,9 +308,9 @@ template<DMAType type>
 __attribute__((unused))
 static void bench_dma_only(Molecube::Pulser &p, int nbuffs, size_t size, int rep)
 {
-    std::vector<DMABuff> buffs(nbuffs);
+    std::vector<DMABuff<type>> buffs(nbuffs);
     for (int i = 0; i < nbuffs; i++) {
-        buffs[i] = DMABuff(type, size);
+        buffs[i] = DMABuff<type>(size);
     }
     auto start_count = p.read(0x31);
     int j = 0;
@@ -339,9 +336,9 @@ template<DMAType type>
 __attribute__((unused))
 static void bench_pipe(Molecube::Pulser &p, int nbuffs, size_t size, int rep)
 {
-    std::vector<DMABuff> buffs(nbuffs);
+    std::vector<DMABuff<type>> buffs(nbuffs);
     for (int i = 0; i < nbuffs; i++) {
-        buffs[i] = DMABuff(type, size);
+        buffs[i] = DMABuff<type>(size);
     }
     auto max_ahead = nbuffs;
     if (max_ahead > 8)
@@ -374,9 +371,9 @@ template<DMAType type>
 __attribute__((unused))
 static void bench_memcpy(int nbuffs, size_t size, int rep)
 {
-    std::vector<DMABuff> buffs(nbuffs);
+    std::vector<DMABuff<type>> buffs(nbuffs);
     for (int i = 0; i < nbuffs; i++) {
-        buffs[i] = DMABuff(type, size);
+        buffs[i] = DMABuff<type>(size);
     }
     std::vector<uint32_t> content_buff(size / 4);
     bench_rep([&] {
@@ -391,9 +388,9 @@ template<DMAType type>
 __attribute__((unused))
 static void bench_rand_fill(int nbuffs, size_t size, int rep)
 {
-    std::vector<DMABuff> buffs(nbuffs);
+    std::vector<DMABuff<type>> buffs(nbuffs);
     for (int i = 0; i < nbuffs; i++) {
-        buffs[i] = DMABuff(type, size);
+        buffs[i] = DMABuff<type>(size);
     }
     bench_rep([&] {
         for (auto &buff: buffs) {
@@ -407,9 +404,9 @@ template<DMAType type>
 __attribute__((unused))
 static void bench_flush(int nbuffs, size_t size, int rep)
 {
-    std::vector<DMABuff> buffs(nbuffs);
+    std::vector<DMABuff<type>> buffs(nbuffs);
     for (int i = 0; i < nbuffs; i++) {
-        buffs[i] = DMABuff(type, size);
+        buffs[i] = DMABuff<type>(size);
     }
     bench_rep([&] {
         for (auto &buff: buffs) {
@@ -422,7 +419,7 @@ template<DMAType type>
 __attribute__((unused))
 static void test_crc32c(Molecube::Pulser &p, size_t size, int rep)
 {
-    DMABuff buff(type, size);
+    DMABuff<type> buff(size);
     std::vector<uint32_t> content_buff(size / 4);
     int failed = 0;
     for (int i = 0; i < rep; i++) {
