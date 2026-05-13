@@ -208,15 +208,16 @@ struct DMABuff {
         case DMAType::HP_OCM_WC:
             return _queue(p, 0x20, 0);
         case DMAType::ACP_DDR:
-        case DMAType::ACP_DDR_WC:
         case DMAType::ACP_OCM:
         case DMAType::ACP_OCM_WC:
-            return _queue(p, 0x21, 0);
+            return _queue(p, 0x21, 2);
         case DMAType::ACP_COH_DDR:
-        case DMAType::ACP_COH_DDR_WC:
         case DMAType::ACP_COH_OCM:
         case DMAType::ACP_COH_OCM_WC:
-            return _queue(p, 0x21, 31);
+            return _queue(p, 0x21, 3);
+        case DMAType::ACP_DDR_WC:
+        case DMAType::ACP_COH_DDR_WC:
+            return _queue(p, 0x21, 0);
         }
     }
 
