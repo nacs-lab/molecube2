@@ -29,7 +29,9 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <span>
 #include <thread>
+#include <utility>
 
 #include <inttypes.h>
 #include <unistd.h>
@@ -37,8 +39,6 @@
 using namespace NaCs;
 using namespace Molecube;
 using namespace std::literals;
-
-static std::random_device rd;
 
 #include "crc32c_table.h"
 
@@ -71,66 +71,17 @@ static uint32_t crc32c(uint32_t crci, const char *buf, size_t len)
     return (uint32_t)crc ^ 0xffffffff;
 }
 
-struct DMABuff {
-    void *virt_addr;
-    void *phy_addr;
-    size_t size;
-    DMABuff(void *virt_addr, size_t size)
-        : virt_addr(virt_addr),
-          phy_addr(Kernel::bufferPhyAddr(virt_addr)),
-          size(size)
-    {
-    }
+static std::random_device rd;
+static std::mt19937 rand_gen(rd());
 
-    static DMABuff alloc_dma(size_t size)
-    {
-        return DMABuff{Kernel::allocDMABuffer(size), size};
+template<typename T>
+static void rand_fill(std::span<T> buff)
+{
+    std::uniform_int_distribution<T> distrib;
+    for (auto &i: buff) {
+        i = distrib(rand_gen);
     }
-    static DMABuff alloc_ocm(size_t size)
-    {
-        return DMABuff{Kernel::allocOCMBuffer(size), size};
-    }
-
-    void run_dma(Molecube::Pulser &p, int idx, size_t size=-1) const
-    {
-        if (size == (size_t)-1)
-            size = this->size;
-        p.write(idx, (unsigned)phy_addr);
-        p.write(idx, size / (16 * 8) - 1);
-    }
-
-    void rand_fill() const
-    {
-        static std::mt19937 gen(rd());
-        std::uniform_int_distribution<unsigned> distrib;
-
-        auto ptr = (unsigned*)virt_addr;
-        for (unsigned i = 0; i < size / sizeof(unsigned); i++) {
-            ptr[i] = distrib(gen);
-        }
-    }
-
-    uint32_t crc32c_sw(size_t size=-1) const
-    {
-        if (size == (size_t)-1)
-            size = this->size;
-        return crc32c(0, (const char*)virt_addr, size);
-    }
-
-    uint32_t crc32c_dma(Molecube::Pulser &p, int idx, size_t size=-1) const
-    {
-        auto start_count = p.read(0x31);
-        run_dma(p, idx, size);
-        while (p.read(0x31) != start_count + 1)
-            std::this_thread::yield();
-        return p.read(idx + 0x14);
-    }
-
-    void flush_dma(bool l1_only=false)
-    {
-        Kernel::cleanCache(virt_addr, size, l1_only);
-    }
-};
+}
 
 static void dma_dbg_print(Molecube::Pulser &p, const char *name=nullptr)
 {
@@ -141,17 +92,221 @@ static void dma_dbg_print(Molecube::Pulser &p, const char *name=nullptr)
            p.read(0x34), p.read(0x35), p.read(0x36));
 }
 
-__attribute__((unused))
-static void bench_dma(Molecube::Pulser &p, const std::vector<DMABuff> &buffs,
-                       int idx, int rep, size_t size = -1)
+enum class DMAType : uint8_t {
+    HP_DDR,
+    HP_DDR_WC,
+    HP_OCM,
+    HP_OCM_WC,
+    ACP_DDR,
+    ACP_OCM,
+    ACP_OCM_WC,
+    ACP_COH_DDR,
+    ACP_COH_OCM,
+    ACP_COH_OCM_WC,
+};
+
+struct DMABuff {
+    void *virt_addr;
+    void *phy_addr;
+    size_t size;
+    DMAType type;
+
+    static void *alloc_buff(DMAType type, size_t size)
+    {
+        switch (type) {
+        default:
+            assert(false);
+        case DMAType::HP_DDR:
+        case DMAType::ACP_DDR:
+        case DMAType::ACP_COH_DDR:
+            return Kernel::allocDMABuffer(size, false);
+        case DMAType::HP_DDR_WC:
+            return Kernel::allocDMABuffer(size, true);
+        case DMAType::HP_OCM:
+        case DMAType::ACP_OCM:
+        case DMAType::ACP_COH_OCM:
+            return Kernel::allocOCMBuffer(size, false);
+        case DMAType::HP_OCM_WC:
+        case DMAType::ACP_OCM_WC:
+        case DMAType::ACP_COH_OCM_WC:
+            return Kernel::allocOCMBuffer(size, true);
+        }
+    }
+
+    friend void swap(DMABuff &b1, DMABuff &b2)
+    {
+        std::swap(b1.virt_addr, b2.virt_addr);
+        std::swap(b1.phy_addr, b2.phy_addr);
+        std::swap(b1.size, b2.size);
+        std::swap(b1.type, b2.type);
+    }
+
+    DMABuff(DMAType type, size_t size)
+        : virt_addr(alloc_buff(type, size)),
+          phy_addr(Kernel::bufferPhyAddr(virt_addr)),
+          size(size),
+          type(type)
+    {}
+    DMABuff()
+        : virt_addr(nullptr),
+          phy_addr(nullptr),
+          size(0),
+          type(DMAType::HP_DDR)
+    {}
+    DMABuff(DMABuff &&other)
+        : DMABuff()
+    {
+        swap(*this, other);
+    }
+    DMABuff(const DMABuff&) = delete;
+    DMABuff &operator=(DMABuff &&other)
+    {
+        swap(*this, other);
+        return *this;
+    }
+    DMABuff &operator=(const DMABuff &other) = delete;
+
+    ~DMABuff()
+    {
+        if (!virt_addr)
+            return;
+        switch (type) {
+        default:
+            assert(false);
+        case DMAType::HP_DDR:
+        case DMAType::ACP_DDR:
+        case DMAType::ACP_COH_DDR:
+        case DMAType::HP_DDR_WC:
+            Kernel::freeDMABuffer(virt_addr, size);
+            return;
+        case DMAType::HP_OCM:
+        case DMAType::ACP_OCM:
+        case DMAType::ACP_COH_OCM:
+        case DMAType::HP_OCM_WC:
+        case DMAType::ACP_OCM_WC:
+        case DMAType::ACP_COH_OCM_WC:
+            Kernel::freeOCMBuffer(virt_addr, size);
+            return;
+        }
+    }
+    void _queue(Molecube::Pulser &p, int idx, uint8_t user) const
+    {
+        p.write(idx, (unsigned)phy_addr);
+        p.write(idx, (size / (16 * 8) - 1) | (uint32_t(user) << 24));
+    }
+    void queue(Molecube::Pulser &p) const
+    {
+        switch (type) {
+        default:
+            assert(false);
+        case DMAType::HP_DDR:
+        case DMAType::HP_DDR_WC:
+        case DMAType::HP_OCM:
+        case DMAType::HP_OCM_WC:
+            return _queue(p, 0x20, 0);
+        case DMAType::ACP_DDR:
+        case DMAType::ACP_OCM:
+        case DMAType::ACP_OCM_WC:
+            return _queue(p, 0x21, 0);
+        case DMAType::ACP_COH_DDR:
+        case DMAType::ACP_COH_OCM:
+        case DMAType::ACP_COH_OCM_WC:
+            return _queue(p, 0x21, 31);
+        }
+    }
+
+    void prepare() const
+    {
+        switch (type) {
+        default:
+            assert(false);
+        case DMAType::HP_DDR:
+        case DMAType::HP_OCM:
+            return Kernel::cleanCache(virt_addr, size, false);
+        case DMAType::ACP_DDR:
+        case DMAType::ACP_OCM:
+            return Kernel::cleanCache(virt_addr, size, true);
+        case DMAType::HP_DDR_WC:
+        case DMAType::HP_OCM_WC:
+        case DMAType::ACP_OCM_WC:
+        case DMAType::ACP_COH_DDR:
+        case DMAType::ACP_COH_OCM:
+        case DMAType::ACP_COH_OCM_WC:
+            asm volatile ("dmb" ::: "memory");
+            return;
+        }
+    }
+    void rand_fill() const
+    {
+        ::rand_fill(std::span((unsigned*)virt_addr, size / sizeof(unsigned)));
+    }
+    uint32_t crc32c_sw() const
+    {
+        return crc32c(0, (const char*)virt_addr, size);
+    }
+    uint32_t crc32c_dma(Molecube::Pulser &p) const
+    {
+        auto start_count = p.read(0x31);
+        queue(p);
+        while (p.read(0x31) != start_count + 1)
+            std::this_thread::yield();
+        switch (type) {
+        default:
+            assert(false);
+        case DMAType::HP_DDR:
+        case DMAType::HP_DDR_WC:
+        case DMAType::HP_OCM:
+        case DMAType::HP_OCM_WC:
+            return p.read(0x34);
+        case DMAType::ACP_DDR:
+        case DMAType::ACP_OCM:
+        case DMAType::ACP_OCM_WC:
+        case DMAType::ACP_COH_DDR:
+        case DMAType::ACP_COH_OCM:
+        case DMAType::ACP_COH_OCM_WC:
+            return p.read(0x35);
+        }
+    }
+};
+
+static void bench_rep(auto &&cb, int rep, int div, auto &&finish)
 {
-    dma_dbg_print(p, "pre-transfer");
+    Timer timer;
+    for (int i = 0; i < rep; i++) {
+        cb();
+    }
+    finish();
+    auto dt = double(timer.elapsed()) / rep / div;
+    if (dt <= 1300) {
+        printf("  %.3f ns\n", dt);
+        return;
+    }
+    dt /= 1000;
+    if (dt <= 1300) {
+        printf("  %.3f us\n", dt);
+        return;
+    }
+    dt /= 1000;
+    if (dt <= 1300) {
+        printf("  %.3f ms\n", dt);
+        return;
+    }
+    dt /= 1000;
+    printf("  %.3f s\n", dt);
+}
+
+template<DMAType type>
+__attribute__((unused))
+static void bench_dma_only(Molecube::Pulser &p, int nbuffs, size_t size, int rep)
+{
+    std::vector<DMABuff> buffs(nbuffs);
+    for (int i = 0; i < nbuffs; i++) {
+        buffs[i] = DMABuff(type, size);
+    }
     auto start_count = p.read(0x31);
-    std::this_thread::sleep_for(10ms);
-    NaCs::Timer timer;
     int j = 0;
     auto last_count = start_count;
-    for (int i = 0; i < rep; i++) {
+    bench_rep([&] {
         for (auto &buff: buffs) {
             if (last_count + 8 < start_count + j) {
                 while ((last_count = p.read(0x31)) + 8 < start_count + j) {
@@ -159,185 +314,243 @@ static void bench_dma(Molecube::Pulser &p, const std::vector<DMABuff> &buffs,
                 }
             }
             j++;
-            buff.run_dma(p, idx, size);
+            buff.queue(p);
         }
+    }, rep, nbuffs, [&] {
+        while (p.read(0x31) != start_count + rep * nbuffs) {
+            std::this_thread::yield();
+        }
+    });
+}
+
+template<DMAType type>
+__attribute__((unused))
+static void bench_pipe(Molecube::Pulser &p, int nbuffs, size_t size, int rep)
+{
+    std::vector<DMABuff> buffs(nbuffs);
+    for (int i = 0; i < nbuffs; i++) {
+        buffs[i] = DMABuff(type, size);
     }
-    dma_dbg_print(p, "post-transfer");
-    while (p.read(0x31) != start_count + rep * buffs.size())
-        std::this_thread::yield();
-    timer.print();
-    dma_dbg_print(p, "post-wait");
+    auto max_ahead = nbuffs;
+    if (max_ahead > 8)
+        max_ahead = 8;
+    std::vector<uint32_t> content_buff(size / 4);
+    rand_fill(std::span(content_buff));
+    auto start_count = p.read(0x31);
+    int j = 0;
+    auto last_count = start_count;
+    bench_rep([&] {
+        for (auto &buff: buffs) {
+            memcpy(buff.virt_addr, &content_buff[0], size);
+            buff.prepare();
+            if (last_count + max_ahead < start_count + j) {
+                while ((last_count = p.read(0x31)) + max_ahead < start_count + j) {
+                    std::this_thread::yield();
+                }
+            }
+            j++;
+            buff.queue(p);
+        }
+    }, rep, nbuffs, [&] {
+        while (p.read(0x31) != start_count + rep * nbuffs) {
+            std::this_thread::yield();
+        }
+    });
+}
+
+template<DMAType type>
+__attribute__((unused))
+static void bench_memcpy(int nbuffs, size_t size, int rep)
+{
+    std::vector<DMABuff> buffs(nbuffs);
+    for (int i = 0; i < nbuffs; i++) {
+        buffs[i] = DMABuff(type, size);
+    }
+    std::vector<uint32_t> content_buff(size / 4);
+    bench_rep([&] {
+        for (auto &buff: buffs) {
+            memcpy(buff.virt_addr, &content_buff[0], size);
+            asm volatile ("" ::: "memory");
+        }
+    }, rep, nbuffs, [] {});
+}
+
+template<DMAType type>
+__attribute__((unused))
+static void bench_rand_fill(int nbuffs, size_t size, int rep)
+{
+    std::vector<DMABuff> buffs(nbuffs);
+    for (int i = 0; i < nbuffs; i++) {
+        buffs[i] = DMABuff(type, size);
+    }
+    bench_rep([&] {
+        for (auto &buff: buffs) {
+            buff.rand_fill();
+            asm volatile ("" ::: "memory");
+        }
+    }, rep, nbuffs, [] {});
+}
+
+template<DMAType type>
+__attribute__((unused))
+static void bench_flush(int nbuffs, size_t size, int rep)
+{
+    std::vector<DMABuff> buffs(nbuffs);
+    for (int i = 0; i < nbuffs; i++) {
+        buffs[i] = DMABuff(type, size);
+    }
+    bench_rep([&] {
+        for (auto &buff: buffs) {
+            buff.prepare();
+        }
+    }, rep, nbuffs, [] {});
+}
+
+template<DMAType type>
+__attribute__((unused))
+static void test_crc32c(Molecube::Pulser &p, size_t size, int rep)
+{
+    DMABuff buff(type, size);
+    std::vector<uint32_t> content_buff(size / 4);
+    for (int i = 0; i < rep; i++) {
+        rand_fill(std::span(content_buff));
+        memcpy(buff.virt_addr, &content_buff[0], size);
+        buff.prepare();
+        auto crc_dma = buff.crc32c_dma(p);
+        auto crc_sw = crc32c(0, (const char*)&content_buff[0], size);
+        if (crc_dma != crc_sw)
+            printf("%d: %x, %x\n", i, crc_dma, crc_sw);
+        assert(crc_dma == crc_sw);
+    }
 }
 
 int main()
 {
     auto addr = Molecube::Pulser::address();
-    printf("%p\n", addr);
     Molecube::Pulser p(addr);
-    auto buff1 = DMABuff::alloc_dma(16 * 4096);
-    auto buff2 = DMABuff::alloc_dma(16 * 4096);
-    auto buff3 = DMABuff::alloc_ocm(16 * 4096);
-    auto buff4 = DMABuff::alloc_ocm(16 * 4096);
-    printf("%p, %p, %p, %p\n", buff1.virt_addr, buff2.virt_addr,
-           buff3.virt_addr, buff4.virt_addr);
-    buff1.flush_dma();
-    buff2.flush_dma();
-    buff3.flush_dma();
-    buff4.flush_dma();
-    printf("%p, %p, %p, %p\n", buff1.phy_addr, buff2.phy_addr,
-           buff3.phy_addr, buff4.phy_addr);
 
-    printf("Main Memory HP\n");
-    bench_dma(p, {buff1}, 0x20, 1000);
-    printf("OCM HP\n");
-    bench_dma(p, {buff3}, 0x20, 1000);
+    printf("\n");
+    printf("DMA read throughput\n");
+    printf("HP DDR\n");
+    bench_dma_only<DMAType::HP_DDR>(p, 4, 16 * 4096, 1000);
+    printf("HP DDR WC\n");
+    bench_dma_only<DMAType::HP_DDR_WC>(p, 4, 16 * 4096, 1000);
+    printf("HP OCM\n");
+    bench_dma_only<DMAType::HP_OCM>(p, 4, 16 * 4096, 1000);
+    printf("HP OCM WC\n");
+    bench_dma_only<DMAType::HP_OCM_WC>(p, 4, 16 * 4096, 1000);
 
-    printf("Main Memory ACP\n");
-    bench_dma(p, {buff1}, 0x21, 1000);
-    printf("OCM ACP\n");
-    bench_dma(p, {buff3}, 0x21, 1000);
+    printf("ACP DDR\n");
+    bench_dma_only<DMAType::ACP_DDR>(p, 4, 16 * 4096, 1000);
+    printf("ACP OCM\n");
+    bench_dma_only<DMAType::ACP_OCM>(p, 4, 16 * 4096, 1000);
+    printf("ACP OCM WC\n");
+    bench_dma_only<DMAType::ACP_OCM_WC>(p, 4, 16 * 4096, 1000);
 
-    // {
-    //     printf("Yield\n");
-    //     Timer timer;
-    //     for (int i = 0; i < 1000; i++) {
-    //         std::this_thread::yield();
-    //     }
-    //     timer.print();
-    // }
+    printf("ACP COH DDR\n");
+    bench_dma_only<DMAType::ACP_COH_DDR>(p, 4, 16 * 4096, 1000);
+    printf("ACP COH OCM\n");
+    bench_dma_only<DMAType::ACP_COH_OCM>(p, 4, 16 * 4096, 1000);
+    printf("ACP COH OCM WC\n");
+    bench_dma_only<DMAType::ACP_COH_OCM_WC>(p, 4, 16 * 4096, 1000);
 
-    // {
-    //     printf("Sleep 1us\n");
-    //     Timer timer;
-    //     for (int i = 0; i < 1000; i++) {
-    //         std::this_thread::sleep_for(1us);
-    //     }
-    //     timer.print();
-    // }
+    printf("\n");
+    printf("DMA pipe throughput\n");
+    printf("HP DDR\n");
+    bench_pipe<DMAType::HP_DDR>(p, 4, 16 * 4096, 1000);
+    printf("HP DDR WC\n");
+    bench_pipe<DMAType::HP_DDR_WC>(p, 4, 16 * 4096, 1000);
+    printf("HP OCM\n");
+    bench_pipe<DMAType::HP_OCM>(p, 4, 16 * 4096, 1000);
+    printf("HP OCM WC\n");
+    bench_pipe<DMAType::HP_OCM_WC>(p, 4, 16 * 4096, 1000);
 
-    // {
-    //     printf("Sleep 1ns\n");
-    //     Timer timer;
-    //     for (int i = 0; i < 1000; i++) {
-    //         std::this_thread::sleep_for(1ns);
-    //     }
-    //     timer.print();
-    // }
+    printf("ACP DDR\n");
+    bench_pipe<DMAType::ACP_DDR>(p, 4, 16 * 4096, 1000);
+    printf("ACP OCM\n");
+    bench_pipe<DMAType::ACP_OCM>(p, 4, 16 * 4096, 1000);
+    printf("ACP OCM WC\n");
+    bench_pipe<DMAType::ACP_OCM_WC>(p, 4, 16 * 4096, 1000);
 
-    // {
-    //     printf("Yield\n");
-    //     Timer timer;
-    //     for (int i = 0; i < 1000; i++) {
-    //         __asm__ volatile ("yield" ::: "memory");
-    //     }
-    //     timer.print();
-    // }
+    printf("ACP COH DDR\n");
+    bench_pipe<DMAType::ACP_COH_DDR>(p, 4, 16 * 4096, 1000);
+    printf("ACP COH OCM\n");
+    bench_pipe<DMAType::ACP_COH_OCM>(p, 4, 16 * 4096, 1000);
+    printf("ACP COH OCM WC\n");
+    bench_pipe<DMAType::ACP_COH_OCM_WC>(p, 4, 16 * 4096, 1000);
 
-    // {
-    //     printf("Noop\n");
-    //     Timer timer;
-    //     for (int i = 0; i < 1000; i++) {
-    //         __asm__ volatile ("nop" ::: "memory");
-    //     }
-    //     timer.print();
-    // }
+    printf("\n");
+    printf("rand fill\n");
+    printf("DDR\n");
+    bench_rand_fill<DMAType::HP_DDR>(4, 16 * 4096, 1000);
+    printf("DDR WC\n");
+    bench_rand_fill<DMAType::HP_DDR_WC>(4, 16 * 4096, 1000);
+    printf("OCM\n");
+    bench_rand_fill<DMAType::HP_OCM>(4, 16 * 4096, 1000);
+    printf("OCM WC\n");
+    bench_rand_fill<DMAType::HP_OCM_WC>(4, 16 * 4096, 1000);
 
-    {
-        printf("Get Version\n");
-        Timer timer;
-        for (int i = 0; i < 1000; i++) {
-            Kernel::getDriverVersion();
-        }
-        timer.print();
-    }
+    printf("\n");
+    printf("memcpy\n");
+    printf("DDR\n");
+    bench_memcpy<DMAType::HP_DDR>(4, 16 * 4096, 1000);
+    printf("DDR WC\n");
+    bench_memcpy<DMAType::HP_DDR_WC>(4, 16 * 4096, 1000);
+    printf("OCM\n");
+    bench_memcpy<DMAType::HP_OCM>(4, 16 * 4096, 1000);
+    printf("OCM WC\n");
+    bench_memcpy<DMAType::HP_OCM_WC>(4, 16 * 4096, 1000);
 
-    {
-        printf("Flush main memory\n");
-        Timer timer;
-        for (int i = 0; i < 1000; i++) {
-            buff1.flush_dma();
-        }
-        timer.print();
-    }
+    printf("\n");
+    printf("flush\n");
+    printf("HP DDR\n");
+    bench_flush<DMAType::HP_DDR>(4, 16 * 4096, 1000);
+    printf("HP DDR WC\n");
+    bench_flush<DMAType::HP_DDR_WC>(4, 16 * 4096, 1000);
+    printf("HP OCM\n");
+    bench_flush<DMAType::HP_OCM>(4, 16 * 4096, 1000);
+    printf("HP OCM WC\n");
+    bench_flush<DMAType::HP_OCM_WC>(4, 16 * 4096, 1000);
 
-    {
-        printf("Flush OCM\n");
-        Timer timer;
-        for (int i = 0; i < 1000; i++) {
-            buff3.flush_dma();
-        }
-        timer.print();
-    }
+    printf("ACP DDR\n");
+    bench_flush<DMAType::ACP_DDR>(4, 16 * 4096, 1000);
+    printf("ACP OCM\n");
+    bench_flush<DMAType::ACP_OCM>(4, 16 * 4096, 1000);
+    printf("ACP OCM WC\n");
+    bench_flush<DMAType::ACP_OCM_WC>(4, 16 * 4096, 1000);
 
-    {
-        printf("Flush main memory l1\n");
-        Timer timer;
-        for (int i = 0; i < 1000; i++) {
-            buff1.flush_dma(true);
-        }
-        timer.print();
-    }
+    printf("ACP COH DDR\n");
+    bench_flush<DMAType::ACP_COH_DDR>(4, 16 * 4096, 1000);
+    printf("ACP COH OCM\n");
+    bench_flush<DMAType::ACP_COH_OCM>(4, 16 * 4096, 1000);
+    printf("ACP COH OCM WC\n");
+    bench_flush<DMAType::ACP_COH_OCM_WC>(4, 16 * 4096, 1000);
 
-    {
-        printf("Flush OCM l1\n");
-        Timer timer;
-        for (int i = 0; i < 1000; i++) {
-            buff3.flush_dma(true);
-        }
-        timer.print();
-    }
+    printf("\n");
+    printf("Test crc32c\n");
+    printf("HP DDR\n");
+    test_crc32c<DMAType::HP_DDR>(p, 16 * 4096, 1000);
+    printf("HP DDR WC\n");
+    test_crc32c<DMAType::HP_DDR_WC>(p, 16 * 4096, 1000);
+    printf("HP OCM\n");
+    test_crc32c<DMAType::HP_OCM>(p, 16 * 4096, 1000);
+    printf("HP OCM WC\n");
+    test_crc32c<DMAType::HP_OCM_WC>(p, 16 * 4096, 1000);
 
-    {
-        printf("Main Memory CRC32C\n");
-        buff1.rand_fill();
-        auto crc = buff1.crc32c_sw();
-        auto crc1 = buff1.crc32c_dma(p, 0x20);
-        buff1.flush_dma();
-        auto crc2 = buff1.crc32c_dma(p, 0x20);
-        printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
-    }
+    printf("ACP DDR\n");
+    test_crc32c<DMAType::ACP_DDR>(p, 16 * 4096, 1000);
+    printf("ACP OCM\n");
+    test_crc32c<DMAType::ACP_OCM>(p, 16 * 4096, 1000);
+    printf("ACP OCM WC\n");
+    test_crc32c<DMAType::ACP_OCM_WC>(p, 16 * 4096, 1000);
 
-    {
-        printf("OCM CRC32C\n");
-        buff3.rand_fill();
-        auto crc = buff3.crc32c_sw();
-        auto crc1 = buff3.crc32c_dma(p, 0x20);
-        buff3.flush_dma();
-        auto crc2 = buff3.crc32c_dma(p, 0x20);
-        printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
-    }
-
-    {
-        printf("Main Memory ACP CRC32C\n");
-        buff1.rand_fill();
-        std::atomic_thread_fence(std::memory_order_seq_cst);
-        auto crc = buff1.crc32c_sw();
-        auto crc1 = buff1.crc32c_dma(p, 0x21);
-        buff1.flush_dma(true);
-        auto crc2 = buff1.crc32c_dma(p, 0x21);
-        printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
-    }
-
-    {
-        printf("OCM ACP CRC32C\n");
-        buff3.rand_fill();
-        std::atomic_thread_fence(std::memory_order_seq_cst);
-        auto crc = buff3.crc32c_sw();
-        auto crc1 = buff3.crc32c_dma(p, 0x21);
-        buff3.flush_dma(true);
-        auto crc2 = buff3.crc32c_dma(p, 0x21);
-        printf("  %08x, %08x, %08x\n", crc, crc1, crc2);
-    }
+    printf("ACP COH DDR\n");
+    test_crc32c<DMAType::ACP_COH_DDR>(p, 16 * 4096, 1000);
+    printf("ACP COH OCM\n");
+    test_crc32c<DMAType::ACP_COH_OCM>(p, 16 * 4096, 1000);
+    printf("ACP COH OCM WC\n");
+    test_crc32c<DMAType::ACP_COH_OCM_WC>(p, 16 * 4096, 1000);
 
     dma_dbg_print(p, "final");
-
-    if (buff1.virt_addr)
-        Kernel::freeDMABuffer(buff1.virt_addr, 16 * 4096);
-    if (buff2.virt_addr)
-        Kernel::freeDMABuffer(buff2.virt_addr, 16 * 4096);
-    if (buff3.virt_addr)
-        Kernel::freeOCMBuffer(buff3.virt_addr, 16 * 4096);
-    if (buff4.virt_addr)
-        Kernel::freeOCMBuffer(buff4.virt_addr, 16 * 4096);
     return 0;
 }

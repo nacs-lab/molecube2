@@ -9,6 +9,8 @@ set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}"
 include(CMakeCMacros)
 include(GNUInstallDirs)
 
+set(CMAKE_CXX_STANDARD 20)
+
 set(SYSTEMD_SERVICE_DIR "${CMAKE_INSTALL_LIBDIR}/systemd/system"
   CACHE PATH "Systemd service file install dir")
 set(SYSTEMD_SYSUSERS_DIR "${CMAKE_INSTALL_LIBDIR}/sysusers.d"
@@ -38,7 +40,7 @@ set(LINKER_FLAGS -Wl,--as-needed -Wl,--no-undefined -Wl,--gc-sections
   -pthread -fno-math-errno -Wl,-Bsymbolic-functions)
 
 cmake_c_add_flags(CMAKE_C_FLAGS -std=gnu11)
-cmake_c_add_flags(CMAKE_CXX_FLAGS -std=gnu++17 -fno-rtti)
+cmake_c_add_flags(CMAKE_CXX_FLAGS -fno-rtti)
 cmake_c_add_flags(CMAKE_EXE_LINKER_FLAGS ${LINKER_FLAGS})
 cmake_c_add_flags(CMAKE_STATIC_LINKER_FLAGS ${LINKER_FLAGS})
 cmake_c_add_flags(CMAKE_SHARED_LINKER_FLAGS ${LINKER_FLAGS})
