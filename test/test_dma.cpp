@@ -36,6 +36,8 @@
 #include <inttypes.h>
 #include <unistd.h>
 
+#include <yaml-cpp/yaml.h>
+
 using namespace NaCs;
 using namespace Molecube;
 using namespace std::literals;
@@ -271,7 +273,7 @@ struct DMABuff {
     }
 };
 
-static void bench_rep(auto &&cb, int rep, int div, auto &&finish)
+static double bench_rep(auto &&cb, int rep, int div, auto &&finish)
 {
     Timer timer;
     for (int i = 0; i < rep; i++) {
@@ -279,60 +281,100 @@ static void bench_rep(auto &&cb, int rep, int div, auto &&finish)
     }
     finish();
     auto dt = double(timer.elapsed()) / rep / div;
+    auto dt_origin = dt;
     if (dt <= 1300) {
         printf(": % 8.3f ns\n", dt);
-        return;
+        return dt_origin;
     }
     dt /= 1000;
     if (dt <= 1300) {
         printf(": % 8.3f us\n", dt);
-        return;
+        return dt_origin;
     }
     dt /= 1000;
     if (dt <= 1300) {
         printf(": % 8.3f ms\n", dt);
-        return;
+        return dt_origin;
     }
     dt /= 1000;
     printf(": % 8.3f s\n", dt);
+    return dt_origin;
 }
 
 template<template<BuffType buff_type> typename Runner, typename ... Args>
-static void run_buff(Args&&... args)
+static void run_buff(YAML::Emitter &yaml, Args&&... args)
 {
-    Runner<BuffType::DDR>::run(args...);
-    Runner<BuffType::DDR_WC>::run(args...);
-    Runner<BuffType::OCM>::run(args...);
-    Runner<BuffType::OCM_WC>::run(args...);
+    yaml << YAML::BeginMap;
+    yaml << YAML::Key << "DDR" << YAML::Value;
+    Runner<BuffType::DDR>::run(yaml, args...);
+    yaml << YAML::Key << "DDR_WC" << YAML::Value;
+    Runner<BuffType::DDR_WC>::run(yaml, args...);
+    yaml << YAML::Key << "OCM" << YAML::Value;
+    Runner<BuffType::OCM>::run(yaml, args...);
+    yaml << YAML::Key << "OCM_WC" << YAML::Value;
+    Runner<BuffType::OCM_WC>::run(yaml, args...);
+    yaml << YAML::EndMap;
 }
 
 template<template<BuffType buff_type, DMAType dma_type> typename Runner, typename ... Args>
-static void run_dma_buff(Args&&... args)
+static void run_dma_buff(YAML::Emitter &yaml, Args&&... args)
 {
-    Runner<BuffType::DDR,DMAType::HP>::run(args...);
-    Runner<BuffType::DDR_WC,DMAType::HP>::run(args...);
-    Runner<BuffType::OCM,DMAType::HP>::run(args...);
-    Runner<BuffType::OCM_WC,DMAType::HP>::run(args...);
+    yaml << YAML::BeginMap;
 
-    Runner<BuffType::DDR,DMAType::ACP>::run(args...);
-    Runner<BuffType::DDR_WC,DMAType::ACP>::run(args...);
-    Runner<BuffType::OCM,DMAType::ACP>::run(args...);
-    Runner<BuffType::OCM_WC,DMAType::ACP>::run(args...);
+    yaml << YAML::Key << "HP" << YAML::Value;
+    yaml << YAML::BeginMap;
+    yaml << YAML::Key << "DDR" << YAML::Value;
+    Runner<BuffType::DDR,DMAType::HP>::run(yaml, args...);
+    yaml << YAML::Key << "DDR_WC" << YAML::Value;
+    Runner<BuffType::DDR_WC,DMAType::HP>::run(yaml, args...);
+    yaml << YAML::Key << "OCM" << YAML::Value;
+    Runner<BuffType::OCM,DMAType::HP>::run(yaml, args...);
+    yaml << YAML::Key << "OCM_WC" << YAML::Value;
+    Runner<BuffType::OCM_WC,DMAType::HP>::run(yaml, args...);
+    yaml << YAML::EndMap;
 
-    Runner<BuffType::DDR,DMAType::ACP_L2>::run(args...);
-    Runner<BuffType::DDR_WC,DMAType::ACP_L2>::run(args...);
-    Runner<BuffType::OCM,DMAType::ACP_L2>::run(args...);
-    Runner<BuffType::OCM_WC,DMAType::ACP_L2>::run(args...);
+    yaml << YAML::Key << "ACP" << YAML::Value;
+    yaml << YAML::BeginMap;
+    yaml << YAML::Key << "DDR" << YAML::Value;
+    Runner<BuffType::DDR,DMAType::ACP>::run(yaml, args...);
+    yaml << YAML::Key << "DDR_WC" << YAML::Value;
+    Runner<BuffType::DDR_WC,DMAType::ACP>::run(yaml, args...);
+    yaml << YAML::Key << "OCM" << YAML::Value;
+    Runner<BuffType::OCM,DMAType::ACP>::run(yaml, args...);
+    yaml << YAML::Key << "OCM_WC" << YAML::Value;
+    Runner<BuffType::OCM_WC,DMAType::ACP>::run(yaml, args...);
+    yaml << YAML::EndMap;
 
-    Runner<BuffType::DDR,DMAType::ACP_L1>::run(args...);
-    Runner<BuffType::DDR_WC,DMAType::ACP_L1>::run(args...);
-    Runner<BuffType::OCM,DMAType::ACP_L1>::run(args...);
-    Runner<BuffType::OCM_WC,DMAType::ACP_L1>::run(args...);
+    yaml << YAML::Key << "ACP_L2" << YAML::Value;
+    yaml << YAML::BeginMap;
+    yaml << YAML::Key << "DDR" << YAML::Value;
+    Runner<BuffType::DDR,DMAType::ACP_L2>::run(yaml, args...);
+    yaml << YAML::Key << "DDR_WC" << YAML::Value;
+    Runner<BuffType::DDR_WC,DMAType::ACP_L2>::run(yaml, args...);
+    yaml << YAML::Key << "OCM" << YAML::Value;
+    Runner<BuffType::OCM,DMAType::ACP_L2>::run(yaml, args...);
+    yaml << YAML::Key << "OCM_WC" << YAML::Value;
+    Runner<BuffType::OCM_WC,DMAType::ACP_L2>::run(yaml, args...);
+    yaml << YAML::EndMap;
+
+    yaml << YAML::Key << "ACP_L1" << YAML::Value;
+    yaml << YAML::BeginMap;
+    yaml << YAML::Key << "DDR" << YAML::Value;
+    Runner<BuffType::DDR,DMAType::ACP_L1>::run(yaml, args...);
+    yaml << YAML::Key << "DDR_WC" << YAML::Value;
+    Runner<BuffType::DDR_WC,DMAType::ACP_L1>::run(yaml, args...);
+    yaml << YAML::Key << "OCM" << YAML::Value;
+    Runner<BuffType::OCM,DMAType::ACP_L1>::run(yaml, args...);
+    yaml << YAML::Key << "OCM_WC" << YAML::Value;
+    Runner<BuffType::OCM_WC,DMAType::ACP_L1>::run(yaml, args...);
+    yaml << YAML::EndMap;
+
+    yaml << YAML::EndMap;
 }
 
 template<BuffType buff_type, DMAType dma_type>
 struct BenchDMAOnly {
-    static void run(Molecube::Pulser &p, int nbuffs, size_t size, int rep)
+    static void run(YAML::Emitter &yaml, Molecube::Pulser &p, int nbuffs, size_t size, int rep)
     {
         print_type(buff_type, dma_type);
         std::vector<DMABuff<buff_type,dma_type>> buffs(nbuffs);
@@ -342,7 +384,7 @@ struct BenchDMAOnly {
         auto start_count = p.read(0x31);
         int j = 0;
         auto last_count = start_count;
-        bench_rep([&] {
+        yaml << bench_rep([&] {
             for (auto &buff: buffs) {
                 if (last_count + 8 < start_count + j) {
                     while ((last_count = p.read(0x31)) + 8 < start_count + j) {
@@ -362,7 +404,7 @@ struct BenchDMAOnly {
 
 template<BuffType buff_type, DMAType dma_type>
 struct BenchDMARW {
-    static void run(Molecube::Pulser &p, int nbuffs, size_t size, int rep)
+    static void run(YAML::Emitter &yaml, Molecube::Pulser &p, int nbuffs, size_t size, int rep)
     {
         print_type(buff_type, dma_type);
         std::vector<DMABuff<buff_type,dma_type>> buffs(nbuffs);
@@ -377,7 +419,7 @@ struct BenchDMARW {
         auto start_count = p.read(0x31);
         int j = 0;
         auto last_count = start_count;
-        bench_rep([&] {
+        yaml << bench_rep([&] {
             for (auto &buff: buffs) {
                 memcpy(buff.virt_addr, &content_buff[0], size);
                 buff.prepare();
@@ -399,61 +441,46 @@ struct BenchDMARW {
 
 template<BuffType buff_type>
 struct BenchRandFill {
-    static void run(int nbuffs, size_t size, int rep)
+    static void run(YAML::Emitter &yaml, size_t size, int rep)
     {
         print_type(buff_type);
-        std::vector<DMABuff<buff_type,DMAType::HP>> buffs(nbuffs);
-        for (int i = 0; i < nbuffs; i++) {
-            buffs[i] = DMABuff<buff_type,DMAType::HP>(size);
-        }
-        bench_rep([&] {
-            for (auto &buff: buffs) {
-                buff.rand_fill();
-                asm volatile ("" ::: "memory");
-            }
-        }, rep, nbuffs, [] {});
+        DMABuff<buff_type,DMAType::HP> buff(size);
+        yaml << bench_rep([&] {
+            buff.rand_fill();
+            asm volatile ("" ::: "memory");
+        }, rep, 1, [] {});
     }
 };
 
 template<BuffType buff_type>
 struct BenchMemcpy {
-    static void run(int nbuffs, size_t size, int rep)
+    static void run(YAML::Emitter &yaml, size_t size, int rep)
     {
         print_type(buff_type);
-        std::vector<DMABuff<buff_type,DMAType::HP>> buffs(nbuffs);
-        for (int i = 0; i < nbuffs; i++) {
-            buffs[i] = DMABuff<buff_type,DMAType::HP>(size);
-        }
+        DMABuff<buff_type,DMAType::HP> buff(size);
         std::vector<uint32_t> content_buff(size / 4);
-        bench_rep([&] {
-            for (auto &buff: buffs) {
-                memcpy(buff.virt_addr, &content_buff[0], size);
-                asm volatile ("" ::: "memory");
-            }
-        }, rep, nbuffs, [] {});
+        yaml << bench_rep([&] {
+            memcpy(buff.virt_addr, &content_buff[0], size);
+            asm volatile ("" ::: "memory");
+        }, rep, 1, [] {});
     }
 };
 
 template<BuffType buff_type, DMAType dma_type>
 struct BenchFlush {
-    static void run(int nbuffs, size_t size, int rep)
+    static void run(YAML::Emitter &yaml, size_t size, int rep)
     {
         print_type(buff_type, dma_type);
-        std::vector<DMABuff<buff_type,dma_type>> buffs(nbuffs);
-        for (int i = 0; i < nbuffs; i++) {
-            buffs[i] = DMABuff<buff_type,dma_type>(size);
-        }
-        bench_rep([&] {
-            for (auto &buff: buffs) {
-                buff.prepare();
-            }
-        }, rep, nbuffs, [] {});
+        DMABuff<buff_type,dma_type> buff(size);
+        yaml << bench_rep([&] {
+            buff.prepare();
+        }, rep, 1, [] {});
     }
 };
 
 template<BuffType buff_type, DMAType dma_type>
 struct TestCRC32c {
-    static void run(Molecube::Pulser &p, size_t size, int rep)
+    static void run(YAML::Emitter &yaml, Molecube::Pulser &p, size_t size, int rep)
     {
         print_type(buff_type, dma_type);
         printf("\n");
@@ -475,37 +502,88 @@ struct TestCRC32c {
         if (failed != 0) {
             printf("  Total failed: %d/%d\n", failed, rep);
         }
+        yaml << double(failed) / rep;
     }
 };
+
+static void bench_all_nbuff(YAML::Emitter &yaml, Molecube::Pulser &p,
+                            int nbuff, size_t size, int rep)
+{
+    yaml << YAML::BeginMap;
+    yaml << YAML::Key << "nbuff" << YAML::Value << nbuff;
+    yaml << YAML::Key << "size" << YAML::Value << size;
+    yaml << YAML::Key << "rep" << YAML::Value << rep;
+    yaml << YAML::Key << "results" << YAML::Value;
+
+    yaml << YAML::BeginMap;
+
+    yaml << YAML::Key << "dma_only" << YAML::Value;
+    printf("DMA read throughput %d x [%zu] (rep: %d)\n", nbuff, size, rep);
+    run_dma_buff<BenchDMAOnly>(yaml, p, nbuff, size, rep);
+    printf("\n");
+
+    yaml << YAML::Key << "dma_pipe" << YAML::Value;
+    printf("DMA read write %d x [%zu] (rep: %d)\n", nbuff, size, rep);
+    run_dma_buff<BenchDMARW>(yaml, p, nbuff, size, rep);
+    printf("\n");
+
+    yaml << YAML::EndMap;
+
+    yaml << YAML::EndMap;
+}
+
+static void bench_all_buff1(YAML::Emitter &yaml, Molecube::Pulser &p,
+                            size_t size, int rep)
+{
+    yaml << YAML::BeginMap;
+    yaml << YAML::Key << "size" << YAML::Value << size;
+    yaml << YAML::Key << "rep" << YAML::Value << rep;
+    yaml << YAML::Key << "results" << YAML::Value;
+
+    yaml << YAML::BeginMap;
+
+    yaml << YAML::Key << "rand_fill" << YAML::Value;
+    printf("rand fill [%zu] (rep: %d)\n", size, rep);
+    run_buff<BenchRandFill>(yaml, size, rep);
+    printf("\n");
+
+    yaml << YAML::Key << "memcpy" << YAML::Value;
+    printf("memcpy [%zu] (rep: %d)\n", size, rep);
+    run_buff<BenchMemcpy>(yaml, size, rep);
+    printf("\n");
+
+    yaml << YAML::Key << "flush" << YAML::Value;
+    printf("flush [%zu] (rep: %d)\n", size, rep);
+    run_dma_buff<BenchFlush>(yaml, size, rep);
+    printf("\n");
+
+    yaml << YAML::Key << "crc32c" << YAML::Value;
+    printf("crc32c [%zu] (rep: %d)\n", size, rep);
+    run_dma_buff<TestCRC32c>(yaml, p, size, rep);
+    printf("\n");
+
+    yaml << YAML::EndMap;
+
+    yaml << YAML::EndMap;
+}
 
 int main()
 {
     auto addr = Molecube::Pulser::address();
     Molecube::Pulser p(addr);
 
-    printf("DMA read throughput\n");
-    run_dma_buff<BenchDMAOnly>(p, 4, 16 * 4096, 1000);
-    printf("\n");
+    YAML::Emitter yaml;
+    yaml << YAML::BeginSeq;
+    for (size_t size: {16 * 8, 16 * 16, 16 * 32, 16 * 64, 16 * 128, 16 * 256,
+            16 * 1024, 16 * 2048, 16 * 4096}) {
+        for (int nbuff = 1; nbuff <= 4; nbuff++) {
+            bench_all_nbuff(yaml, p, nbuff, size, 1000);
+        }
+        bench_all_buff1(yaml, p, size, 1000);
+    }
+    yaml << YAML::EndSeq;
 
-    printf("DMA read write\n");
-    run_dma_buff<BenchDMARW>(p, 4, 16 * 4096, 1000);
-    printf("\n");
-
-    printf("rand fill\n");
-    run_buff<BenchRandFill>(4, 16 * 4096, 1000);
-    printf("\n");
-
-    printf("memcpy\n");
-    run_buff<BenchMemcpy>(4, 16 * 4096, 1000);
-    printf("\n");
-
-    printf("flush\n");
-    run_dma_buff<BenchFlush>(4, 16 * 4096, 1000);
-    printf("\n");
-
-    printf("Test crc32c\n");
-    run_dma_buff<TestCRC32c>(p, 16 * 4096, 10000);
-    printf("\n");
+    std::cout << yaml.c_str() << std::endl;
 
     dma_dbg_print(p, "final");
     return 0;
