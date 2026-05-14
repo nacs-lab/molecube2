@@ -107,12 +107,12 @@ static inline const char *type_name(BuffType type)
         return "";
     case BuffType::DDR:
         return "DDR";
-    case BuffType::DDR_WR:
-        return "DDR WR";
+    case BuffType::DDR_WC:
+        return "DDR_WC";
     case BuffType::OCM:
         return "OCM";
-    case BuffType::OCM_WR:
-        return "OCM WR";
+    case BuffType::OCM_WC:
+        return "OCM_WC";
     }
 }
 
@@ -142,12 +142,12 @@ static inline const char *type_name(DMAType type)
 
 static inline void print_type(auto type)
 {
-    printf(" %s\n", type_name(type));
+    printf(" %6s", type_name(type));
 }
 
 static inline void print_type(BuffType buff_type, DMAType dma_type)
 {
-    printf(" %s %s\n", type_name(buff_type), type_name(dma_type));
+    printf(" %6s %6s", type_name(dma_type), type_name(buff_type));
 }
 
 template<BuffType buff_type, DMAType dma_type>
@@ -280,24 +280,24 @@ static void bench_rep(auto &&cb, int rep, int div, auto &&finish)
     finish();
     auto dt = double(timer.elapsed()) / rep / div;
     if (dt <= 1300) {
-        printf("  %.3f ns\n", dt);
+        printf(": % 8.3f ns\n", dt);
         return;
     }
     dt /= 1000;
     if (dt <= 1300) {
-        printf("  %.3f us\n", dt);
+        printf(": % 8.3f us\n", dt);
         return;
     }
     dt /= 1000;
     if (dt <= 1300) {
-        printf("  %.3f ms\n", dt);
+        printf(": % 8.3f ms\n", dt);
         return;
     }
     dt /= 1000;
-    printf("  %.3f s\n", dt);
+    printf(": % 8.3f s\n", dt);
 }
 
-template<template Runner, typename ... Args>
+template<template<BuffType buff_type> typename Runner, typename ... Args>
 static void run_buff(Args&&... args)
 {
     Runner<BuffType::DDR>::run(args...);
@@ -306,7 +306,7 @@ static void run_buff(Args&&... args)
     Runner<BuffType::OCM_WC>::run(args...);
 }
 
-template<template Runner, typename ... Args>
+template<template<BuffType buff_type, DMAType dma_type> typename Runner, typename ... Args>
 static void run_dma_buff(Args&&... args)
 {
     Runner<BuffType::DDR,DMAType::HP>::run(args...);
@@ -399,7 +399,7 @@ struct BenchDMARW {
 
 template<BuffType buff_type>
 struct BenchRandFill {
-    static void bench_rand_fill(int nbuffs, size_t size, int rep)
+    static void run(int nbuffs, size_t size, int rep)
     {
         print_type(buff_type);
         std::vector<DMABuff<buff_type,DMAType::HP>> buffs(nbuffs);
@@ -453,9 +453,10 @@ struct BenchFlush {
 
 template<BuffType buff_type, DMAType dma_type>
 struct TestCRC32c {
-    static void test_crc32c(Molecube::Pulser &p, size_t size, int rep)
+    static void run(Molecube::Pulser &p, size_t size, int rep)
     {
         print_type(buff_type, dma_type);
+        printf("\n");
         DMABuff<buff_type,dma_type> buff(size);
         std::vector<uint32_t> content_buff(size / 4);
         int failed = 0;
@@ -503,7 +504,7 @@ int main()
     printf("\n");
 
     printf("Test crc32c\n");
-    run_dma_buff<TestCRC32c>(p, 4, 16 * 4096, 10000);
+    run_dma_buff<TestCRC32c>(p, 16 * 4096, 10000);
     printf("\n");
 
     dma_dbg_print(p, "final");
