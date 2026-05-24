@@ -21,7 +21,7 @@ void write_dds(Molecube::Pulser &p, int i, int type)
     for (int addr = 0x34; addr < 0x6c; addr += 2) {
         if (addr == 0x64 || addr == 0x66)
             continue;
-        dds_set_2bytes<false>(i, addr, (addr + type) | (addr << 8));
+        p.dds_set_2bytes<false>(i, addr, (addr + type) | (addr << 8));
     }
     while (!p.is_finished()) {
     }
