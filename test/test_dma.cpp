@@ -577,9 +577,9 @@ int main()
     for (size_t size: {16 * 8, 16 * 16, 16 * 32, 16 * 64, 16 * 128, 16 * 256,
             16 * 1024, 16 * 2048, 16 * 4096}) {
         for (int nbuff = 1; nbuff <= 4; nbuff++) {
-            bench_all_nbuff(yaml, p, nbuff, size, 1000);
+            bench_all_nbuff(yaml, p, nbuff, size, 10000);
         }
-        bench_all_buff1(yaml, p, size, 1000);
+        bench_all_buff1(yaml, p, size, 10000);
     }
     yaml << YAML::EndSeq;
 
