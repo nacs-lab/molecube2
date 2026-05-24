@@ -23,6 +23,9 @@ target_link_libraries(test_set_dds libmolecube)
 add_executable(test_init_dds test_init_dds.cpp)
 target_link_libraries(test_init_dds libmolecube)
 
+add_executable(test_dump_all_dds test_dump_all_dds.cpp)
+target_link_libraries(test_dump_all_dds libmolecube)
+
 add_executable(test_controller test_controller.cpp)
 target_link_libraries(test_controller libmolecube)
 
