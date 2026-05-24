@@ -58,8 +58,8 @@ void write_dds(Molecube::Pulser &p, int i, int type)
 void output_dds(Molecube::Pulser &p, int i, int type)
 {
     p.dump_dds(std::cout, i);
-    p.template dds_set_freq<false>(chn, freq2num(10e6 * type));
-    p.template dds_set_amp<false>(chn, amp2num(0.1 * type));
+    p.template dds_set_freq<false>(i, freq2num(10e6 * type));
+    p.template dds_set_amp<false>(i, amp2num(0.1 * type));
     while (!p.is_finished()) {
     }
     p.dump_dds(std::cout, i);
