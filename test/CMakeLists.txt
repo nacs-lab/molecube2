@@ -5,6 +5,9 @@ add_definitions(-UNDEBUG)
 add_executable(test_pulser test_pulser.cpp)
 target_link_libraries(test_pulser libmolecube)
 
+add_executable(test_regs test_regs.cpp)
+target_link_libraries(test_regs libmolecube)
+
 add_executable(test_benchmark_pulse test_benchmark_pulse.cpp)
 target_link_libraries(test_benchmark_pulse libmolecube)
 
