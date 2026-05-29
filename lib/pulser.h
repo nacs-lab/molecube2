@@ -37,15 +37,6 @@ using namespace NaCs;
 class Pulser {
     Pulser(const Pulser&) = delete;
     void operator=(const Pulser&) = delete;
-    // Read and write pulse controller registers.
-    inline uint32_t read(uint32_t reg) const
-    {
-        return Mem::read<uint32_t>(&m_addr, reg);
-    }
-    inline void write(uint32_t reg, uint32_t val)
-    {
-        Mem::write<uint32_t>(&m_addr, val, reg);
-    }
     struct Bits {
         enum {
             // Register 2
@@ -77,14 +68,6 @@ class Pulser {
 
     // Internal pulses
     template<bool checked>
-    inline void pulse(uint32_t ctrl, uint32_t op)
-    {
-        if (checked)
-            ctrl = ctrl | Bits::TimeCheck;
-        write(31, op);
-        write(31, ctrl);
-    }
-    template<bool checked>
     inline void spi(uint8_t clk_div, uint8_t spi_id, uint32_t data)
     {
         uint32_t opcode = ((uint32_t(spi_id & 3) << 11) | clk_div);
@@ -97,6 +80,23 @@ class Pulser {
     }
 
 public:
+    // Read and write pulse controller registers.
+    inline uint32_t read(uint32_t reg) const
+    {
+        return Mem::read<uint32_t>(&m_addr, reg);
+    }
+    inline void write(uint32_t reg, uint32_t val)
+    {
+        Mem::write<uint32_t>(&m_addr, val, reg);
+    }
+    template<bool checked>
+    inline void pulse(uint32_t ctrl, uint32_t op)
+    {
+        if (checked)
+            ctrl = ctrl | Bits::TimeCheck;
+        write(31, op);
+        write(31, ctrl);
+    }
     static constexpr uint32_t max_wait_t = (1 << 24) - 1;
     // Public functions that are not exposed by the dummy pulser.
     // set bytes at addr + 1 and addr
