@@ -89,9 +89,11 @@ static void dma_dbg_print(Molecube::Pulser &p, const char *name=nullptr)
 {
     if (!name)
         name = "dma status";
-    printf("%s: %d, %d, %d, %08x, %08x, %08x\n", name,
+    printf("%s: %d, %d, %d, %08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x\n", name,
            p.read(0x31), p.read(0x32), p.read(0x33),
-           p.read(0x34), p.read(0x35), p.read(0x36));
+           p.read(0x34), p.read(0x35),
+           p.read(0x36), p.read(0x37), p.read(0x38),
+           p.read(0x39), p.read(0x3a), p.read(0x3b));
 }
 
 enum class BuffType : uint8_t {
@@ -270,6 +272,12 @@ struct DMABuff {
         if (dma_type == DMAType::HP)
             return p.read(0x34);
         return p.read(0x35);
+    }
+    uint32_t dma_latency(Molecube::Pulser &p) const
+    {
+        if (dma_type == DMAType::HP)
+            return p.read(0x38) - p.read(0x36);
+        return p.read(0x39) - p.read(0x37);
     }
 };
 
