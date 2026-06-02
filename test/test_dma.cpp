@@ -90,7 +90,7 @@ static void dma_dbg_print(Molecube::Pulser &p, const char *name=nullptr)
 {
     if (!name)
         name = "dma status";
-    printf("%s: %d, %d, %d, %08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x\n", name,
+    fprintf(stderr, "%s: %d, %d, %d, %08x, %08x, %08x, %08x, %08x, %08x, %08x, %08x\n", name,
            p.read(0x31), p.read(0x32), p.read(0x33),
            p.read(0x34), p.read(0x35),
            p.read(0x36), p.read(0x37), p.read(0x38),
@@ -147,12 +147,12 @@ static inline const char *type_name(DMAType type)
 
 static inline void print_type(auto type)
 {
-    printf(" %6s", type_name(type));
+    fprintf(stderr, " %6s", type_name(type));
 }
 
 static inline void print_type(BuffType buff_type, DMAType dma_type)
 {
-    printf(" %6s %6s", type_name(dma_type), type_name(buff_type));
+    fprintf(stderr, " %6s %6s", type_name(dma_type), type_name(buff_type));
 }
 
 template<BuffType buff_type, DMAType dma_type>
@@ -292,21 +292,21 @@ static double bench_rep(auto &&cb, int rep, int div, auto &&finish)
     auto dt = double(timer.elapsed()) / rep / div;
     auto dt_origin = dt;
     if (dt <= 1300) {
-        printf(": % 8.3f ns\n", dt);
+        fprintf(stderr, ": % 8.3f ns\n", dt);
         return dt_origin;
     }
     dt /= 1000;
     if (dt <= 1300) {
-        printf(": % 8.3f us\n", dt);
+        fprintf(stderr, ": % 8.3f us\n", dt);
         return dt_origin;
     }
     dt /= 1000;
     if (dt <= 1300) {
-        printf(": % 8.3f ms\n", dt);
+        fprintf(stderr, ": % 8.3f ms\n", dt);
         return dt_origin;
     }
     dt /= 1000;
-    printf(": % 8.3f s\n", dt);
+    fprintf(stderr, ": % 8.3f s\n", dt);
     return dt_origin;
 }
 
@@ -492,7 +492,7 @@ struct TestCRC32c {
     static void run(YAML::Emitter &yaml, Molecube::Pulser &p, size_t size, int rep)
     {
         print_type(buff_type, dma_type);
-        printf("\n");
+        fprintf(stderr, "\n");
         DMABuff<buff_type,dma_type> buff(size);
         std::vector<uint32_t> content_buff(size / 4);
         int failed = 0;
@@ -504,12 +504,12 @@ struct TestCRC32c {
             auto crc_sw = crc32c(0, (const char*)&content_buff[0], size);
             if (crc_dma != crc_sw) {
                 if (failed == 0)
-                    printf("  First failed@%d: %08x != %08x\n", i, crc_dma, crc_sw);
+                    fprintf(stderr, "  First failed@%d: %08x != %08x\n", i, crc_dma, crc_sw);
                 failed += 1;
             }
         }
         if (failed != 0) {
-            printf("  Total failed: %d/%d\n", failed, rep);
+            fprintf(stderr, "  Total failed: %d/%d\n", failed, rep);
         }
         yaml << double(failed) / rep;
     }
@@ -572,7 +572,7 @@ struct LatencyDMA {
         yaml << YAML::EndSeq;
         auto avg_l = sum_l / rep;
         auto avg_l2 = sum_l2 / rep;
-        printf(": %f +- %f\n", avg_l, sqrt(avg_l2 - avg_l * avg_l));
+        fprintf(stderr, ": %f +- %f\n", avg_l, sqrt(avg_l2 - avg_l * avg_l));
     }
 };
 
@@ -588,14 +588,14 @@ static void bench_all_nbuff(YAML::Emitter &yaml, Molecube::Pulser &p,
     yaml << YAML::BeginMap;
 
     yaml << YAML::Key << "dma_only" << YAML::Value;
-    printf("DMA read throughput %d x [%zu] (rep: %d)\n", nbuff, size, rep);
+    fprintf(stderr, "DMA read throughput %d x [%zu] (rep: %d)\n", nbuff, size, rep);
     run_dma_buff<BenchDMAOnly>(yaml, p, nbuff, size, rep);
-    printf("\n");
+    fprintf(stderr, "\n");
 
     yaml << YAML::Key << "dma_pipe" << YAML::Value;
-    printf("DMA read write %d x [%zu] (rep: %d)\n", nbuff, size, rep);
+    fprintf(stderr, "DMA read write %d x [%zu] (rep: %d)\n", nbuff, size, rep);
     run_dma_buff<BenchDMARW>(yaml, p, nbuff, size, rep);
-    printf("\n");
+    fprintf(stderr, "\n");
 
     yaml << YAML::EndMap;
 
@@ -613,24 +613,24 @@ static void bench_all_buff1(YAML::Emitter &yaml, Molecube::Pulser &p,
     yaml << YAML::BeginMap;
 
     yaml << YAML::Key << "rand_fill" << YAML::Value;
-    printf("rand fill [%zu] (rep: %d)\n", size, rep);
+    fprintf(stderr, "rand fill [%zu] (rep: %d)\n", size, rep);
     run_buff<BenchRandFill>(yaml, size, rep);
-    printf("\n");
+    fprintf(stderr, "\n");
 
     yaml << YAML::Key << "memcpy" << YAML::Value;
-    printf("memcpy [%zu] (rep: %d)\n", size, rep);
+    fprintf(stderr, "memcpy [%zu] (rep: %d)\n", size, rep);
     run_buff<BenchMemcpy>(yaml, size, rep);
-    printf("\n");
+    fprintf(stderr, "\n");
 
     yaml << YAML::Key << "flush" << YAML::Value;
-    printf("flush [%zu] (rep: %d)\n", size, rep);
+    fprintf(stderr, "flush [%zu] (rep: %d)\n", size, rep);
     run_dma_buff<BenchFlush>(yaml, size, rep);
-    printf("\n");
+    fprintf(stderr, "\n");
 
     yaml << YAML::Key << "crc32c" << YAML::Value;
-    printf("crc32c [%zu] (rep: %d)\n", size, rep);
+    fprintf(stderr, "crc32c [%zu] (rep: %d)\n", size, rep);
     run_dma_buff<TestCRC32c>(yaml, p, size, rep);
-    printf("\n");
+    fprintf(stderr, "\n");
 
     yaml << YAML::EndMap;
 
@@ -649,9 +649,9 @@ static void bench_latency(YAML::Emitter &yaml, Molecube::Pulser &p,
     yaml << YAML::BeginMap;
 
     yaml << YAML::Key << "dma_latency" << YAML::Value;
-    printf("DMA latency %d x [%zu] (rep: %d)\n", nbuff, size, rep);
+    fprintf(stderr, "DMA latency %d x [%zu] (rep: %d)\n", nbuff, size, rep);
     run_dma_buff<LatencyDMA>(yaml, p, nbuff, size, rep);
-    printf("\n");
+    fprintf(stderr, "\n");
 
     yaml << YAML::EndMap;
 
