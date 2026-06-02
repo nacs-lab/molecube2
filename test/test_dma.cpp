@@ -35,6 +35,7 @@
 
 #include <inttypes.h>
 #include <unistd.h>
+#include <math.h>
 
 #include <yaml-cpp/yaml.h>
 
@@ -545,6 +546,8 @@ struct LatencyDMA {
         int j = 0;
         auto last_count = start_count;
         yaml << YAML::BeginSeq;
+        double sum_l = 0;
+        double sum_l2 = 0;
         for (int i = 0; i < rep; i++) {
             for (size_t bi = 0; bi < cache_buff_size; bi++) {
                 cache_buff_ptr[bi];
@@ -561,9 +564,15 @@ struct LatencyDMA {
             while (p.read(0x31) != start_count + (i + 1) * nbuffs) {
                 std::this_thread::yield();
             }
-            yaml << buffs[0].dma_latency(p);
+            auto latency = buffs[0].dma_latency(p);
+            sum_l += latency;
+            sum_l2 += latency * latency;
+            yaml << latency;
         }
         yaml << YAML::EndSeq;
+        auto avg_l = sum_l / rep;
+        auto avg_l2 = sum_l2 / rep;
+        printf(": %f +- %f\n", avg_l, sqrt(avg_l2 - avg_l * avg_l));
     }
 };
 
