@@ -514,6 +514,59 @@ struct TestCRC32c {
     }
 };
 
+template<BuffType buff_type, DMAType dma_type>
+struct LatencyDMA {
+    static void run(YAML::Emitter &yaml, Molecube::Pulser &p, int nbuffs, size_t size, int rep)
+    {
+        print_type(buff_type, dma_type);
+        std::vector<DMABuff<buff_type,dma_type>> buffs(nbuffs);
+        for (int i = 0; i < nbuffs; i++) {
+            buffs[i] = DMABuff<buff_type,dma_type>(size);
+        }
+        // hijack the _wc flag to mean whether we invalidate the cache
+        // since the _wc'ness doesn't matter for this test.
+        size_t cache_buff_size = 0;
+        if (buff_type == BuffType::DDR_WC) {
+            // Evict L2: 512k, 8 way associative, size in 64bit
+            cache_buff_size = 512 * 1024 * 8 / 8;
+        }
+        else if (buff_type == BuffType::OCM_WC) {
+            // Evict L1 only: 32k, 4 way associative, size in 64bit
+            cache_buff_size = 32 * 1024 * 4 / 8;
+        }
+        std::vector<uint64_t> cache_buff(cache_buff_size);
+        for (auto &v: cache_buff) {
+            // Fill with some random content
+            v = 0xdc07577d67f1f69fll;
+        }
+        volatile uint64_t *cache_buff_ptr = &cache_buff[0];
+
+        auto start_count = p.read(0x31);
+        int j = 0;
+        auto last_count = start_count;
+        yaml << YAML::BeginSeq;
+        for (int i = 0; i < rep; i++) {
+            for (size_t bi = 0; bi < cache_buff_size; bi++) {
+                cache_buff_ptr[bi];
+            }
+            for (auto &buff: buffs) {
+                if (last_count + 8 < start_count + j) {
+                    while ((last_count = p.read(0x31)) + 8 < start_count + j) {
+                        std::this_thread::yield();
+                    }
+                }
+                j++;
+                buff.queue(p);
+            }
+            while (p.read(0x31) != start_count + (i + 1) * nbuffs) {
+                std::this_thread::yield();
+            }
+            yaml << buffs[0].dma_latency(p);
+        }
+        yaml << YAML::EndSeq;
+    }
+};
+
 static void bench_all_nbuff(YAML::Emitter &yaml, Molecube::Pulser &p,
                             int nbuff, size_t size, int rep)
 {
@@ -575,6 +628,27 @@ static void bench_all_buff1(YAML::Emitter &yaml, Molecube::Pulser &p,
     yaml << YAML::EndMap;
 }
 
+static void bench_latency(YAML::Emitter &yaml, Molecube::Pulser &p,
+                          int nbuff, size_t size, int rep)
+{
+    yaml << YAML::BeginMap;
+    yaml << YAML::Key << "nbuff" << YAML::Value << nbuff;
+    yaml << YAML::Key << "size" << YAML::Value << size;
+    yaml << YAML::Key << "rep" << YAML::Value << rep;
+    yaml << YAML::Key << "results" << YAML::Value;
+
+    yaml << YAML::BeginMap;
+
+    yaml << YAML::Key << "dma_latency" << YAML::Value;
+    printf("DMA latency %d x [%zu] (rep: %d)\n", nbuff, size, rep);
+    run_dma_buff<LatencyDMA>(yaml, p, nbuff, size, rep);
+    printf("\n");
+
+    yaml << YAML::EndMap;
+
+    yaml << YAML::EndMap;
+}
+
 int main()
 {
     auto addr = Molecube::Pulser::address();
@@ -582,12 +656,15 @@ int main()
 
     YAML::Emitter yaml;
     yaml << YAML::BeginSeq;
-    for (size_t size: {16 * 8, 16 * 16, 16 * 32, 16 * 64, 16 * 128, 16 * 256,
-            16 * 1024, 16 * 2048, 16 * 4096}) {
-        for (int nbuff = 1; nbuff <= 4; nbuff++) {
-            bench_all_nbuff(yaml, p, nbuff, size, 10000);
-        }
-        bench_all_buff1(yaml, p, size, 10000);
+    // for (size_t size: {16 * 8, 16 * 16, 16 * 32, 16 * 64, 16 * 128, 16 * 256,
+    //         16 * 1024, 16 * 2048, 16 * 4096}) {
+    //     for (int nbuff = 1; nbuff <= 4; nbuff++) {
+    //         bench_all_nbuff(yaml, p, nbuff, size, 10000);
+    //     }
+    //     bench_all_buff1(yaml, p, size, 10000);
+    // }
+    for (int nbuff = 1; nbuff < 20; nbuff++) {
+        bench_latency(yaml, p, nbuff, 16 * 8, 2000);
     }
     yaml << YAML::EndSeq;
 
