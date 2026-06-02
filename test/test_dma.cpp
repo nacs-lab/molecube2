@@ -672,8 +672,11 @@ int main()
     //     }
     //     bench_all_buff1(yaml, p, size, 10000);
     // }
-    for (int nbuff = 1; nbuff < 20; nbuff++) {
-        bench_latency(yaml, p, nbuff, 16 * 8, 1000);
+    for (int nbuff = 1; nbuff < 16; nbuff++) {
+        bench_latency(yaml, p, nbuff, 16 * 8, 2000);
+    }
+    for (int nbuff: {16, 18, 20, 22, 24, 28, 32, 36, 40, 44, 48, 56, 64}) {
+        bench_latency(yaml, p, nbuff, 16 * 8, 2000);
     }
     yaml << YAML::EndSeq;
 
