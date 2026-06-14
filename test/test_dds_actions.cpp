@@ -93,7 +93,7 @@ static void scan_dds_timing(Molecube::Pulser &p, const std::vector<int> &ids)
         printf("%d, %d, %d, %d, %d: fail=%d\n", timings[0], timings[1], timings[2],
                timings[3], timings[4], cnt);
     };
-    uint8_t min_timings[5];
+    uint8_t min_timings[5] = {};
 
     set_timing();
     print_fail_count(check_all_dds_loopback(p, ids));
