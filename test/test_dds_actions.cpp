@@ -94,9 +94,12 @@ static void scan_dds_timing(Molecube::Pulser &p, const std::vector<int> &ids)
                timings[3], timings[4], cnt);
     };
     uint8_t min_timings[5];
+
+    set_timing();
+    print_fail_count(check_all_dds_loopback(p, ids));
     for (int tid = 0; tid < 5; tid++) {
         bool failed = false;
-        for (int t = 8; t >= 0; t--) {
+        for (int t = 7; t >= 0; t--) {
             timings[tid] = uint8_t(t);
             set_timing();
             auto cnt = check_all_dds_loopback(p, ids);
