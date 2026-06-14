@@ -82,6 +82,21 @@ static int check_all_dds_loopback(Molecube::Pulser &p, const std::vector<int> &i
     return fail_count;
 }
 
+static void check_dds_timing(Molecube::Pulser &p, const std::vector<int> &ids)
+{
+    uint32_t dds_timing1 = p.read(0x50);
+    uint8_t timings[5] = {uint8_t(dds_timing1 & 0x3f),
+        uint8_t((dds_timing1 >> 6) & 0x3f),
+        uint8_t((dds_timing1 >> 12) & 0x3f),
+        uint8_t((dds_timing1 >> 18) & 0x3f),
+        uint8_t((dds_timing1 >> 24) & 0x3f)};
+    auto print_fail_count = [&] (int cnt) {
+        printf("%d, %d, %d, %d, %d: fail=%d\n", timings[0], timings[1], timings[2],
+               timings[3], timings[4], cnt);
+    };
+    print_fail_count(check_all_dds_loopback(p, ids));
+}
+
 static void scan_dds_timing(Molecube::Pulser &p, const std::vector<int> &ids)
 {
     uint8_t timings[5] = {8, 8, 8, 8, 8};
@@ -135,16 +150,41 @@ static std::vector<int> parse_dds_ids(const char *s)
             ids.push_back(v);
             break;
         case '-':
-            if (start >= 0) {
-                fprintf(stderr, "Invalid DDS range\n");
-            }
+            if (start >= 0)
+                throw std::invalid_argument("Invalid DDS range");
             start = v;
+            break;
+        default:
+            throw std::invalid_argument("Invalid DDS range");
         }
         if (!*endptr)
             break;
         s = endptr + 1;
     }
     return ids;
+}
+
+static void set_dds_timing(Molecube::Pulser &p, const char *s)
+{
+    std::vector<int> times;
+    while (*s) {
+        char *endptr;
+        auto v = (int)strtol(s, &endptr, 10);
+        switch (*endptr) {
+        case '\0':
+        case ',':
+            times.push_back(v);
+            break;
+        default:
+            throw std::invalid_argument("Invalid timing spec");
+        }
+        if (!*endptr)
+            break;
+        s = endptr + 1;
+    }
+    if (times.size() != 5)
+        throw std::invalid_argument("Wrong number of timing settings, expect 5");
+    set_dds_wr_timing(p, times[0], times[1], times[2], times[3], times[4]);
 }
 
 void reset_dds(Molecube::Pulser &p, int i)
@@ -208,6 +248,12 @@ int main(int argc, char **argv)
     }
     else if (strcmp(argv[1], "scan_timing") == 0) {
         scan_dds_timing(p, parse_dds_ids(argv[2]));
+    }
+    else if (strcmp(argv[1], "check_timing") == 0) {
+        check_dds_timing(p, parse_dds_ids(argv[2]));
+    }
+    else if (strcmp(argv[1], "set_timing") == 0) {
+        set_dds_timing(p, argv[2]);
     }
 
     return 0;
