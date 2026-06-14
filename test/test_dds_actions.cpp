@@ -51,8 +51,8 @@ static bool check_dds_loopback_type(Molecube::Pulser &p, int i, uint32_t type)
     for (uint32_t addr = 0x34; addr < 0x6c; addr += 4) {
         if (addr == 0x64)
             continue;
-        p.dds_set_2bytes<false>(i, addr, dds_loopback_data(i, addr, type));
-        p.dds_get_2bytes<false>(i, addr);
+        p.dds_set_4bytes<false>(i, addr, dds_loopback_data(i, addr, type));
+        p.dds_get_4bytes<false>(i, addr);
     }
     bool pass = true;
     for (uint32_t addr = 0x34; addr < 0x6c; addr += 4) {
