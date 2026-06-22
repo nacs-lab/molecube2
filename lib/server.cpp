@@ -222,6 +222,9 @@ _NACS_EXPORT Server::Server(const Config &conf)
         m_dds_names.get().resize(22);
         m_dds_names.save();
     }
+    m_ctrl->set_dds_timing1(m_conf.dds_write_adsu, m_conf.dds_write_wrlow,
+                            m_conf.dds_write_adhd, m_conf.dds_write_fuddl,
+                            m_conf.dds_write_fudhd);
     run_startup();
 }
 

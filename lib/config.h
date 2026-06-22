@@ -35,6 +35,11 @@ struct Config {
     int max_ttl_chn = 31;
     std::string listen{"tcp://*:7777"};
     std::string runtime_dir{"/var/lib/molecube/"};
+    int8_t dds_write_adsu = -1;
+    int8_t dds_write_wrlow = -1;
+    int8_t dds_write_adhd = -1;
+    int8_t dds_write_fuddl = -1;
+    int8_t dds_write_fudhd = -1;
 };
 
 }

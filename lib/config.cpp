@@ -40,6 +40,17 @@ NACS_EXPORT() Config Config::loadYAML(const char *fname)
     if (auto runtime_dir_node = file["runtime_dir"])
         conf.runtime_dir = runtime_dir_node.as<std::string>();
 
+    if (auto t_node = file["dds_write_adsu"])
+        conf.dds_write_adsu = (int8_t)t_node.as<int>();
+    if (auto t_node = file["dds_write_wrlow"])
+        conf.dds_write_wrlow = (int8_t)t_node.as<int>();
+    if (auto t_node = file["dds_write_adhd"])
+        conf.dds_write_adhd = (int8_t)t_node.as<int>();
+    if (auto t_node = file["dds_write_fuddl"])
+        conf.dds_write_fuddl = (int8_t)t_node.as<int>();
+    if (auto t_node = file["dds_write_fudhd"])
+        conf.dds_write_fudhd = (int8_t)t_node.as<int>();
+
     return conf;
 }
 
