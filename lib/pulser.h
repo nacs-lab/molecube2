@@ -25,6 +25,7 @@
 
 #include <assert.h>
 
+#include <array>
 #include <ostream>
 
 namespace Molecube {
@@ -370,6 +371,15 @@ public:
                          uint32_t fuddl, uint32_t fudhd)
     {
         write(0x50, adsu | (wrlow << 6) | (adhd << 12) | (fuddl << 18) | (fudhd << 24));
+    }
+    std::array<uint8_t,5> get_dds_timing1() const
+    {
+        uint32_t dds_timing1 = read(0x50);
+        return {uint8_t(dds_timing1 & 0x3f),
+            uint8_t((dds_timing1 >> 6) & 0x3f),
+            uint8_t((dds_timing1 >> 12) & 0x3f),
+            uint8_t((dds_timing1 >> 18) & 0x3f),
+            uint8_t((dds_timing1 >> 24) & 0x3f)};
     }
 
     Pulser(volatile void *const addr)

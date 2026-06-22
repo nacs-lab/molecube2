@@ -318,6 +318,10 @@ public:
     void set_dds_timing1(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)
     {
     }
+    std::array<uint8_t,5> get_dds_timing1() const
+    {
+        return {7, 7, 7, 7, 7};
+    }
 
     DummyPulser();
     DummyPulser(DummyPulser &&other);

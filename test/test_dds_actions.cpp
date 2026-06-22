@@ -77,12 +77,7 @@ static int check_all_dds_loopback(Molecube::Pulser &p, const std::vector<int> &i
 
 static void check_dds_timing(Molecube::Pulser &p, const std::vector<int> &ids)
 {
-    uint32_t dds_timing1 = p.read(0x50);
-    uint8_t timings[5] = {uint8_t(dds_timing1 & 0x3f),
-        uint8_t((dds_timing1 >> 6) & 0x3f),
-        uint8_t((dds_timing1 >> 12) & 0x3f),
-        uint8_t((dds_timing1 >> 18) & 0x3f),
-        uint8_t((dds_timing1 >> 24) & 0x3f)};
+    auto timings = p.get_dds_timing1();
     auto print_fail_count = [&] (int cnt) {
         printf("%d, %d, %d, %d, %d: fail=%d\n", timings[0], timings[1], timings[2],
                timings[3], timings[4], cnt);
