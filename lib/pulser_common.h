@@ -19,9 +19,34 @@
 #ifndef LIBMOLECUBE_PULSER_COMMON_H
 #define LIBMOLECUBE_PULSER_COMMON_H
 
+#include <stdint.h>
+
+#include <string>
+
 namespace Molecube {
 
 static constexpr int NUM_TTL_BANKS = 8;
+struct pulser_version_t {
+    uint32_t major;
+    uint32_t minor;
+    bool check_compatible(const pulser_version_t &ver) const
+    {
+        return major == ver.major && minor >= ver.minor;
+    }
+    bool check_at_least(const pulser_version_t &ver) const
+    {
+        if (major > ver.major)
+            return true;
+        if (major < ver.major)
+            return false;
+        return minor >= ver.minor;
+    }
+};
+
+static inline std::string to_string(const pulser_version_t &ver)
+{
+    return std::to_string(ver.major) + "." + std::to_string(ver.minor);
+}
 
 }
 

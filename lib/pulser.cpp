@@ -153,18 +153,14 @@ NACS_EXPORT() void Pulser::clear_results()
     }
 }
 
-constexpr uint32_t major_ver = 5;
-constexpr uint32_t minor_ver = 2;
+constexpr pulser_version_t req_version{5, 2};
 
 NACS_EXPORT() void Pulser::check_hw_version() const
 {
-    auto major_ver_hw = read(6);
-    auto minor_ver_hw = read(7);
-    if (major_ver_hw != major_ver || minor_ver_hw < minor_ver) {
+    auto hw_ver = hw_version();
+    if (!hw_ver.check_compatible(req_version)) {
         throw std::runtime_error("Incompatible hardware version: require " +
-                                 std::to_string(major_ver) + "." + std::to_string(minor_ver) +
-                                 ", got " + std::to_string(major_ver_hw) + "." +
-                                 std::to_string(minor_ver_hw));
+                                 to_string(req_version) + ", got " + to_string(hw_ver));
     }
 }
 

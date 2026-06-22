@@ -361,6 +361,11 @@ public:
         return read(0x30);
     }
 
+    pulser_version_t hw_version() const
+    {
+        return {read(6), read(7)};
+    }
+
     Pulser(volatile void *const addr)
         : m_addr(*static_cast<volatile uint32_t*>(addr))
     {

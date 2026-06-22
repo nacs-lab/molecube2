@@ -310,6 +310,11 @@ public:
         return m_result_consumed.load(std::memory_order_relaxed);
     }
 
+    pulser_version_t hw_version() const
+    {
+        return {5, 4};
+    }
+
     DummyPulser();
     DummyPulser(DummyPulser &&other);
 
