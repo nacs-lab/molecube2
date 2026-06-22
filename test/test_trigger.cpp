@@ -26,7 +26,7 @@ int main(int argc, char **argv)
 {
     using namespace Molecube;
     if (argc < 3 || argc > 5) {
-        printf("Require two arguments: test_set_ttl chn val\n");
+        printf("Require two to four arguments: test_trigger chn val [trigger_chn [trigger_edge<0:lower, 1:raise>]]\n");
         return 1;
     }
     int fullchn = atoi(argv[1]);
