@@ -33,13 +33,6 @@ num2amp(uint32_t num)
     return num / 4095.0;
 }
 
-static inline void
-set_dds_wr_timing(Molecube::Pulser &p, uint32_t adsu, uint32_t wrlow, uint32_t adhd,
-                  uint32_t fuddl, uint32_t fudhd)
-{
-    p.write(0x50, adsu | (wrlow << 6) | (adhd << 12) | (fuddl << 18) | (fudhd << 24));
-}
-
 static uint32_t dds_loopback_data(int i, uint32_t addr, uint32_t type)
 {
     return (addr + type) | (addr << 8) | ((addr + i + type) << 16) |
@@ -101,7 +94,7 @@ static void scan_dds_timing(Molecube::Pulser &p, const std::vector<int> &ids)
 {
     uint8_t timings[5] = {8, 8, 8, 8, 8};
     auto set_timing = [&] {
-        set_dds_wr_timing(p, timings[0], timings[1], timings[2],
+        p.set_dds_timing1(timings[0], timings[1], timings[2],
                           timings[3], timings[4]);
     };
     auto print_fail_count = [&] (int cnt) {
@@ -184,7 +177,7 @@ static void set_dds_timing(Molecube::Pulser &p, const char *s)
     }
     if (times.size() != 5)
         throw std::invalid_argument("Wrong number of timing settings, expect 5");
-    set_dds_wr_timing(p, times[0], times[1], times[2], times[3], times[4]);
+    p.set_dds_timing1(times[0], times[1], times[2], times[3], times[4]);
 }
 
 void reset_dds(Molecube::Pulser &p, int i)

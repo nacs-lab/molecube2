@@ -315,6 +315,10 @@ public:
         return {5, 4};
     }
 
+    void set_dds_timing1(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)
+    {
+    }
+
     DummyPulser();
     DummyPulser(DummyPulser &&other);
 

@@ -366,6 +366,12 @@ public:
         return {read(6), read(7)};
     }
 
+    void set_dds_timing1(uint32_t adsu, uint32_t wrlow, uint32_t adhd,
+                         uint32_t fuddl, uint32_t fudhd)
+    {
+        write(0x50, adsu | (wrlow << 6) | (adhd << 12) | (fuddl << 18) | (fudhd << 24));
+    }
+
     Pulser(volatile void *const addr)
         : m_addr(*static_cast<volatile uint32_t*>(addr))
     {
