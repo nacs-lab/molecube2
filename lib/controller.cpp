@@ -178,14 +178,6 @@ public:
         }
         dds_phase(chn, uint16_t(m_ctrl.m_dds_phase[chn] + detphase));
     }
-    void dds_reset(uint8_t chn)
-    {
-        // Do the reset pulse that's part of the sequence but do the
-        // actual reinitialization later after the sequence finishes.
-        m_t += Seq::Zynq::PulseTime::DDSReset;
-        m_ctrl.m_p.template dds_reset<true>(chn);
-        m_ctrl.m_dds_pending_reset[chn] = true;
-    }
     void dac(uint8_t chn, uint16_t V)
     {
         m_t += Seq::Zynq::PulseTime::DAC;
