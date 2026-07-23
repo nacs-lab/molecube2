@@ -337,18 +337,6 @@ public:
     {
         return read(0x2a);
     }
-    inline uint32_t ttl_cycle()
-    {
-        return read(0x2b);
-    }
-    inline uint32_t wait_cycle()
-    {
-        return read(0x2c);
-    }
-    inline uint32_t result_overflow_count()
-    {
-        return read(0x2d);
-    }
     inline uint32_t result_count()
     {
         return read(0x2e);

@@ -155,8 +155,6 @@ NACS_EXPORT() void DummyPulser::toggle_init()
     m_spi_count.store(0, std::memory_order_relaxed);
     m_underflow_cycle.store(0, std::memory_order_relaxed);
     m_inst_cycle.store(0, std::memory_order_relaxed);
-    m_ttl_cycle.store(0, std::memory_order_relaxed);
-    m_wait_cycle.store(0, std::memory_order_relaxed);
     m_result_generated.store(0, std::memory_order_relaxed);
     m_result_consumed.store(0, std::memory_order_relaxed);
 }
@@ -223,7 +221,6 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
         auto bank = cmd.v1 >> 24;
         m_ttl_count.fetch_add(1, std::memory_order_relaxed);
         m_ttl[bank].store(cmd.v2, std::memory_order_release);
-        m_ttl_cycle.fetch_add(t, std::memory_order_relaxed);
         return t;
     }
     case OP::Clock:
@@ -235,7 +232,6 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
         return Seq::Zynq::PulseTime::DAC;
     case OP::Wait:
         m_wait_count.fetch_add(1, std::memory_order_relaxed);
-        m_wait_cycle.fetch_add(cmd.v1, std::memory_order_relaxed);
         return cmd.v1;
     case OP::ClearErr:
         m_clear_error_count.fetch_add(1, std::memory_order_relaxed);
