@@ -36,10 +36,33 @@ NACS_EXPORT() void *Pulser::address()
 {
     return Kernel::mapPulseCtrl();
 }
+NACS_EXPORT() void *Pulser::alloc_buffer(size_t size)
+{
+    return Kernel::allocDMABuffer(size, true);
+}
+NACS_EXPORT() uintptr_t Pulser::buffer_addr(void *buff)
+{
+    return (uintptr_t)Kernel::bufferPhyAddr(buff);
+}
+NACS_EXPORT() void Pulser::free_buffer(void *buff, size_t size)
+{
+    Kernel::freeDMABuffer(buff, size);
+}
 #else
 NACS_EXPORT() void *Pulser::address()
 {
     return nullptr;
+}
+NACS_EXPORT() void *Pulser::alloc_buffer(size_t)
+{
+    return nullptr;
+}
+NACS_EXPORT() uintptr_t Pulser::buffer_addr(void*)
+{
+    return 0;
+}
+NACS_EXPORT() void Pulser::free_buffer(void*, size_t)
+{
 }
 #endif
 

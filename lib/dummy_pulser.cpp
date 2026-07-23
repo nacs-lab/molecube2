@@ -302,4 +302,17 @@ DummyPulser::DummyPulser(DummyPulser &&o)
     }
 }
 
+NACS_EXPORT() void *DummyPulser::alloc_buffer(size_t size)
+{
+    return malloc(size);
+}
+NACS_EXPORT() uintptr_t DummyPulser::buffer_addr(void *buff)
+{
+    return (uintptr_t)buff;
+}
+NACS_EXPORT() void DummyPulser::free_buffer(void *buff, size_t)
+{
+    free(buff);
+}
+
 }

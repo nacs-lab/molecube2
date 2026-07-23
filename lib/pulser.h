@@ -448,6 +448,9 @@ public:
     void dump_dds(std::ostream &stm, int chn);
 
     static void *address();
+    static void *alloc_buffer(size_t size);
+    static uintptr_t buffer_addr(void *buff);
+    static void free_buffer(void *buff, size_t size);
 
 private:
     void clear_results();
