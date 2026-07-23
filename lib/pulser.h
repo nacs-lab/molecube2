@@ -174,6 +174,14 @@ public:
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
         return read(0x48 + bank);
     }
+    inline uint32_t dma_status() const
+    {
+        return read(0x58);
+    }
+    inline uint32_t dma_control() const
+    {
+        return read(0x59);
+    }
 
     // Write
     // TTL functions: pulse_io = (ttl_out | high_mask) & (~low_mask);
@@ -197,6 +205,14 @@ public:
             write((bank - 1) * 2 + 0x11, low_mask);
         }
     }
+    inline void set_ttl(int bytes, uint8_t lo, uint8_t hi)
+    {
+        write(4, (bytes << 16) | (uint32_t(lo) << 8) | hi);
+    }
+    inline void set_clock(uint8_t div)
+    {
+        write(5, div);
+    }
     // release hold.  pulses can run
     inline void release_hold()
     {
@@ -218,6 +234,24 @@ public:
     {
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
         write(0x48 + bank, mask);
+    }
+    inline uint16_t read_dds0(uint8_t dds_id, uint8_t dds_addr)
+    {
+        write(0x52, dds_addr | (uint32_t(dds_id) << 7));
+        return (uint16_t)read(0x52);
+    }
+    inline uint16_t read_dds1(uint8_t dds_id, uint8_t dds_addr)
+    {
+        write(0x53, dds_addr | (uint32_t(dds_id) << 7));
+        return (uint16_t)read(0x53);
+    }
+    inline void start_dma(uintptr_t addr, uint16_t blocks, bool first)
+    {
+        write(0x58, addr | (blocks << 1) | int(first));
+    }
+    inline void set_dma_control(uint32_t ctrl)
+    {
+        write(0x59, ctrl);
     }
 
     // Pulses
