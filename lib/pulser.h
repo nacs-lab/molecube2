@@ -164,6 +164,16 @@ public:
     {
         return (uint8_t)read(5);
     }
+    inline uint32_t ttl_in(int bank) const
+    {
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        return read(0x60 + bank);
+    }
+    inline uint32_t dma_ttl_mask(int bank) const
+    {
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        return read(0x48 + bank);
+    }
 
     // Write
     // TTL functions: pulse_io = (ttl_out | high_mask) & (~low_mask);
@@ -203,6 +213,11 @@ public:
         uint32_t r3 = read(3);
         write(3, r3 | Bits::Init);
         write(3, r3 & ~Bits::Init);
+    }
+    inline void set_dma_ttl_mask(int bank, uint32_t mask)
+    {
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        write(0x48 + bank, mask);
     }
 
     // Pulses
