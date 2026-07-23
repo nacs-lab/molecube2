@@ -116,6 +116,7 @@ public:
     inline uint32_t ttl_in(int bank) const
     {
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        (void)bank;
         return 0;
     }
     inline uint32_t dma_ttl_mask(int bank) const
