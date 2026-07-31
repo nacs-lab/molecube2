@@ -760,7 +760,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
         runner.template clock<false>(255);
     }
     if (!m_p.timing_ok())
-        Log::warn("Timing failures: %u cycles.\n", m_p.underflow_cycle());
+        Log::warn("Timing failures.\n");
     m_p.clear_error();
 
     if (!m_cmd_waiting) {

@@ -31,9 +31,6 @@ NACS_EXPORT() DummyPulser::DummyPulser()
 
 NACS_EXPORT() void DummyPulser::init_dds(int chn)
 {
-    const int cmd_count = 7 + 46;
-    m_inst_word_count.fetch_add(cmd_count * 2, std::memory_order_relaxed);
-
     if (!dds_exists_internal(chn))
         return;
     dds_reset<false>(chn);
@@ -43,7 +40,6 @@ NACS_EXPORT() void DummyPulser::init_dds(int chn)
 NACS_EXPORT() bool DummyPulser::check_dds(int chn, bool force)
 {
     if (!force) {
-        m_inst_word_count.fetch_add(2, std::memory_order_relaxed);
         if (dds_exists_internal(chn) && m_dds[chn].init) {
             return false;
         }
@@ -54,8 +50,6 @@ NACS_EXPORT() bool DummyPulser::check_dds(int chn, bool force)
 
 NACS_EXPORT() bool DummyPulser::dds_exists(int chn)
 {
-    const int cmd_count = 4;
-    m_inst_word_count.fetch_add(cmd_count * 2, std::memory_order_relaxed);
     return dds_exists_internal(chn);
 }
 
@@ -64,8 +58,6 @@ NACS_EXPORT() void DummyPulser::dump_dds(std::ostream &stm, int chn)
     stm << "*******************************" << std::endl;
     stm << "Dummy DDS board: " << chn << std::endl;
     stm << "*******************************" << std::endl;
-    const int cmd_count = 32;
-    m_inst_word_count.fetch_add(cmd_count * 2, std::memory_order_relaxed);
 }
 
 NACS_EXPORT() bool DummyPulser::try_get_result(uint32_t &res)
@@ -101,7 +93,6 @@ NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
 NACS_EXPORT() void DummyPulser::add_cmd(OP op, bool timing, uint32_t v1, uint32_t v2)
 {
     Cmd cmd{op, timing, std::chrono::steady_clock::now(), v1, v2};
-    m_inst_word_count.fetch_add(2, std::memory_order_relaxed);
     std::unique_lock<std::mutex> lock(m_cmds_lock);
     while (m_cmds.size() >= 4096) {
         if (!m_force_release) {
@@ -144,8 +135,6 @@ NACS_EXPORT() void DummyPulser::toggle_init()
     m_timing_ok.store(true, std::memory_order_release);
     m_timing_check.store(false, std::memory_order_release);
 
-    m_inst_word_count.store(0, std::memory_order_relaxed);
-    m_inst_count.store(0, std::memory_order_relaxed);
     m_ttl_count.store(0, std::memory_order_relaxed);
     m_dds_count.store(0, std::memory_order_relaxed);
     m_wait_count.store(0, std::memory_order_relaxed);
@@ -153,8 +142,6 @@ NACS_EXPORT() void DummyPulser::toggle_init()
     m_loopback_count.store(0, std::memory_order_relaxed);
     m_clock_count.store(0, std::memory_order_relaxed);
     m_spi_count.store(0, std::memory_order_relaxed);
-    m_underflow_cycle.store(0, std::memory_order_relaxed);
-    m_inst_cycle.store(0, std::memory_order_relaxed);
     m_result_generated.store(0, std::memory_order_relaxed);
     m_result_consumed.store(0, std::memory_order_relaxed);
 }
@@ -191,9 +178,6 @@ NACS_INTERNAL bool DummyPulser::run_past_cmds(time_point_t cur_t)
         if (cmdt > startt) {
             if (m_timing_check.load(std::memory_order_acquire)) {
                 m_timing_ok.store(false, std::memory_order_release);
-                auto dt = std::chrono::duration_cast<std::chrono::nanoseconds>(cmdt - startt);
-                m_underflow_cycle.fetch_add(uint32_t(dt.count() / 10 + 1),
-                                            std::memory_order_relaxed);
             }
             startt = cmdt;
             assert(cmdt <= cur_t);
@@ -204,7 +188,6 @@ NACS_INTERNAL bool DummyPulser::run_past_cmds(time_point_t cur_t)
         cmd_run = true;
         m_timing_check.store(cmd.timing, std::memory_order_release);
         auto steps = run_cmd(cmd);
-        m_inst_cycle.fetch_add(steps, std::memory_order_relaxed);
         m_release_time = startt + std::chrono::nanoseconds(steps * 10);
         m_cmds.pop();
     }
@@ -214,7 +197,6 @@ NACS_INTERNAL bool DummyPulser::run_past_cmds(time_point_t cur_t)
 
 NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
 {
-    m_inst_count.fetch_add(1, std::memory_order_relaxed);
     switch (cmd.op) {
     case OP::TTL: {
         auto t = cmd.v1 & ((uint32_t(1) << 24) - 1);
@@ -236,7 +218,6 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
     case OP::ClearErr:
         m_clear_error_count.fetch_add(1, std::memory_order_relaxed);
         m_timing_ok.store(true, std::memory_order_release);
-        m_underflow_cycle.store(0, std::memory_order_relaxed);
         return Seq::Zynq::PulseTime::Clear;
     case OP::DDSSetFreq:
         m_dds_count.fetch_add(1, std::memory_order_relaxed);

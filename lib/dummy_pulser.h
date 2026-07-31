@@ -239,15 +239,6 @@ public:
     {
         m_loopback_reg.store(val, std::memory_order_relaxed);
     }
-    inline uint32_t inst_word_count()
-    {
-        return m_inst_word_count.load(std::memory_order_relaxed);
-    }
-    inline uint32_t inst_count()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_inst_count.load(std::memory_order_relaxed);
-    }
     inline uint32_t ttl_count()
     {
         const_cast<DummyPulser*>(this)->forward_time();
@@ -282,16 +273,6 @@ public:
     {
         const_cast<DummyPulser*>(this)->forward_time();
         return m_spi_count.load(std::memory_order_relaxed);
-    }
-    inline uint32_t underflow_cycle()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_underflow_cycle.load(std::memory_order_relaxed);
-    }
-    inline uint32_t inst_cycle()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_inst_cycle.load(std::memory_order_relaxed);
     }
     inline uint32_t result_count()
     {
@@ -381,8 +362,6 @@ private:
 
     // Debug registers
     std::atomic<uint32_t> m_loopback_reg{0};
-    std::atomic<uint32_t> m_inst_word_count{0};
-    std::atomic<uint32_t> m_inst_count{0};
     std::atomic<uint32_t> m_ttl_count{0};
     std::atomic<uint32_t> m_dds_count{0};
     std::atomic<uint32_t> m_wait_count{0};
@@ -390,8 +369,6 @@ private:
     std::atomic<uint32_t> m_loopback_count{0};
     std::atomic<uint32_t> m_clock_count{0};
     std::atomic<uint32_t> m_spi_count{0};
-    std::atomic<uint32_t> m_underflow_cycle{0};
-    std::atomic<uint32_t> m_inst_cycle{0};
     std::atomic<uint32_t> m_result_generated{0};
     std::atomic<uint32_t> m_result_consumed{0};
 

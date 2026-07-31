@@ -342,14 +342,6 @@ public:
     {
         write(0x1e, val);
     }
-    inline uint32_t inst_word_count()
-    {
-        return read(0x20);
-    }
-    inline uint32_t inst_count()
-    {
-        return read(0x21);
-    }
     inline uint32_t ttl_count()
     {
         return read(0x22);
@@ -377,14 +369,6 @@ public:
     inline uint32_t spi_count()
     {
         return read(0x28);
-    }
-    inline uint32_t underflow_cycle()
-    {
-        return read(0x29);
-    }
-    inline uint32_t inst_cycle()
-    {
-        return read(0x2a);
     }
     inline uint32_t result_count()
     {
