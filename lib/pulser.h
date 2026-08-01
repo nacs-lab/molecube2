@@ -342,46 +342,6 @@ public:
     {
         write(0x1e, val);
     }
-    inline uint32_t ttl_count()
-    {
-        return read(0x22);
-    }
-    inline uint32_t dds_count()
-    {
-        return read(0x23);
-    }
-    inline uint32_t wait_count()
-    {
-        return read(0x24);
-    }
-    inline uint32_t clear_error_count()
-    {
-        return read(0x25);
-    }
-    inline uint32_t loopback_count()
-    {
-        return read(0x26);
-    }
-    inline uint32_t clock_count()
-    {
-        return read(0x27);
-    }
-    inline uint32_t spi_count()
-    {
-        return read(0x28);
-    }
-    inline uint32_t result_count()
-    {
-        return read(0x2e);
-    }
-    inline uint32_t result_generated()
-    {
-        return read(0x2f);
-    }
-    inline uint32_t result_consumed()
-    {
-        return read(0x30);
-    }
 
     pulser_version_t hw_version() const
     {

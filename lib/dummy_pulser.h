@@ -239,56 +239,6 @@ public:
     {
         m_loopback_reg.store(val, std::memory_order_relaxed);
     }
-    inline uint32_t ttl_count()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_ttl_count.load(std::memory_order_relaxed);
-    }
-    inline uint32_t dds_count()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_dds_count.load(std::memory_order_relaxed);
-    }
-    inline uint32_t wait_count()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_wait_count.load(std::memory_order_relaxed);
-    }
-    inline uint32_t clear_error_count()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_clear_error_count.load(std::memory_order_relaxed);
-    }
-    inline uint32_t loopback_count()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_loopback_count.load(std::memory_order_relaxed);
-    }
-    inline uint32_t clock_count()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_clock_count.load(std::memory_order_relaxed);
-    }
-    inline uint32_t spi_count()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_spi_count.load(std::memory_order_relaxed);
-    }
-    inline uint32_t result_count()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return uint32_t(m_results.size());
-    }
-    inline uint32_t result_generated()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_result_generated.load(std::memory_order_relaxed);
-    }
-    inline uint32_t result_consumed()
-    {
-        const_cast<DummyPulser*>(this)->forward_time();
-        return m_result_consumed.load(std::memory_order_relaxed);
-    }
 
     pulser_version_t hw_version() const
     {
@@ -362,15 +312,6 @@ private:
 
     // Debug registers
     std::atomic<uint32_t> m_loopback_reg{0};
-    std::atomic<uint32_t> m_ttl_count{0};
-    std::atomic<uint32_t> m_dds_count{0};
-    std::atomic<uint32_t> m_wait_count{0};
-    std::atomic<uint32_t> m_clear_error_count{0};
-    std::atomic<uint32_t> m_loopback_count{0};
-    std::atomic<uint32_t> m_clock_count{0};
-    std::atomic<uint32_t> m_spi_count{0};
-    std::atomic<uint32_t> m_result_generated{0};
-    std::atomic<uint32_t> m_result_consumed{0};
 
     std::mutex m_cmds_lock;
 

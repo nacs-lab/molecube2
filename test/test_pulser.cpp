@@ -64,72 +64,6 @@ void test_pulser(P &p)
 
     p.toggle_init();
 
-    uint32_t ttl_count = 0;
-    uint32_t dds_count = 0;
-    uint32_t wait_count = 0;
-    uint32_t clear_error_count = 0;
-    uint32_t loopback_count = 0;
-    uint32_t clock_count = 0;
-    uint32_t ttl_cycle = 0;
-    uint32_t wait_cycle = 0;
-    uint32_t result_count = 0;
-    uint32_t result_generated = 0;
-    uint32_t result_consumed = 0;
-    auto check_inst = [&] {
-        assert(p.ttl_count() == ttl_count);
-        assert(p.dds_count() == dds_count);
-        assert(p.wait_count() == wait_count);
-        assert(p.clear_error_count() == clear_error_count);
-        assert(p.loopback_count() == loopback_count);
-        assert(p.clock_count() == clock_count);
-        assert(p.result_count() == result_count);
-        assert(p.result_generated() == result_generated);
-        assert(p.result_consumed() == result_consumed);
-    };
-    auto ttl_finished = [&] (uint32_t cycle) {
-        ttl_count += 1;
-        ttl_cycle += cycle;
-    };
-    auto dds_finished = [&] () {
-        dds_count += 1;
-    };
-    auto wait_finished = [&] (uint32_t cycle) {
-        wait_count += 1;
-        wait_cycle += cycle;
-    };
-    auto clear_error_finished = [&] () {
-        clear_error_count += 1;
-    };
-    auto loopback_finished = [&] () {
-        loopback_count += 1;
-    };
-    auto clock_finished = [&] () {
-        clock_count += 1;
-    };
-    auto generate_result = [&] {
-        result_generated++;
-        result_count++;
-    };
-    auto consume_result = [&] {
-        result_consumed++;
-        assert(result_count > 0);
-        result_count--;
-    };
-    auto reset_count = [&] {
-        ttl_count = 0;
-        dds_count = 0;
-        wait_count = 0;
-        clear_error_count = 0;
-        loopback_count = 0;
-        clock_count = 0;
-        ttl_cycle = 0;
-        wait_cycle = 0;
-        result_generated = 0;
-        result_consumed = 0;
-        check_inst();
-    };
-    reset_count();
-
     // Test TTL and loopback pulse
     printf("  Testing TTL and loopback pulse\n");
     p.release_hold();
@@ -140,62 +74,40 @@ void test_pulser(P &p)
             p.template ttl<false>(v, 10, bank);
         }
         p.template loopback<false>(vl);
-        generate_result();
         assert(p.get_result() == vl);
-        consume_result();
         for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
             assert(p.cur_ttl(bank) == v);
-            ttl_finished(10);
         }
-        loopback_finished();
-        check_inst();
     }
     for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
         p.template ttl<false>(0xffffffff, 10, bank);
     }
     p.template loopback<false>(0);
-    generate_result();
     assert(p.get_result() == 0);
-    consume_result();
     for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
         assert(p.cur_ttl(bank) == 0xffffffff);
-        ttl_finished(10);
     }
-    loopback_finished();
-    check_inst();
     for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
         p.template ttl<false>(0, 10, bank);
     }
     p.template loopback<false>(0xffffffff);
-    generate_result();
     assert(p.get_result() == 0xffffffff);
-    consume_result();
     for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
         assert(p.cur_ttl(bank) == 0);
-        ttl_finished(10);
     }
-    loopback_finished();
-    check_inst();
 
     // Test hold and release
     printf("  Testing hold and release\n");
     p.set_hold();
     p.template ttl<false>(345, 10, 0);
     p.template loopback<false>(888);
-    check_inst();
     std::this_thread::sleep_for(10ms);
-    check_inst();
     uint32_t res0;
     assert(!p.try_get_result(res0));
     assert(p.cur_ttl(0) == 0);
     p.release_hold();
-    generate_result();
     assert(p.get_result() == 888);
-    consume_result();
     assert(p.cur_ttl(0) == 345);
-    ttl_finished(10);
-    loopback_finished();
-    check_inst();
 
     assert(p.is_finished());
 
@@ -203,13 +115,10 @@ void test_pulser(P &p)
 
     while (!p.is_finished()) {
     }
-    ttl_finished(10);
-    check_inst();
 
     // Test loopback and clock
     printf("  Testing loopback and clock\n");
     p.toggle_init();
-    reset_count();
     p.release_hold();
     assert(p.cur_clock() == 255);
     for (int i = 0; i < 256; i++) {
@@ -217,12 +126,7 @@ void test_pulser(P &p)
         uint32_t vl = i * 15 + 12389 + i / 2 + (i << 20);
         p.template clock<false>(vc);
         p.template loopback<false>(vl);
-        generate_result();
         assert(p.get_result() == vl);
-        consume_result();
-        clock_finished();
-        loopback_finished();
-        check_inst();
         assert(p.cur_clock() == vc);
     }
 
@@ -231,151 +135,47 @@ void test_pulser(P &p)
     assert(p.timing_ok());
     p.template wait<true>(3);
     std::this_thread::sleep_for(10ms);
-    wait_finished(3);
-    check_inst();
     p.template wait<true>(3);
     std::this_thread::sleep_for(10ms);
-    wait_finished(3);
-    check_inst();
     assert(!p.timing_ok());
     p.clear_error();
     p.template loopback<false>(1);
-    generate_result();
     assert(p.get_result() == 1);
-    consume_result();
-    clear_error_finished();
-    loopback_finished();
-    check_inst();
     assert(p.timing_ok());
 
     // Test auto release
     printf("  Testing auto release\n");
     p.toggle_init();
-    reset_count();
     p.set_hold();
     for (int i = 0; i < 4095; i++) {
         p.template wait<true>(5);
-        wait_finished(5);
     }
     for (int i = 0; i < 8; i++) {
         p.template wait<true>(1000);
-        wait_finished(1000);
     }
     p.template wait<false>(3);
-    wait_finished(3);
     assert(p.timing_ok());
     while (!p.is_finished()) {
     }
-    check_inst();
     assert(p.timing_ok());
 
     // Test DDS controller read/write/timing (does not require a working DDS)
     printf("  Testing DDS controller read/write/timing\n");
     p.template dds_set_freq<false>(0, 0);
-    dds_finished();
     p.template dds_set_amp<false>(0, 0);
-    dds_finished();
     while (!p.is_finished()) {
     }
-    check_inst();
     for (int i = 0; i < 256; i++) {
         uint32_t vl = (i << 20) | i;
         p.template dds_get_freq<false>(0);
-        dds_finished();
-        generate_result();
         p.template loopback<false>(vl);
-        loopback_finished();
-        generate_result();
         p.template dds_get_amp<false>(0);
-        dds_finished();
-        generate_result();
         p.template loopback<false>(vl);
-        loopback_finished();
-        generate_result();
         assert(p.get_result() == 0);
-        consume_result();
         assert(p.get_result() == vl);
-        consume_result();
         assert(p.get_result() == 0);
-        consume_result();
         assert(p.get_result() == vl);
-        consume_result();
-        check_inst();
     }
-
-    // Test result counters and result overflow
-    // printf("  Testing result counters and result overflow\n");
-    // std::vector<uint32_t> expected;
-    // // assert(p.result_overflow_count() == 0);
-    // p.toggle_init();
-    // reset_count();
-    // p.release_hold();
-    // uint32_t max_res = 0;
-    // auto gen_res = [&] (int n=256) {
-    //     for (int i = 0; i < n; i++) {
-    //         uint32_t vl = (uint32_t)expected.size();
-    //         p.template loopback<false>(vl);
-    //         expected.push_back(vl);
-    //         loopback_finished();
-    //         generate_result();
-    //     }
-    //     while (!p.is_finished()) {
-    //     }
-    //     check_inst();
-    //     // assert(p.result_count() > p.result_overflow_count());
-    // };
-    // auto mask_results = [&] {
-    //     auto novf = p.result_overflow_count();
-    //     auto nres = expected.size();
-    //     for (uint32_t i = 0; i < novf; i++) {
-    //         expected[nres - 1 - i] = 0;
-    //     }
-    // };
-    // auto gen_until_overflow = [&] (int n=256) {
-    //     do {
-    //         gen_res(n);
-    //     } while (p.result_overflow_count() == 0);
-    //     if (max_res > 0) {
-    //         assert(p.result_count() - p.result_overflow_count() == max_res);
-    //     }
-    //     else {
-    //         max_res = p.result_count() - p.result_overflow_count();
-    //         assert(max_res > 4096);
-    //     }
-    //     mask_results();
-    // };
-    // auto check_res = [&] (int maxn=256) {
-    //     for (int i = 0; i < maxn && !expected.empty(); i++) {
-    //         auto e = expected[0];
-    //         expected.erase(expected.begin());
-    //         assert(p.get_result() == e);
-    //         consume_result();
-    //         check_inst();
-    //     }
-    //     return !expected.empty();
-    // };
-    // gen_until_overflow();
-    // check_res(512);
-    // assert(p.result_overflow_count() == 0);
-    // gen_until_overflow(512);
-    // check_res(512);
-    // assert(p.result_overflow_count() == 0);
-    // gen_until_overflow(1024);
-    // check_res(1024);
-    // assert(p.result_overflow_count() == 0);
-    // check_res(512);
-    // gen_until_overflow(2048);
-    // check_res(2048);
-    // assert(p.result_overflow_count() == 0);
-    // check_res(1024);
-    // gen_until_overflow(4096);
-    // check_res(4096);
-    // assert(p.result_overflow_count() == 0);
-    // check_res(2048);
-    // while (check_res()) {
-    // }
-    // assert(p.result_count() == 0);
-    // assert(p.result_overflow_count() == 0);
 }
 
 int main()
