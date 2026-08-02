@@ -87,7 +87,7 @@ static void check_dds_timing(Molecube::Pulser &p, const std::vector<int> &ids)
 
 static void scan_dds_timing(Molecube::Pulser &p, const std::vector<int> &ids)
 {
-    uint8_t timings[5] = {8, 8, 8, 8, 8};
+    uint8_t timings[5] = {7, 7, 7, 7, 7};
     auto set_timing = [&] {
         p.set_dds_timing1(timings[0], timings[1], timings[2],
                           timings[3], timings[4]);
@@ -112,7 +112,7 @@ static void scan_dds_timing(Molecube::Pulser &p, const std::vector<int> &ids)
                 min_timings[tid] = uint8_t(t + 1);
             }
         }
-        timings[tid] = 8;
+        timings[tid] = 7;
     }
     memcpy(timings, min_timings, sizeof(timings));
     set_timing();
