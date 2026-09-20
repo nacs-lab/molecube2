@@ -18,8 +18,10 @@ int main()
   auto addr = Molecube::Pulser::address();
   Molecube::Pulser p(addr);
 
-  auto dma_buff = (uint8_t*)p.alloc_buffer(4096);
-  auto write_buff = (uint8_t*)malloc(4096);
+  size_t alloc_sz = 4096 * 4;
+
+  auto dma_buff = (uint8_t*)p.alloc_buffer(alloc_sz);
+  auto write_buff = (uint8_t*)malloc(alloc_sz);
   auto phy_addr = p.buffer_addr(dma_buff);
   printf("virt: %p, phy: %p\n", dma_buff, (void*)phy_addr);
 
@@ -27,7 +29,7 @@ int main()
   auto add_inst = [&] (auto inst) {
     constexpr size_t inst_sz = sizeof(inst);
     static_assert(inst_sz == 2 || inst_sz == 4 || inst_sz == 6, "");
-    assert(buff_sz + inst_sz <= 4096);
+    assert(buff_sz + inst_sz <= alloc_sz);
     memcpy(write_buff + buff_sz, &inst, inst_sz);
     buff_sz += inst_sz;
   };
@@ -61,7 +63,7 @@ int main()
   DMA::print(std::cout, std::span(write_buff, buff_sz), 0);
   auto total_time = DMA::total_time(std::span(write_buff, buff_sz), 0);
   printf("Total time: %" PRId64 "\n", total_time);
-  memcpy(dma_buff, write_buff, 4096);
+  memcpy(dma_buff, write_buff, alloc_sz);
   asm volatile ("dmb st" ::: "memory");
   p.set_dma_ttl_mask(0, 0xf);
 
@@ -90,7 +92,7 @@ int main()
   }
 
   free(write_buff);
-  p.free_buffer(write_buff, 4096);
+  p.free_buffer(write_buff, alloc_sz);
 
   return 0;
 }
