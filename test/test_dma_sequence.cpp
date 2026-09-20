@@ -51,8 +51,17 @@ int main()
   add_inst(DMA::Inst_v0::Wait2(10000));
   add_inst(DMA::Inst_v0::DDSSet16(1, 10, 1, 0x32 >> 1, 49));
   add_inst(DMA::Inst_v0::Wait1(100));
-  while (buff_sz % (16 *  8) != 0) {
-    add_inst(DMA::Inst_v0::Wait1(100));
+  while (true) {
+      auto rem = buff_sz % (16 *  8);
+      if (rem == 0)
+          break;
+      rem = 16 *  8 - rem;
+      if (rem > sizeof(DMA::Inst_v0::Wait2)) {
+          add_inst(DMA::Inst_v0::Wait2(100));
+      }
+      else {
+          add_inst(DMA::Inst_v0::Wait1(100));
+      }
   }
   DMA::print(std::cout, std::span(write_buff, buff_sz), 0);
   auto total_time = DMA::total_time(std::span(write_buff, buff_sz), 0);
