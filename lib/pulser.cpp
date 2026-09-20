@@ -144,9 +144,9 @@ NACS_EXPORT() void Pulser::dump_dds(std::ostream &stm, int chn)
     for (unsigned addr = 0; addr + 3 <= 0x7f; addr += 4) {
         dds_get_4bytes<false>(chn, addr);
         if (uint32_t u = get_result()) {
-            stm << "AD9914 board = " << chn << ", addr = 0x"
+            stm << "AD9914 board = " << std::dec << chn << ", addr = 0x"
                 << std::hex << addr + 3 << "..." << addr
-                << " = 0x" << u << std::endl;
+                << " = 0x" << u << std::dec << std::endl;
         }
     }
     stm << "*******************************" << std::endl;
