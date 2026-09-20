@@ -37,8 +37,10 @@ include_directories(${MCDEP_INCLUDE_DIRS} ${YAML_CPP_INCLUDE_DIR})
 set(LINKER_FLAGS -Wl,--as-needed -Wl,--no-undefined -Wl,--gc-sections
   -pthread -fno-math-errno -Wl,-Bsymbolic-functions)
 
-cmake_c_add_flags(CMAKE_C_FLAGS -std=gnu11)
-cmake_c_add_flags(CMAKE_CXX_FLAGS -std=gnu++17 -fno-rtti)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED On)
+
+cmake_c_add_flags(CMAKE_CXX_FLAGS -fno-rtti)
 cmake_c_add_flags(CMAKE_EXE_LINKER_FLAGS ${LINKER_FLAGS})
 cmake_c_add_flags(CMAKE_STATIC_LINKER_FLAGS ${LINKER_FLAGS})
 cmake_c_add_flags(CMAKE_SHARED_LINKER_FLAGS ${LINKER_FLAGS})
