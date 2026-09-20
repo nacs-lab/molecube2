@@ -32,6 +32,10 @@ int main()
     buff_sz += inst_sz;
   };
 
+  for (uint8_t addr = 0x2c; addr < 0x34; addr += 2) {
+      printf("[%x:%x] = %x\n", addr, addr + 1, p.read_dds1(10, addr));
+  }
+
   add_inst(DMA::Inst_v0::Wait1(10));
   add_inst(DMA::Inst_v0::TTLSet4(0, 8));
   add_inst(DMA::Inst_v0::Wait1(100));
@@ -71,6 +75,10 @@ int main()
 
   auto status2 = p.dma_status();
   printf("%x -> %x\n", status1, status2);
+
+  for (uint8_t addr = 0x2c; addr < 0x34; addr += 2) {
+      printf("[%x:%x] = %x\n", addr, addr + 1, p.read_dds1(10, addr));
+  }
 
   free(write_buff);
   p.free_buffer(write_buff, 4096);
