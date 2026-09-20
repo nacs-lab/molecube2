@@ -35,21 +35,16 @@ int main()
   for (uint8_t addr = 0x2c; addr < 0x34; addr += 2) {
       printf("[%x:%x] = %x\n", addr, addr + 1, p.read_dds1(10, addr));
   }
-  for (int i = 0; i < 22; i++) {
-      printf("DDS %d START ---\n", i);
-      p.dump_dds(std::cout, i);
-      printf("DDS %d END \n", i);
-  }
 
   add_inst(DMA::Inst_v0::Wait1(10));
   add_inst(DMA::Inst_v0::TTLSet4(0, 8));
   add_inst(DMA::Inst_v0::Wait1(100));
   add_inst(DMA::Inst_v0::TTLSet4(0, 0));
-  add_inst(DMA::Inst_v0::DDSSet32(1, 10, 1, 0x2c >> 1, 0x05503507));
+  add_inst(DMA::Inst_v0::DDSSet32(1, 10, 0, 0x2c >> 1, 0x07507507));
   add_inst(DMA::Inst_v0::Wait1(100));
-  add_inst(DMA::Inst_v0::DDSSet16(1, 10, 1, 0x32 >> 1, 408));
+  add_inst(DMA::Inst_v0::DDSSet16(1, 10, 1, 0x32 >> 1, 409));
   add_inst(DMA::Inst_v0::Wait2(10000));
-  add_inst(DMA::Inst_v0::DDSSet16(1, 10, 1, 0x32 >> 1, 49));
+  add_inst(DMA::Inst_v0::DDSSet16(1, 10, 1, 0x32 >> 1, 0));
   add_inst(DMA::Inst_v0::Wait1(100));
   while (true) {
       auto rem = buff_sz % (16 *  8);
@@ -92,11 +87,6 @@ int main()
 
   for (uint8_t addr = 0x2c; addr < 0x34; addr += 2) {
       printf("[%x:%x] = %x\n", addr, addr + 1, p.read_dds1(10, addr));
-  }
-  for (int i = 0; i < 22; i++) {
-      printf("DDS %d START ---\n", i);
-      p.dump_dds(std::cout, i);
-      printf("DDS %d END \n", i);
   }
 
   free(write_buff);
