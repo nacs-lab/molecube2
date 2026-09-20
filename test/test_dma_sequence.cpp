@@ -42,10 +42,10 @@ int main()
   add_inst(DMA::Inst_v0::TTLSet4(0, 0));
   add_inst(DMA::Inst_v0::DDSSet32(1, 10, 0, 0x2c >> 1, 0x07507507));
   add_inst(DMA::Inst_v0::Wait1(100));
-  add_inst(DMA::Inst_v0::DDSSet16(1, 10, 1, 0x32 >> 1, 409));
-  add_inst(DMA::Inst_v0::Wait2(10000));
-  add_inst(DMA::Inst_v0::DDSSet16(1, 10, 1, 0x32 >> 1, 0));
-  add_inst(DMA::Inst_v0::Wait1(100));
+  for (int amp = 1000; amp > 0; amp--) {
+      add_inst(DMA::Inst_v0::DDSSet16(1, 10, 1, 0x32 >> 1, amp));
+      add_inst(DMA::Inst_v0::Wait2(11));
+  }
   while (true) {
       auto rem = buff_sz % (16 *  8);
       if (rem == 0)
