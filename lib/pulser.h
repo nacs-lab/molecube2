@@ -363,6 +363,12 @@ public:
             uint8_t((dds_timing1 >> 24) & 0x3f)};
     }
 
+    bool support_dma() const
+    {
+        constexpr pulser_version_t dma_version{5, 5};
+        return hw_version().check_compatible(dma_version);
+    }
+
     Pulser(volatile void *const addr)
         : m_addr(*static_cast<volatile uint32_t*>(addr))
     {

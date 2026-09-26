@@ -268,6 +268,11 @@ public:
     static uintptr_t buffer_addr(void *buff);
     static void free_buffer(void *buff, size_t size);
 
+    bool support_dma() const
+    {
+        return true;
+    }
+
 private:
     // check dds existance without changing debug registers.
     bool dds_exists_internal(int chn)
