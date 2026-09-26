@@ -245,12 +245,19 @@ public:
         return {5, 4};
     }
 
-    void set_dds_timing1(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t)
+    void set_dds_timing1(uint32_t adsu, uint32_t wrlow, uint32_t adhd,
+                         uint32_t fuddl, uint32_t fudhd)
     {
+        m_dds_adsu = adsu & 7;
+        m_dds_wrlow = wrlow & 7;
+        m_dds_adhd = adhd & 7;
+        m_dds_fuddl = fuddl & 7;
+        m_dds_fudhd = fudhd & 7;
     }
     std::array<uint8_t,5> get_dds_timing1() const
     {
-        return {7, 7, 7, 7, 7};
+        return {m_dds_adsu, m_dds_wrlow, m_dds_adhd,
+                m_dds_fuddl, m_dds_fudhd};
     }
 
     DummyPulser();
@@ -330,6 +337,12 @@ private:
     std::array<DDS,NDDS> m_dds;
 
     time_point_t m_release_time{std::chrono::steady_clock::now()};
+
+    uint8_t m_dds_adsu{7};
+    uint8_t m_dds_wrlow{7};
+    uint8_t m_dds_adhd{7};
+    uint8_t m_dds_fuddl{7};
+    uint8_t m_dds_fudhd{7};
 };
 
 }
