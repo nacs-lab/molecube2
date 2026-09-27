@@ -17,6 +17,7 @@ int main()
 {
   auto addr = Molecube::Pulser::address();
   Molecube::Pulser p(addr);
+  auto dds_inst_timing = Molecube::DDSInstTiming::get(p);
 
   size_t alloc_sz = 4096 * 4;
 
@@ -46,7 +47,7 @@ int main()
   add_inst(DMA::Inst_v0::Wait1(100));
   for (int amp = 1000; amp > 0; amp--) {
       add_inst(DMA::Inst_v0::DDSSet16(1, 10, 1, 0x32 >> 1, amp));
-      add_inst(DMA::Inst_v0::Wait2(11));
+      add_inst(DMA::Inst_v0::Wait1(dds_inst_timing.set16_fud));
   }
   while (true) {
       auto rem = buff_sz % (16 *  8);
