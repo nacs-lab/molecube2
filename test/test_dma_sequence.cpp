@@ -72,7 +72,7 @@ int main()
 
   NaCs::Timer timer;
 
-  p.start_dma(phy_addr, uint16_t(buff_sz / (16 * 8)), true);
+  p.start_dma(phy_addr, uint16_t(buff_sz / (16 * 8) - 1), true);
 
   while ((p.dma_status() & 0xff) != ((status0 + 1) & 0xff)) {
   }
