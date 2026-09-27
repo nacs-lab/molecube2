@@ -48,6 +48,28 @@ static inline std::string to_string(const pulser_version_t &ver)
     return std::to_string(ver.major) + "." + std::to_string(ver.minor);
 }
 
+struct DDSInstTiming {
+    uint8_t set16;
+    uint8_t set16_fud;
+    uint8_t set32;
+    uint8_t set32_fud;
+
+    template<typename Pulser>
+    static DDSInstTiming get(Pulser &&p)
+    {
+        auto [adsu, wrlow, adhd, fuddl, fudhd] = p.get_dds_timing1();
+        adsu += 1;
+        wrlow += 1;
+        adhd += 1;
+        fuddl += 1;
+        fudhd += 1;
+        return {uint8_t(adsu + wrlow + adhd),
+            uint8_t(adsu + wrlow + fuddl + fudhd),
+            uint8_t(adsu + wrlow + adhd + adsu + wrlow + adhd),
+            uint8_t(adsu + wrlow + adhd + adsu + wrlow + fuddl + fudhd)};
+    }
+};
+
 }
 
 #endif

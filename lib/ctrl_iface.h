@@ -348,6 +348,7 @@ public:
     void get_dds_ovr(ReqOP op, int chn, callback_t cb);
     void reset_dds(int chn);
     virtual void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) = 0;
+    virtual DDSInstTiming get_dds_inst_timing() const = 0;
 
     void set_clock(uint8_t val);
     void get_clock(callback_t cb);

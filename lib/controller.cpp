@@ -60,6 +60,7 @@ private:
     void detect_dds(bool force=false);
     void dump_dds(int i);
     void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) override;
+    DDSInstTiming get_dds_inst_timing() const override;
 
     // Process a command.
     // Returns the sequence time forwarded and if the command needs a result.
@@ -404,6 +405,12 @@ void Controller<Pulser>::set_dds_timing1(int adsu, int wrlow, int adhd,
     }
     m_p.set_dds_timing1((uint32_t)timings[0], (uint32_t)timings[1], (uint32_t)timings[2],
                         (uint32_t)timings[3], (uint32_t)timings[4]);
+}
+
+template<typename Pulser>
+DDSInstTiming Controller<Pulser>::get_dds_inst_timing() const
+{
+    return DDSInstTiming::get(m_p);
 }
 
 template<typename Pulser>

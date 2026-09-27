@@ -852,6 +852,12 @@ void Server::process_zmq()
             goto err;
         process_set_startup(addr, msg);
     }
+    else if (ZMQ::match(msg, "get_dds_inst_timing")) {
+        auto timing = m_ctrl->get_dds_inst_timing();
+        zmq::message_t msg(sizeof(timing));
+        memcpy(msg.data(), &timing, sizeof(timing));
+        send_reply(addr, msg);
+    }
     else {
         goto err;
     }
