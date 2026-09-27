@@ -124,6 +124,11 @@ public:
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
         return m_dma_ttl_mask[bank].load(std::memory_order_acquire);
     }
+    inline uint32_t dma_status() const
+    {
+        // The DMA is never busy since the instructions aren't executed.
+        return m_dma_count.load(std::memory_order_acquire) & 0xff;
+    }
 
     // Write
     inline void set_ttl_himask(uint32_t high_mask, int bank)
@@ -140,6 +145,12 @@ public:
     {
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
         m_dma_ttl_mask[bank].store(mask, std::memory_order_release);
+    }
+    // Only keeps track of the number of DMA requests.
+    // The instructions are not executed.
+    inline void start_dma(uintptr_t, uint16_t, bool)
+    {
+        m_dma_count.fetch_add(1, std::memory_order_acq_rel);
     }
     void release_hold();
     void set_hold();
@@ -317,6 +328,7 @@ private:
     std::array<std::atomic<uint32_t>,NUM_TTL_BANKS> m_ttl_lo{0};
     std::array<std::atomic<uint32_t>,NUM_TTL_BANKS> m_ttl{0};
     std::array<std::atomic<uint32_t>,NUM_TTL_BANKS> m_dma_ttl_mask{0};
+    std::atomic<uint32_t> m_dma_count{0};
     std::atomic<uint8_t> m_clock{255};
     std::atomic<bool> m_cmds_empty{true};
     std::atomic<bool> m_timing_ok{true};

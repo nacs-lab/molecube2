@@ -19,7 +19,10 @@
 #include "dummy_pulser.h"
 
 #include <nacs-seq/zynq/pulse_time.h>
+#include <nacs-utils/number.h>
 
+#include <atomic>
+#include <bit>
 #include <stdexcept>
 #include <thread>
 
@@ -237,7 +240,8 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
 
 _NACS_EXPORT
 DummyPulser::DummyPulser(DummyPulser &&o)
-    : m_clock(o.m_clock.load(std::memory_order_relaxed)),
+    : m_dma_count(o.m_dma_count.load(std::memory_order_relaxed)),
+      m_clock(o.m_clock.load(std::memory_order_relaxed)),
       m_cmds_empty(o.m_cmds_empty.load(std::memory_order_relaxed)),
       m_timing_ok(o.m_timing_ok.load(std::memory_order_relaxed)),
       m_timing_check(o.m_timing_check.load(std::memory_order_relaxed)),
@@ -255,20 +259,41 @@ DummyPulser::DummyPulser(DummyPulser &&o)
                           std::memory_order_relaxed);
         m_ttl[i].store(o.m_ttl[i].load(std::memory_order_relaxed),
                        std::memory_order_relaxed);
+        m_dma_ttl_mask[i].store(o.m_dma_ttl_mask[i].load(std::memory_order_relaxed),
+                                std::memory_order_relaxed);
     }
 }
 
+// Limit the total buffer size to mimic the size of the DMA buffer pool in the kernel.
+static std::atomic<size_t> dma_buff_used{0};
+static constexpr size_t dma_buff_pool_sz = 256 * 1024;
+
 NACS_EXPORT() void *DummyPulser::alloc_buffer(size_t size)
 {
-    return malloc(size);
+    size = alignTo(size, 4096);
+    auto used = dma_buff_used.load(std::memory_order_relaxed);
+    do {
+        if (used + size > dma_buff_pool_sz) {
+            return nullptr;
+        }
+    } while (!dma_buff_used.compare_exchange_weak(used, used + size,
+                                                  std::memory_order_relaxed));
+    // Align the buffer so that it satisfies the DMA address requirement
+    // (page aligned and not crossing a 1MB boundary).
+    size_t align = std::bit_ceil(size);
+    auto buff = aligned_alloc(align, alignTo(size, align));
+    if (!buff)
+        dma_buff_used.fetch_sub(size, std::memory_order_relaxed);
+    return buff;
 }
 NACS_EXPORT() uintptr_t DummyPulser::buffer_addr(void *buff)
 {
     return (uintptr_t)buff;
 }
-NACS_EXPORT() void DummyPulser::free_buffer(void *buff, size_t)
+NACS_EXPORT() void DummyPulser::free_buffer(void *buff, size_t size)
 {
     free(buff);
+    dma_buff_used.fetch_sub(alignTo(size, 4096), std::memory_order_relaxed);
 }
 
 }
