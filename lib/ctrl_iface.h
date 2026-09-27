@@ -101,9 +101,6 @@ public:
         Clock
     };
     class callback_t {
-        // C++20
-        template<typename T>
-        using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
         template<typename T>
         struct Caller {
             static void call(void *p, uint32_t v)
@@ -113,10 +110,10 @@ public:
         };
     public:
         template<typename T,
-                 class=std::enable_if_t<!std::is_same<remove_cvref_t<T>,callback_t>::value>>
+                 class=std::enable_if_t<!std::is_same<std::remove_cvref_t<T>,callback_t>::value>>
         callback_t(T &&v)
             : m_ptr(std::forward<T>(v)),
-              m_fptr(Caller<remove_cvref_t<T>>::call)
+              m_fptr(Caller<std::remove_cvref_t<T>>::call)
         {}
         callback_t(callback_t &&cb)
             : m_ptr(std::move(cb.m_ptr)),
