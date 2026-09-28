@@ -241,6 +241,7 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
 _NACS_EXPORT
 DummyPulser::DummyPulser(DummyPulser &&o)
     : m_dma_count(o.m_dma_count.load(std::memory_order_relaxed)),
+      m_dma_control(o.m_dma_control.load(std::memory_order_relaxed)),
       m_clock(o.m_clock.load(std::memory_order_relaxed)),
       m_cmds_empty(o.m_cmds_empty.load(std::memory_order_relaxed)),
       m_timing_ok(o.m_timing_ok.load(std::memory_order_relaxed)),

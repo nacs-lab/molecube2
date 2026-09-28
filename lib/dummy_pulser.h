@@ -129,6 +129,10 @@ public:
         // The DMA is never busy since the instructions aren't executed.
         return m_dma_count.load(std::memory_order_acquire) & 0xff;
     }
+    inline uint32_t dma_control() const
+    {
+        return m_dma_control.load(std::memory_order_acquire);
+    }
 
     // Write
     inline void set_ttl_himask(uint32_t high_mask, int bank)
@@ -151,6 +155,12 @@ public:
     inline void start_dma(uintptr_t, uint16_t, bool)
     {
         m_dma_count.fetch_add(1, std::memory_order_acq_rel);
+    }
+    // Only stores the value. It has no effect otherwise.
+    // Only the lowest bit is used.
+    inline void set_dma_control(uint32_t ctrl)
+    {
+        m_dma_control.store(ctrl & 1, std::memory_order_release);
     }
     void release_hold();
     void set_hold();
@@ -329,6 +339,7 @@ private:
     std::array<std::atomic<uint32_t>,NUM_TTL_BANKS> m_ttl{0};
     std::array<std::atomic<uint32_t>,NUM_TTL_BANKS> m_dma_ttl_mask{0};
     std::atomic<uint32_t> m_dma_count{0};
+    std::atomic<uint32_t> m_dma_control{0};
     std::atomic<uint8_t> m_clock{255};
     std::atomic<bool> m_cmds_empty{true};
     std::atomic<bool> m_timing_ok{true};
