@@ -126,7 +126,7 @@ public:
     void ttl1(int full_chn, bool val, uint64_t t)
     {
         auto chn = uint8_t(full_chn & 31);
-        int bank = chn / 32;
+        int bank = full_chn / 32;
         ttl(setBit(m_ctrl.m_ttl[bank], chn, val), t, bank);
     }
     void ttl(uint32_t ttl, uint64_t t, int bank)
