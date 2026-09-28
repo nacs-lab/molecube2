@@ -26,6 +26,15 @@
 namespace Molecube {
 
 struct Config {
+    enum class DMAEnable : uint8_t {
+        // Do not use DMA mode.
+        Disabled,
+        // Use DMA mode if it is supported.
+        Enabled,
+        // Fail if DMA mode cannot be used.
+        Required,
+    };
+
     Config();
     static Config loadYAML(const char *fname);
 
@@ -38,6 +47,7 @@ struct Config {
     int8_t dds_write_adhd = -1;
     int8_t dds_write_fuddl = -1;
     int8_t dds_write_fudhd = -1;
+    DMAEnable dma_enable = DMAEnable::Disabled;
 };
 
 }

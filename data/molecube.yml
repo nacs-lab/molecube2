@@ -2,3 +2,9 @@
 # max_ttl_chn: 31
 # listen: "tcp://*:7777"
 # runtime_dir: /var/lib/molecube
+# dds_write_adsu: 7
+# dds_write_wrlow: 7
+# dds_write_adhd: 7
+# dds_write_fuddl: 7
+# dds_write_fudhd: 7
+# dma_enable: disabled # disabled, enabled or required

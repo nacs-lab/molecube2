@@ -22,6 +22,8 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include <stdexcept>
+
 namespace Molecube {
 
 NACS_EXPORT() Config::Config()
@@ -52,6 +54,22 @@ NACS_EXPORT() Config Config::loadYAML(const char *fname)
         conf.dds_write_fuddl = (int8_t)t_node.as<int>();
     if (auto t_node = file["dds_write_fudhd"])
         conf.dds_write_fudhd = (int8_t)t_node.as<int>();
+
+    if (auto dma_node = file["dma_enable"]) {
+        auto dma_enable = dma_node.as<std::string>();
+        if (dma_enable == "disabled") {
+            conf.dma_enable = DMAEnable::Disabled;
+        }
+        else if (dma_enable == "enabled") {
+            conf.dma_enable = DMAEnable::Enabled;
+        }
+        else if (dma_enable == "required") {
+            conf.dma_enable = DMAEnable::Required;
+        }
+        else {
+            throw std::runtime_error("Invalid dma_enable value: " + dma_enable);
+        }
+    }
 
     return conf;
 }
