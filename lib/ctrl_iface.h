@@ -149,12 +149,9 @@ protected:
         uint8_t is_override: 1; // The value set/get is override
         uint32_t operand: 26; // opcode specific encoding (e.g. channel number)
         // DDSFreq/Phase/Amp: operand is channel number
-        // TTL/TTLOveride:
-        // * last two bits specify the type of override:
-        //    * 0: low
-        //    * 1: high
-        //    * 2: clear (set override only)
-        // * 3 bits before that specify the bank number
+        // TTL (set only): the last two bits are the value to set (0: low, 1: high),
+        //   the bits before that specify the bank number and
+        //   `val` is the mask of the channels to set.
         uint32_t val; // opcode specific encoding of value.
     };
 
@@ -273,33 +270,9 @@ protected:
     void set_dirty();
     void set_observed();
 
+    void send_cmd(ReqOP op, bool has_res, bool is_override, uint32_t operand, uint32_t val);
     void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
 
-    /**
-     * Try to concurrently set/get values without sending a command in the queue.
-     * The backend should implement this for commands
-     * that doesn't need to be synchronized to reduce queue pressure.
-     *
-     * Both function return true if the set/get is completed.
-     */
-    virtual bool concurrent_set(ReqOP op, uint32_t operand,
-                                bool is_override, uint32_t val)
-    {
-        (void)op;
-        (void)operand;
-        (void)is_override;
-        (void)val;
-        return false;
-    }
-    virtual bool concurrent_get(ReqOP op, uint32_t operand,
-                                bool is_override, uint32_t &val)
-    {
-        (void)op;
-        (void)operand;
-        (void)is_override;
-        (void)val;
-        return false;
-    }
     CtrlIFace();
 public:
     virtual ~CtrlIFace() {}
@@ -332,15 +305,19 @@ public:
     // may not response to the cancellation.
     bool cancel_seq(uint64_t id);
 
-    void set_ttl(int bank, uint32_t mask, bool val);
+    virtual void set_ttl(int bank, uint32_t mask, bool val) = 0;
     // val = 0 => low
     // val = 1 => high
     // val = 2 => default
-    void set_ttl_ovr(int bank, uint32_t mask, int val);
+    virtual void set_ttl_ovr(int bank, uint32_t mask, int val) = 0;
 
-    uint32_t get_ttl(int bank);
-    uint32_t get_ttl_ovrlo(int bank);
-    uint32_t get_ttl_ovrhi(int bank);
+    virtual uint32_t get_ttl(int bank) = 0;
+    // The TTL channels overridden to low and high.
+    struct TTLOvr {
+        uint32_t lo;
+        uint32_t hi;
+    };
+    virtual TTLOvr get_ttl_ovr(int bank) = 0;
 
     void set_dds(ReqOP op, int chn, uint32_t val);
     void set_dds_ovr(ReqOP op, int chn, uint32_t val);
@@ -375,11 +352,7 @@ private:
                        std::span<const uint8_t> code,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
-    void send_cmd(const ReqCmd &cmd);
     void send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
-
-    void send_ttl_set_cmd(uint32_t operand, bool is_override, uint32_t val);
-    uint32_t send_ttl_get_cmd(uint32_t operand, bool is_override);
 
     bool m_quit{false};
 

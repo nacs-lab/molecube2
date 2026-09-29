@@ -49,13 +49,13 @@ public:
 private:
     class Runner;
 
+    void set_ttl(int bank, uint32_t mask, bool val) override;
+    void set_ttl_ovr(int bank, uint32_t mask, int val) override;
+    uint32_t get_ttl(int bank) override;
+    TTLOvr get_ttl_ovr(int bank) override;
     void set_clock(uint8_t val) override;
     uint8_t get_clock() override;
 
-    bool concurrent_set(ReqOP op, uint32_t operand, bool is_override,
-                        uint32_t val) override;
-    bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
-                        uint32_t &val) override;
     std::vector<int> get_active_dds() override;
     bool has_ttl_ovr() override;
 
@@ -319,6 +319,60 @@ Controller<Pulser>::~Controller()
     m_worker.join();
 }
 
+// TTL channels are get and set in batch so they don't really fit
+// the cache used for other channels.
+// Since the ttl get requests are always handled directly (`get_ttl*`)
+// we'll just skip the cache and callback storage for now.
+template<typename Pulser>
+void Controller<Pulser>::set_ttl(int bank, uint32_t mask, bool val)
+{
+    if (!mask)
+        return;
+    set_dirty();
+    send_cmd(TTL, false, false, uint32_t(val) | uint32_t(bank << 2), mask);
+}
+
+template<typename Pulser>
+void Controller<Pulser>::set_ttl_ovr(int bank, uint32_t mask, int val)
+{
+    if (!mask)
+        return;
+    set_dirty();
+    // TTL overrides are set concurrently without sending a command in the queue
+    // since they don't need to be synchronized.
+    assert(0 <= bank && bank < NUM_TTL_BANKS);
+    auto lomask = m_p.ttl_lomask(bank);
+    auto himask = m_p.ttl_himask(bank);
+    if (val == 0) {
+        m_p.set_ttl_lomask((lomask | mask), bank);
+        m_p.set_ttl_himask((himask & ~mask), bank);
+    }
+    else if (val == 1) {
+        m_p.set_ttl_lomask((lomask & ~mask), bank);
+        m_p.set_ttl_himask((himask | mask), bank);
+    }
+    else {
+        m_p.set_ttl_lomask((lomask & ~mask), bank);
+        m_p.set_ttl_himask((himask & ~mask), bank);
+    }
+}
+
+template<typename Pulser>
+uint32_t Controller<Pulser>::get_ttl(int bank)
+{
+    set_observed();
+    assert(0 <= bank && bank < NUM_TTL_BANKS);
+    return (m_p.cur_ttl(bank) | m_p.ttl_himask(bank)) & ~m_p.ttl_lomask(bank);
+}
+
+template<typename Pulser>
+auto Controller<Pulser>::get_ttl_ovr(int bank) -> TTLOvr
+{
+    set_observed();
+    assert(0 <= bank && bank < NUM_TTL_BANKS);
+    return {m_p.ttl_lomask(bank), m_p.ttl_himask(bank)};
+}
+
 template<typename Pulser>
 void Controller<Pulser>::set_clock(uint8_t val)
 {
@@ -330,61 +384,6 @@ uint8_t Controller<Pulser>::get_clock()
 {
     set_observed();
     return m_p.cur_clock();
-}
-
-template<typename Pulser>
-bool Controller<Pulser>::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
-                                        uint32_t val)
-{
-    if (op != TTL || !is_override)
-        return false;
-    auto type = operand & 3;
-    auto bank = int(operand >> 2);
-    assert(0 <= bank && bank < NUM_TTL_BANKS);
-    auto lomask = m_p.ttl_lomask(bank);
-    auto himask = m_p.ttl_himask(bank);
-    if (type == 0) {
-        m_p.set_ttl_lomask((lomask | val), bank);
-        m_p.set_ttl_himask((himask & ~val), bank);
-    }
-    else if (type == 1) {
-        m_p.set_ttl_lomask((lomask & ~val), bank);
-        m_p.set_ttl_himask((himask | val), bank);
-    }
-    else if (type == 2) {
-        m_p.set_ttl_lomask((lomask & ~val), bank);
-        m_p.set_ttl_himask((himask & ~val), bank);
-    }
-    else {
-        return false;
-    }
-    return true;
-}
-
-template<typename Pulser>
-bool Controller<Pulser>::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
-                                        uint32_t &val)
-{
-    if (op != TTL)
-        return false;
-    auto type = operand & 3;
-    auto bank = int(operand >> 2);
-    assert(0 <= bank && bank < NUM_TTL_BANKS);
-    if (!is_override) {
-        if (type != 0)
-            return false;
-        val = (m_p.cur_ttl(bank) | m_p.ttl_himask(bank)) & ~m_p.ttl_lomask(bank);
-        return true;
-    }
-    if (type == 0) {
-        val = m_p.ttl_lomask(bank);
-        return true;
-    }
-    else if (type == 1) {
-        val = m_p.ttl_himask(bank);
-        return true;
-    }
-    return false;
 }
 
 template<typename Pulser>
@@ -522,7 +521,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
 {
     switch (cmd->opcode) {
     case TTL: {
-        // Should have been caught by concurrent_get/set.
+        // Should have been caught by set_ttl_ovr/get_ttl*.
         assert(!cmd->has_res && !cmd->is_override);
         auto type = cmd->operand & 3;
         auto bank = cmd->operand >> 2;

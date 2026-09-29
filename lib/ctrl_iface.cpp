@@ -162,9 +162,12 @@ void CtrlIFace::backend_event()
     writeEvent(m_bkend_evt);
 }
 
-void CtrlIFace::send_cmd(const ReqCmd &_cmd)
+void CtrlIFace::send_cmd(ReqOP op, bool has_res, bool is_override,
+                         uint32_t operand, uint32_t val)
 {
-    auto cmd = m_cmd_alloc.alloc(_cmd);
+    auto cmd = m_cmd_alloc.alloc(ReqCmd{uint8_t(op & 0xf), uint8_t(has_res),
+                                        uint8_t(is_override),
+                                        operand & ((1 << 26) - 1), val});
     {
         std::lock_guard<std::mutex> lk(m_ftend_lck);
         m_cmd_queue.push(cmd);
@@ -175,77 +178,16 @@ void CtrlIFace::send_cmd(const ReqCmd &_cmd)
 void CtrlIFace::send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val)
 {
     set_dirty();
-    if (!concurrent_set(op, operand, is_override, val))
-        send_cmd(ReqCmd{uint8_t(op & 0xf), 0, uint8_t(is_override),
-                        operand & ((1 << 26) - 1), val});
+    send_cmd(op, false, is_override, operand, val);
     m_cmd_cache.set(op, operand, is_override, val);
 }
 
 void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb)
 {
     set_observed();
-    uint32_t val = 0;
-    if (concurrent_get(op, operand, is_override, val)) {
-        m_cmd_cache.set(op, operand, is_override, val);
-        cb(val);
-        return;
-    }
     if (m_cmd_cache.get(op, operand, is_override, std::move(cb)))
         return;
-    send_cmd(ReqCmd{uint8_t(op & 0xf), 1, uint8_t(is_override),
-                    operand & ((1 << 26) - 1), 0});
-}
-
-// TTL channels are get and set in batch so they don't really fit
-// the cache used for other channels.
-// Since the implementation of `Controller` always returns ttl get request concurrently
-// we'll just skip the cache and callback storage for now.
-void CtrlIFace::send_ttl_set_cmd(uint32_t operand, bool is_override, uint32_t val)
-{
-    set_dirty();
-    if (!concurrent_set(TTL, operand, is_override, val)) {
-        send_cmd(ReqCmd{TTL, 0, uint8_t(is_override), operand & ((1 << 26) - 1), val});
-    }
-}
-
-uint32_t CtrlIFace::send_ttl_get_cmd(uint32_t operand, bool is_override)
-{
-    set_observed();
-    // Unsupported for now
-    // We could support asynchronous get by adding a TTL specific callback queue.
-    uint32_t val = 0;
-    if (!concurrent_get(TTL, operand, is_override, val))
-        abort();
-    return val;
-}
-
-NACS_EXPORT() void CtrlIFace::set_ttl(int bank, uint32_t mask, bool val)
-{
-    if (!mask)
-        return;
-    send_ttl_set_cmd(uint32_t(val) | uint32_t(bank << 2), false, mask);
-}
-
-NACS_EXPORT() void CtrlIFace::set_ttl_ovr(int bank, uint32_t mask, int val)
-{
-    if (!mask)
-        return;
-    send_ttl_set_cmd(uint32_t(val) | uint32_t(bank << 2), true, mask);
-}
-
-NACS_EXPORT() uint32_t CtrlIFace::get_ttl(int bank)
-{
-    return send_ttl_get_cmd(uint32_t(bank << 2), false);
-}
-
-NACS_EXPORT() uint32_t CtrlIFace::get_ttl_ovrlo(int bank)
-{
-    return send_ttl_get_cmd(uint32_t(bank << 2), true);
-}
-
-NACS_EXPORT() uint32_t CtrlIFace::get_ttl_ovrhi(int bank)
-{
-    return send_ttl_get_cmd(uint32_t(bank << 2) | 1, true);
+    send_cmd(op, true, is_override, operand, 0);
 }
 
 NACS_EXPORT() void CtrlIFace::set_dds(ReqOP op, int chn, uint32_t val)
@@ -275,7 +217,7 @@ NACS_EXPORT() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, callback_t cb)
 NACS_EXPORT() void CtrlIFace::reset_dds(int chn)
 {
     set_dirty();
-    send_cmd(ReqCmd{DDSReset, 0, 0, uint32_t(chn & ((1 << 26) - 1)), 0});
+    send_cmd(DDSReset, false, false, uint32_t(chn), 0);
     // Clear override
     m_cmd_cache.set(DDSFreq, chn, true, -1);
     m_cmd_cache.set(DDSAmp, chn, true, -1);

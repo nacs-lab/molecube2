@@ -418,10 +418,9 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
             auto lo_start = &res[16];
             auto hi_start = &res[16 + 4 * ttl_banks];
             for (uint32_t bank = 0; bank < ttl_banks; bank++) {
-                auto lo = m_ctrl->get_ttl_ovrlo(bank);
-                auto hi = m_ctrl->get_ttl_ovrhi(bank);
-                memcpy(&lo_start[bank * 4], &lo, 4);
-                memcpy(&hi_start[bank * 4], &hi, 4);
+                auto ovr = m_ctrl->get_ttl_ovr(bank);
+                memcpy(&lo_start[bank * 4], &ovr.lo, 4);
+                memcpy(&hi_start[bank * 4], &ovr.hi, 4);
             }
             auto sz = res.size();
             zmq::message_t msg(sz);
@@ -681,8 +680,8 @@ void Server::process_zmq()
         }
         for (int i = 0; i < 3; i++)
             m_ctrl->set_ttl_ovr(bank, masks[i], i);
-        std::array<uint32_t,2> new_masks{m_ctrl->get_ttl_ovrlo(bank),
-            m_ctrl->get_ttl_ovrhi(bank)};
+        auto ovr = m_ctrl->get_ttl_ovr(bank);
+        std::array<uint32_t,2> new_masks{ovr.lo, ovr.hi};
         send_reply(addr, ZMQ::bits_msg(new_masks));
     }
     else if (ZMQ::match(msg, "set_ttl")) {
