@@ -752,6 +752,8 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_reqcmd(Runner *runner)
 template<typename Pulser>
 void Controller<Pulser>::run_seq(ReqSeq *seq)
 {
+    // DMA sequences are ignored by the worker.
+    assert(seq->type != SeqType::DMASeq);
     // Read all the result (`toggle_init` may abort it).
     while (true) {
         auto res = try_get_result<false>();
@@ -776,7 +778,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     try {
         auto ver = seq->ver;
         assert(ver == 1 || ver == 2 || ver == 3);
-        if (unlikely(seq->is_cmd)) {
+        if (unlikely(seq->type == SeqType::CmdList)) {
             Seq::Zynq::CmdList::ExeState exestate;
             if (ver > 1)
                 exestate.min_time = Seq::Zynq::PulseTime::Min2;
@@ -799,7 +801,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     m_p.release_hold();
     seq->state.store(SeqFlushed, std::memory_order_relaxed);
     backend_event();
-    if (!seq->is_cmd) {
+    if (seq->type == SeqType::Bytecode) {
         // This is a hack that is believed to make the NI card happy.
         runner.template clock<false>(9);
     }
@@ -812,7 +814,7 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     seq->state.store(SeqEnd, std::memory_order_relaxed);
     backend_event();
     runner.enable_process_cmd();
-    if (!seq->is_cmd) {
+    if (seq->type == SeqType::Bytecode) {
         // 10ms
         runner.template wait<false>(1000000);
         runner.template clock<false>(255);
@@ -840,7 +842,9 @@ void Controller<Pulser>::worker()
 {
     while (wait(500000000)) { // Wake up every 500ms
         if (auto seq = get_seq()) {
-            if (seq->cancel.load(std::memory_order_relaxed)) {
+            // The DMA sequences cannot be run without the DMA mode.
+            if (seq->cancel.load(std::memory_order_relaxed) ||
+                unlikely(seq->type == SeqType::DMASeq)) {
                 seq->state.store(SeqCancel, std::memory_order_relaxed);
             }
             else {

@@ -85,6 +85,13 @@ public:
         DDSReset,
         Clock
     };
+    // Type of the sequence code.
+    enum class SeqType : uint8_t {
+        Bytecode,
+        CmdList,
+        // (Version 0) DMA instructions.
+        DMASeq,
+    };
     class callback_t {
         template<typename T>
         struct Caller {
@@ -177,23 +184,23 @@ protected:
         uint64_t id;
         // Sequence length in ns
         uint64_t seq_len_ns;
-        // Bytecode or cmdlist
+        // Bytecode, cmdlist or DMA instructions
         std::span<const uint8_t> code;
         // TTL's used in the sequence. Only these TTL's will be changed in the sequence.
         std::array<uint32_t,NUM_TTL_BANKS> ttl_mask;
         // version
         uint32_t ver;
-        // Whether this is a command list or not. (`false` for bytecode).
-        bool is_cmd;
+        // The type of `code`.
+        SeqType type;
         std::atomic<bool> cancel{false};
         // This is set by the backend to signal change of state.
         // Only `SeqEnd` event is guaranteed to have a accompanied event fd notification.
         std::atomic<ReqSeqState> state{SeqInit};
         ReqSeq(uint64_t id, uint64_t seq_len_ns, std::span<const uint8_t> code,
-               const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask, uint32_t ver, bool is_cmd,
+               const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask, uint32_t ver, SeqType type,
                std::unique_ptr<ReqSeqNotify> _notify, AnyPtr storage)
             : id(id), seq_len_ns(seq_len_ns), code(code),
-              ttl_mask(ttl_mask), ver(ver), is_cmd(is_cmd),
+              ttl_mask(ttl_mask), ver(ver), type(type),
               notify(std::move(_notify)), storage(std::move(storage))
         {
         }
@@ -306,12 +313,12 @@ public:
     virtual void run_frontend() = 0;
 
     template<typename... Args>
-    uint64_t run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns,
+    uint64_t run_code(SeqType type, uint32_t ver, uint64_t seq_len_ns,
                       const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask,
                       std::span<const uint8_t> code,
                       std::unique_ptr<ReqSeqNotify> notify, Args&&... args)
     {
-        return _run_code(is_cmd, ver, seq_len_ns, ttl_mask, code,
+        return _run_code(type, ver, seq_len_ns, ttl_mask, code,
                          std::move(notify), AnyPtr(std::forward<Args>(args)...));
     }
     // Cancel the sequence determined by the `id`. `id == 0` means cancel all sequences.
@@ -370,7 +377,7 @@ public:
                                              Config::DMAEnable dma_enable=Config::DMAEnable::Disabled);
 
 private:
-    uint64_t _run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns,
+    uint64_t _run_code(SeqType type, uint32_t ver, uint64_t seq_len_ns,
                        const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask,
                        std::span<const uint8_t> code,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
