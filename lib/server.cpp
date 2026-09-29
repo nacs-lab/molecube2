@@ -181,7 +181,7 @@ void Server::run_startup()
         }
         bool *finished;
     };
-    m_ctrl->run_code(true, ver, len_ns, ttl_mask, code,
+    m_ctrl->run_code(CtrlIFace::SeqType::CmdList, ver, len_ns, ttl_mask, code,
                      std::make_unique<Notify>(&finished));
     while (!finished) {
         using namespace std::literals;
@@ -396,7 +396,8 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     new_msg->move(&msg);
 #endif
     code = std::span((const uint8_t*)new_msg->data(), new_msg->size()).subspan(offset);
-    auto id = m_ctrl->run_code(is_cmd, ver, len_ns, ttl_mask, code,
+    auto id = m_ctrl->run_code(is_cmd ? CtrlIFace::SeqType::CmdList : CtrlIFace::SeqType::Bytecode,
+                               ver, len_ns, ttl_mask, code,
                                std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify), new_msg);
     m_seq_status.push_back(SeqStatus{id});
     Log::info("Sequence %llu scheduled.\n", (unsigned long long)id);

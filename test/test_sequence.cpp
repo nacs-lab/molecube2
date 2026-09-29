@@ -84,7 +84,7 @@ int main(int argc, char **argv)
         }
         bool *finished;
     };
-    ctrl->run_code(true, seq.ver, seq.len_ns, seq.ttl_mask,
+    ctrl->run_code(Molecube::CtrlIFace::SeqType::CmdList, seq.ver, seq.len_ns, seq.ttl_mask,
                    std::span((const uint8_t*)seq.seq.data(), seq.seq.size()), std::make_unique<Notify>(&finished));
     while (!finished) {
         using namespace std::literals;
