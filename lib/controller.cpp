@@ -38,7 +38,7 @@ namespace {
 using namespace Molecube;
 
 template<typename Pulser>
-class Controller : public CtrlIFace {
+class Controller final : public CtrlIFace {
     Controller(const Controller&) = delete;
     void operator=(const Controller&) = delete;
 
