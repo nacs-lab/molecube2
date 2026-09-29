@@ -19,13 +19,11 @@
 #ifndef LIBMOLECUBE_CONFIG_H
 #define LIBMOLECUBE_CONFIG_H
 
-#include "ctrl_iface.h"
-
 #include <string>
 
-namespace Molecube {
+#include <stdint.h>
 
-using namespace NaCs;
+namespace Molecube {
 
 struct Config {
     Config();

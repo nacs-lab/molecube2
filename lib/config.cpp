@@ -18,6 +18,8 @@
 
 #include "config.h"
 
+#include <nacs-utils/utils.h>
+
 #include <yaml-cpp/yaml.h>
 
 namespace Molecube {
