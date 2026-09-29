@@ -132,7 +132,8 @@ protected:
         uint8_t has_res: 1;
         uint32_t operand: 26; // opcode specific encoding (e.g. channel number)
         // DDSFreq/Phase/Amp: operand is channel number
-        // TTL (set only): the last two bits are the value to set (0: low, 1: high),
+        // TTL (set only, not used by the DMA controller):
+        //   the last two bits are the value to set (0: low, 1: high),
         //   the bits before that specify the bank number and
         //   `val` is the mask of the channels to set.
         uint32_t val; // opcode specific encoding of value.

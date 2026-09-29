@@ -941,26 +941,63 @@ ControllerDMA<Pulser>::~ControllerDMA()
     free_dma_buffs<Pulser>(m_dma_buffs);
 }
 
+// TTL channels are get and set directly in the hardware
+// without going through the command queue.
 template<typename Pulser>
 void ControllerDMA<Pulser>::set_ttl(int bank, uint32_t mask, bool val)
 {
+    if (!mask)
+        return;
+    set_dirty();
+    assert(0 <= bank && bank < NUM_TTL_BANKS);
+    // Set the channels one byte at a time.
+    for (int i = 0; i < 4; i++) {
+        auto byte = uint8_t(mask >> (i * 8));
+        if (!byte)
+            continue;
+        m_p.set_ttl(bank * 4 + i, val ? 0 : byte, val ? byte : 0);
+    }
 }
 
 template<typename Pulser>
 void ControllerDMA<Pulser>::set_ttl_ovr(int bank, uint32_t mask, int val)
 {
+    if (!mask)
+        return;
+    set_dirty();
+    // TTL overrides are set concurrently without sending a command in the queue
+    // since they don't need to be synchronized.
+    assert(0 <= bank && bank < NUM_TTL_BANKS);
+    auto lomask = m_p.ttl_lomask(bank);
+    auto himask = m_p.ttl_himask(bank);
+    if (val == 0) {
+        m_p.set_ttl_lomask((lomask | mask), bank);
+        m_p.set_ttl_himask((himask & ~mask), bank);
+    }
+    else if (val == 1) {
+        m_p.set_ttl_lomask((lomask & ~mask), bank);
+        m_p.set_ttl_himask((himask | mask), bank);
+    }
+    else {
+        m_p.set_ttl_lomask((lomask & ~mask), bank);
+        m_p.set_ttl_himask((himask & ~mask), bank);
+    }
 }
 
 template<typename Pulser>
 uint32_t ControllerDMA<Pulser>::get_ttl(int bank)
 {
-    return 0;
+    set_observed();
+    assert(0 <= bank && bank < NUM_TTL_BANKS);
+    return (m_p.cur_ttl(bank) | m_p.ttl_himask(bank)) & ~m_p.ttl_lomask(bank);
 }
 
 template<typename Pulser>
 auto ControllerDMA<Pulser>::get_ttl_ovr(int bank) -> TTLOvr
 {
-    return {0, 0};
+    set_observed();
+    assert(0 <= bank && bank < NUM_TTL_BANKS);
+    return {m_p.ttl_lomask(bank), m_p.ttl_himask(bank)};
 }
 
 template<typename Pulser>
@@ -1029,6 +1066,11 @@ std::vector<int> ControllerDMA<Pulser>::get_active_dds()
 template<typename Pulser>
 bool ControllerDMA<Pulser>::has_ttl_ovr()
 {
+    for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+        if (m_p.ttl_lomask(bank) || m_p.ttl_himask(bank)) {
+            return true;
+        }
+    }
     return false;
 }
 
