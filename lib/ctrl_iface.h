@@ -31,6 +31,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <type_traits>
 #include <vector>
 
@@ -196,9 +197,7 @@ protected:
         // Sequence length in ns
         uint64_t seq_len_ns;
         // Bytecode or cmdlist
-        const uint8_t *code;
-        // Length of `code`
-        size_t code_len;
+        std::span<const uint8_t> code;
         // TTL's used in the sequence. Only these TTL's will be changed in the sequence.
         std::array<uint32_t,NUM_TTL_BANKS> ttl_mask;
         // version
@@ -209,10 +208,10 @@ protected:
         // This is set by the backend to signal change of state.
         // Only `SeqEnd` event is guaranteed to have a accompanied event fd notification.
         std::atomic<ReqSeqState> state{SeqInit};
-        ReqSeq(uint64_t id, uint64_t seq_len_ns, const uint8_t *code, size_t code_len,
+        ReqSeq(uint64_t id, uint64_t seq_len_ns, std::span<const uint8_t> code,
                const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask, uint32_t ver, bool is_cmd,
                std::unique_ptr<ReqSeqNotify> _notify, AnyPtr storage)
-            : id(id), seq_len_ns(seq_len_ns), code(code), code_len(code_len),
+            : id(id), seq_len_ns(seq_len_ns), code(code),
               ttl_mask(ttl_mask), ver(ver), is_cmd(is_cmd),
               notify(std::move(_notify)), storage(std::move(storage))
         {
@@ -316,10 +315,10 @@ public:
     template<typename... Args>
     uint64_t run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns,
                       const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask,
-                      const uint8_t *code, size_t code_len,
+                      std::span<const uint8_t> code,
                       std::unique_ptr<ReqSeqNotify> notify, Args&&... args)
     {
-        return _run_code(is_cmd, ver, seq_len_ns, ttl_mask, code, code_len,
+        return _run_code(is_cmd, ver, seq_len_ns, ttl_mask, code,
                          std::move(notify), AnyPtr(std::forward<Args>(args)...));
     }
     // Cancel the sequence determined by the `id`. `id == 0` means cancel all sequences.
@@ -368,7 +367,7 @@ public:
 private:
     uint64_t _run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns,
                        const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask,
-                       const uint8_t *code, size_t code_len,
+                       std::span<const uint8_t> code,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
     void set_dirty();

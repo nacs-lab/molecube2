@@ -21,17 +21,18 @@ int main()
 
   size_t alloc_sz = 4096 * 4;
 
-  auto dma_buff = (uint8_t*)p.alloc_buffer(alloc_sz);
-  auto write_buff = (uint8_t*)malloc(alloc_sz);
+  auto dma_buff = p.alloc_buffer(alloc_sz);
+  assert(dma_buff);
+  std::vector<uint8_t> write_buff(alloc_sz);
   auto phy_addr = p.buffer_addr(dma_buff);
-  printf("virt: %p, phy: %p\n", dma_buff, (void*)phy_addr);
+  printf("virt: %p, phy: %p\n", (void*)dma_buff, (void*)phy_addr);
 
   size_t buff_sz = 0;
   auto add_inst = [&] (auto inst) {
     constexpr size_t inst_sz = sizeof(inst);
     static_assert(inst_sz == 2 || inst_sz == 4 || inst_sz == 6, "");
-    assert(buff_sz + inst_sz <= alloc_sz);
-    memcpy(write_buff + buff_sz, &inst, inst_sz);
+    assert(buff_sz + inst_sz <= write_buff.size());
+    memcpy(write_buff.data() + buff_sz, &inst, inst_sz);
     buff_sz += inst_sz;
   };
 
@@ -61,10 +62,10 @@ int main()
           add_inst(DMA::Inst_v0::Wait1(100));
       }
   }
-  DMA::print(std::cout, std::span(write_buff, buff_sz), 0);
-  auto total_time = DMA::total_time(std::span(write_buff, buff_sz), 0);
+  DMA::print(std::cout, std::span(write_buff).first(buff_sz), 0);
+  auto total_time = DMA::total_time(std::span(write_buff).first(buff_sz), 0);
   printf("Total time: %" PRId64 "\n", total_time);
-  memcpy(dma_buff, write_buff, alloc_sz);
+  memcpy(dma_buff, write_buff.data(), write_buff.size());
   asm volatile ("dmb st" ::: "memory");
   p.set_dma_ttl_mask(0, 0xf);
 
@@ -92,8 +93,7 @@ int main()
       printf("[%x:%x] = %x\n", addr, addr + 1, p.read_dds1(10, addr));
   }
 
-  free(write_buff);
-  p.free_buffer(write_buff, alloc_sz);
+  p.free_buffer(dma_buff, alloc_sz);
 
   return 0;
 }

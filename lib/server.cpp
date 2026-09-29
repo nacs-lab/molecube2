@@ -133,46 +133,40 @@ void Server::run_startup()
         Log::error("`startup.cmdbin` too short.\n");
         return;
     }
-    auto str_data = (const uint8_t*)str.data();
-    auto str_sz = str.size();
+    auto code = std::span((const uint8_t*)str.data(), str.size());
 
     uint32_t ver;
-    memcpy(&ver, str_data, 4);
-    str_data += 4;
-    str_sz -= 4;
+    memcpy(&ver, code.data(), 4);
+    code = code.subspan(4);
     if (ver != 1 && ver != 2 && ver != 3) {
         Log::error("Wrong startup file version.\n");
         return;
     }
 
     uint64_t len_ns;
-    memcpy(&len_ns, str_data, 8);
-    str_data += 8;
-    str_sz -= 8;
+    memcpy(&len_ns, code.data(), 8);
+    code = code.subspan(8);
 
     std::array<uint32_t,NUM_TTL_BANKS> ttl_mask;
     ttl_mask.fill(0);
     if (ver < 3) {
-        memcpy(&ttl_mask, str_data, 4);
-        str_data += 4;
-        str_sz -= 4;
+        memcpy(&ttl_mask, code.data(), 4);
+        code = code.subspan(4);
     }
     else {
         uint32_t ttl_banks;
-        memcpy(&ttl_banks, str_data, 4);
-        str_data += 4;
-        str_sz -= 4;
+        memcpy(&ttl_banks, code.data(), 4);
+        code = code.subspan(4);
         if (ttl_banks == 0 || ttl_banks > NUM_TTL_BANKS) {
             Log::error("`startup.cmdbin` TTL_BANK number out of range.\n");
             return;
         }
-        if (str_sz < ttl_banks * 4) {
+        if (code.size() < ttl_banks * 4) {
             Log::error("`startup.cmdbin` too short.\n");
             return;
         }
-        memcpy(&ttl_mask, str_data, 4 * ttl_banks);
-        str_data += 4 * ttl_banks;
-        str_sz -= 4 * ttl_banks;
+        memcpy(&ttl_mask, code.data(), 4 * ttl_banks);
+        code = code.subspan(4 * ttl_banks);
     }
 
     bool finished = false;
@@ -187,7 +181,7 @@ void Server::run_startup()
         }
         bool *finished;
     };
-    m_ctrl->run_code(true, ver, len_ns, ttl_mask, str_data, str_sz,
+    m_ctrl->run_code(true, ver, len_ns, ttl_mask, code,
                      std::make_unique<Notify>(&finished));
     while (!finished) {
         using namespace std::literals;
@@ -298,38 +292,32 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     // Not long enough
     if (!recv_more(msg) || msg.size() < 12)
         return false;
-    auto orig_msg_data = (const uint8_t*)msg.data();
-    auto msg_data = orig_msg_data;
-    auto msg_sz = msg.size();
+    auto code = std::span((const uint8_t*)msg.data(), msg.size());
 
     Timer timer;
-    Log::info("Running %s: %zu bytes.\n", is_cmd ? "command list" : "sequence", msg_sz);
+    Log::info("Running %s: %zu bytes.\n", is_cmd ? "command list" : "sequence", code.size());
 
     uint64_t len_ns;
-    memcpy(&len_ns, msg_data, 8);
-    msg_data += 8;
-    msg_sz -= 8;
+    memcpy(&len_ns, code.data(), 8);
+    code = code.subspan(8);
 
     std::array<uint32_t,NUM_TTL_BANKS> ttl_mask;
     uint32_t ttl_banks;
     ttl_mask.fill(0);
     if (ver < 3) {
         ttl_banks = 1;
-        memcpy(&ttl_mask, msg_data, 4);
-        msg_data += 4;
-        msg_sz -= 4;
+        memcpy(&ttl_mask, code.data(), 4);
+        code = code.subspan(4);
     }
     else {
-        memcpy(&ttl_banks, msg_data, 4);
-        msg_data += 4;
-        msg_sz -= 4;
+        memcpy(&ttl_banks, code.data(), 4);
+        code = code.subspan(4);
         if (ttl_banks == 0 || ttl_banks > NUM_TTL_BANKS)
             return false;
-        if (msg_sz < ttl_banks * 4)
+        if (code.size() < ttl_banks * 4)
             return false;
-        memcpy(&ttl_mask, msg_data, 4 * ttl_banks);
-        msg_data += 4 * ttl_banks;
-        msg_sz -= 4 * ttl_banks;
+        memcpy(&ttl_mask, code.data(), 4 * ttl_banks);
+        code = code.subspan(4 * ttl_banks);
     }
 
     struct Notify: CtrlIFace::ReqSeqNotify {
@@ -400,15 +388,15 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
     // Moving a ZMQ message **MAY** copy data and may change the valid address
     // since for small message the data may be stored inline.
     // Therefore, we need to update the pointer after we move the message...
-    auto offset = msg_data - orig_msg_data;
+    auto offset = msg.size() - code.size();
     auto new_msg = new zmq::message_t;
 #if CPPZMQ_VERSION >= 40301
     new_msg->move(msg);
 #else
     new_msg->move(&msg);
 #endif
-    msg_data = (const uint8_t*)new_msg->data() + offset;
-    auto id = m_ctrl->run_code(is_cmd, ver, len_ns, ttl_mask, msg_data, msg_sz,
+    code = std::span((const uint8_t*)new_msg->data(), new_msg->size()).subspan(offset);
+    auto id = m_ctrl->run_code(is_cmd, ver, len_ns, ttl_mask, code,
                                std::unique_ptr<CtrlIFace::ReqSeqNotify>(notify), new_msg);
     m_seq_status.push_back(SeqStatus{id});
     Log::info("Sequence %llu scheduled.\n", (unsigned long long)id);

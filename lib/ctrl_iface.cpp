@@ -128,14 +128,14 @@ void CtrlIFace::finish_cmd()
 
 NACS_EXPORT() uint64_t CtrlIFace::_run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns,
                                             const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask,
-                                            const uint8_t *code, size_t code_len,
+                                            std::span<const uint8_t> code,
                                             std::unique_ptr<ReqSeqNotify> notify,
                                             AnyPtr storage)
 {
     set_dirty();
     auto id = ++m_seq_cnt;
     notify->set_id(id);
-    auto seq = m_seq_alloc.alloc(id, seq_len_ns, code, code_len, ttl_mask, ver, is_cmd,
+    auto seq = m_seq_alloc.alloc(id, seq_len_ns, code, ttl_mask, ver, is_cmd,
                                  std::move(notify), std::move(storage));
     {
         std::lock_guard<std::mutex> lk(m_ftend_lck);

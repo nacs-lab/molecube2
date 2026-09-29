@@ -729,13 +729,13 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
             Seq::Zynq::CmdList::ExeState exestate;
             if (ver > 1)
                 exestate.min_time = Seq::Zynq::PulseTime::Min2;
-            exestate.run(runner, seq->code, seq->code_len, ver);
+            exestate.run(runner, seq->code.data(), seq->code.size(), ver);
         }
         else {
             Seq::Zynq::ByteCode::ExeState exestate;
             if (ver > 1)
                 exestate.min_time = Seq::Zynq::PulseTime::Min2;
-            exestate.run(runner, seq->code, seq->code_len, ver);
+            exestate.run(runner, seq->code.data(), seq->code.size(), ver);
         }
     }
     catch (const std::exception &err) {
