@@ -23,27 +23,54 @@
 #include <nacs-utils/container.h>
 #include <nacs-utils/log.h>
 #include <nacs-utils/mem.h>
+#include <nacs-utils/number.h>
 #include <nacs-utils/streams.h>
 #include <nacs-utils/timer.h>
 
 #include <nacs-seq/zynq/bytecode.h>
 #include <nacs-seq/zynq/cmdlist.h>
+#include <nacs-seq/zynq/dma.h>
 
+#include <atomic>
+#include <bit>
 #include <chrono>
 #include <iostream>
+#include <span>
 #include <thread>
 #include <tuple>
 
 namespace {
 using namespace Molecube;
 
+// Make sure the writes to the DMA buffer are visible to the DMA engine
+// before the register write that starts the DMA.
+static inline void dma_write_barrier()
+{
+#if defined(__arm__) || defined(__aarch64__)
+    asm volatile ("dmb st" ::: "memory");
+#else
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+#endif
+}
+
 // The DMA reads the instructions in blocks of 16 x 64bits.
 static constexpr size_t dma_block_sz = 16 * 8;
+// The hardware can queue up to 8 DMA commands.
+static constexpr uint32_t dma_max_cmds = 8;
 // Each buffer is read with a single DMA command, which can read at most 1024 blocks.
 static constexpr size_t dma_max_buff_sz = 64 * 1024;
 static_assert(dma_max_buff_sz / dma_block_sz <= 1024);
 // Minimum number of buffers needed to run DMA sequences.
 static constexpr size_t dma_min_buffs = 3;
+// Each sequence time unit (10ns) is `1 << dma_cycle_shift` DMA cycles (5ns).
+// This is `CLOCK_SHIFT` in the FPGA config and cannot be read from the hardware.
+static constexpr unsigned dma_cycle_shift = 1;
+
+// Error flags from running a DMA sequence.
+enum DMAFlags : uint8_t {
+    DMAUnderflow = 1 << 0,
+    DMATrigTimeout = 1 << 1,
+};
 
 // Set the DDS write timing on the pulser.
 // A negative value keeps the current value of that timing parameter.
@@ -911,6 +938,9 @@ public:
     ~ControllerDMA();
 
 private:
+    class DMAWriter;
+    class Runner;
+
     void run_frontend() override;
     void set_ttl(int bank, uint32_t mask, bool val) override;
     void set_ttl_ovr(int bank, uint32_t mask, int val) override;
@@ -934,8 +964,331 @@ private:
     void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) override;
     DDSInstTiming get_dds_inst_timing() const override;
 
+    void run_seq(ReqSeq *seq);
+    // Run two DMA blocks of 5000-cycle waits (Wait2(4999)).
+    void run_dummy_dma_seq();
+    // Read and cache the DMA status.
+    uint32_t read_dma_status();
+    // Wait until `cond(status)` returns true for the DMA status and return the status.
+    template<typename Cond>
+    uint32_t wait_dma(Cond &&cond);
+    // Number of started DMA transfers that are not finished according to `status`.
+    uint32_t dma_pending(uint32_t status) const
+    {
+        // The number of pending transfers is always less than 256
+        // so the lower 8 bits of the counts are enough.
+        return (m_dma_started - status) & 0xff;
+    }
+
+
     Pulser m_p;
+    uint16_t m_dds_phase[NDDS] = {0};
     std::vector<DMABuff> m_dma_buffs;
+    // Number of DMA transfers started (modulo 2^32).
+    uint32_t m_dma_started = 0;
+    // Last value read from the DMA status register.
+    uint32_t m_dma_status = 0;
+};
+
+// Write (version 0) DMA instructions directly into the DMA buffers.
+// Each buffer is sent to the hardware as soon as it is full,
+// `finish()` sends the rest and `wait_end()` waits for the sequence to finish.
+// The sequence starts running when the first buffer is sent so the caller
+// must keep up with the hardware afterwards to avoid an underflow.
+template<typename Pulser>
+class ControllerDMA<Pulser>::DMAWriter {
+    DMAWriter(const DMAWriter&) = delete;
+    void operator=(const DMAWriter&) = delete;
+
+public:
+    // Only the TTL channels in `ttl_mask` will be controlled by the DMA.
+    // Banks beyond the length of `ttl_mask` are not controlled by the DMA.
+    DMAWriter(ControllerDMA &ctrl, std::span<const uint32_t> ttl_mask)
+        : m_ctrl(ctrl),
+          m_nmasks(ttl_mask.size()),
+          // Each transfer uses the next buffer in the list so a buffer is free to be
+          // written to once there are fewer than `m_dma_buffs.size()` pending transfers.
+          m_max_pending(uint32_t(std::min(ctrl.m_dma_buffs.size(),
+                                          size_t(dma_max_cmds)) - 1))
+    {
+        assert(m_nmasks <= NUM_TTL_BANKS);
+        for (int bank = 0; bank < int(m_nmasks); bank++) {
+            m_ctrl.m_p.set_dma_ttl_mask(bank, ttl_mask[bank]);
+        }
+    }
+    // Returns the unused space in the current DMA buffer,
+    // waiting for the hardware to finish reading it if necessary.
+    // The returned span is never empty but may be too short for a whole instruction.
+    // An instruction can be split across buffers since the hardware reads them
+    // as a single stream. Use `commit()` to mark the written bytes as used.
+    std::span<uint8_t> get_buffer()
+    {
+        if (!m_acquired) {
+            m_ctrl.wait_dma([&] (uint32_t status) {
+                return m_ctrl.dma_pending(status) <= m_max_pending;
+            });
+            m_acquired = true;
+        }
+        auto &buff = m_ctrl.m_dma_buffs[m_buff_idx];
+        return std::span(buff.virt, buff.size).subspan(m_len);
+    }
+    // Mark the first `n` bytes of the span returned by `get_buffer()` as used.
+    // The buffer is sent to the hardware if it's full.
+    void commit(size_t n)
+    {
+        assert(m_acquired);
+        auto &buff = m_ctrl.m_dma_buffs[m_buff_idx];
+        assert(m_len + n <= buff.size);
+        m_len += n;
+        if (m_len == buff.size) {
+            send();
+        }
+    }
+    void add_code(std::span<const uint8_t> code)
+    {
+        while (!code.empty()) {
+            auto buff = get_buffer();
+            auto len = std::min(buff.size(), code.size());
+            memcpy(buff.data(), code.data(), len);
+            commit(len);
+            code = code.subspan(len);
+        }
+    }
+    template<typename Inst>
+    void add_inst(const Inst &inst)
+    {
+        static_assert(sizeof(Inst) == 2 || sizeof(Inst) == 4 || sizeof(Inst) == 6);
+        add_code(std::span((const uint8_t*)&inst, sizeof(Inst)));
+    }
+    // Send the remaining instructions.
+    void finish()
+    {
+        using namespace Seq::Zynq::DMA;
+        if (m_len > 0) {
+            assert(m_acquired && m_len % 2 == 0);
+            // Pad to full blocks with waits.
+            // Only the last transfer may need this since the buffer sizes
+            // are multiples of pages.
+            auto pad = alignTo(m_len, dma_block_sz) - m_len;
+            while (pad > 0) {
+                if (pad > sizeof(Inst_v0::Wait2)) {
+                    add_inst(Inst_v0::Wait2(19));
+                    pad -= sizeof(Inst_v0::Wait2);
+                }
+                else {
+                    add_inst(Inst_v0::Wait1(19));
+                    pad -= sizeof(Inst_v0::Wait1);
+                }
+            }
+            // `commit()` sends the buffer if the padding filled it up.
+            if (m_len > 0) {
+                send();
+            }
+        }
+    }
+    // Wait for the sequence to finish after `finish()`.
+    // Returns the error flags (`DMAFlags`) from the sequence.
+    uint8_t wait_end()
+    {
+        // Wait for all the transfers to finish and for the instructions to finish.
+        auto status = m_ctrl.wait_dma([&] (uint32_t status) {
+            return m_ctrl.dma_pending(status) == 0 && !(status & 0x100);
+        });
+        for (int bank = 0; bank < int(m_nmasks); bank++)
+            m_ctrl.m_p.set_dma_ttl_mask(bank, 0);
+        uint8_t flags = 0;
+        if (status & 0x200)
+            flags |= DMAUnderflow;
+        if (status & 0x400)
+            flags |= DMATrigTimeout;
+        return flags;
+    }
+
+private:
+    // Send the used part of the current buffer and move on to the next one.
+    // The used size must be a multiple of the block size.
+    void send()
+    {
+        auto &buff = m_ctrl.m_dma_buffs[m_buff_idx];
+        assert(m_len > 0 && m_len % dma_block_sz == 0);
+        dma_write_barrier();
+        // The hardware reads one more block than the number we pass in.
+        m_ctrl.m_p.start_dma(buff.phy, uint16_t(m_len / dma_block_sz - 1), m_first);
+        m_first = false;
+        m_ctrl.m_dma_started++;
+        m_buff_idx = (m_buff_idx + 1) % m_ctrl.m_dma_buffs.size();
+        m_len = 0;
+        // Wait for the next buffer to be free only when it's needed.
+        m_acquired = false;
+    }
+
+    ControllerDMA &m_ctrl;
+    const size_t m_nmasks;
+    const uint32_t m_max_pending;
+    size_t m_buff_idx = 0;
+    // Number of bytes used in the current buffer.
+    size_t m_len = 0;
+    // Whether the current buffer is free to be written to.
+    bool m_acquired = false;
+    bool m_first = true;
+};
+
+// Translate a sequence into DMA instructions written to a `DMAWriter`.
+// Provides the callbacks for `Seq::Zynq::ByteCode::ExeState` and
+// `Seq::Zynq::CmdList::ExeState`.
+// Each output instruction is followed by a wait for the time of the
+// corresponding pulse so the timing is the same as running the sequence with
+// `Controller::Runner`.
+// This also makes sure that the DDS and DAC are done before the next output
+// on the same device, which would otherwise be dropped by the hardware.
+template<typename Pulser>
+class ControllerDMA<Pulser>::Runner {
+public:
+    // `ttlmask` should be the same as the one used to create the `writer`.
+    Runner(ControllerDMA &ctrl, DMAWriter &writer,
+           const std::array<uint32_t,NUM_TTL_BANKS> &ttlmask, uint64_t seq_len_ns)
+        : m_ctrl(ctrl),
+          m_writer(writer),
+          m_ttlmask(ttlmask),
+          m_seq_len(seq_len_ns / 10)
+    {
+        for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+            m_ttl[bank] = ctrl.m_p.cur_ttl(bank);
+        }
+    }
+    void ttl1(uint8_t chn, bool val, uint64_t t)
+    {
+        int bank = chn / 32;
+        ttl(setBit(m_ttl[bank], uint8_t(chn % 32), val), t, bank);
+    }
+    void ttl(uint32_t ttl, uint64_t t, int bank)
+    {
+        using namespace Seq::Zynq::DMA;
+        assert(bank >= 0 && bank < NUM_TTL_BANKS);
+        auto mask = m_ttlmask[bank];
+        m_ttl[bank] = ttl;
+        // Skipping the banks without any channel controlled by the DMA is required
+        // since the hardware ignores the high bits of the bank number
+        // for the banks that don't exist.
+        if (mask) {
+            // The value must not have any bits set outside of the mask.
+            auto val = ttl & mask;
+            m_writer.add_inst(Inst_v0::TTLSet32(uint8_t(bank * 2), uint16_t(val),
+                                                uint8_t(bank * 2 + 1), uint16_t(val >> 16)));
+        }
+        wait(t);
+    }
+    void dds_freq(uint8_t chn, uint32_t freq)
+    {
+        add_dds_set32(chn, 0x2c, freq);
+        wait(Seq::Zynq::PulseTime::DDSFreq);
+    }
+    void dds_amp(uint8_t chn, uint16_t amp)
+    {
+        add_dds_set16(chn, 0x32, amp);
+        wait(Seq::Zynq::PulseTime::DDSAmp);
+    }
+    void dds_phase(uint8_t chn, uint16_t phase)
+    {
+        if (likely(!m_ctrl.dds_overridden(DDSPhase, chn)))
+            m_ctrl.m_dds_phase[chn] = phase;
+        add_dds_set16(chn, 0x30, phase);
+        wait(Seq::Zynq::PulseTime::DDSPhase);
+    }
+    void dds_detphase(uint8_t chn, uint16_t detphase)
+    {
+        dds_phase(chn, uint16_t(m_ctrl.m_dds_phase[chn] + detphase));
+    }
+    void dac(uint8_t chn, uint16_t V)
+    {
+        using namespace Seq::Zynq;
+        // Same SPI transfer as `Pulser::dac`.
+        // `div` is the number of cycles per SPI clock edge minus 1.
+        // Old SPI clock divider 0 is `(0 << dma_cycle_shift) | 1` in DMA cycles.
+        constexpr uint16_t div = (1 << dma_cycle_shift) - 1;
+        // 18 bits with two edges per bit, plus the chip select cycles.
+        static_assert(2 * 18 * (div + 1) + 2 <= (PulseTime::DAC << dma_cycle_shift));
+        m_writer.add_inst(DMA::Inst_v0::DAC(0, div, 0, 0, (uint32_t(chn & 3) << 16) | V));
+        wait(PulseTime::DAC);
+    }
+    void clock(uint8_t period)
+    {
+        // 255 (off) is converted to 0x1ff (off).
+        auto dma_period = uint16_t((period << dma_cycle_shift) |
+                                   ((1 << dma_cycle_shift) - 1));
+        m_writer.add_inst(Seq::Zynq::DMA::Inst_v0::ClockOut(dma_period));
+        wait(Seq::Zynq::PulseTime::Clock);
+    }
+    // Wait for `t` sequence time units.
+    void wait(uint64_t t)
+    {
+        using namespace Seq::Zynq::DMA;
+        m_t += t;
+        auto cycles = t << dma_cycle_shift;
+        // A wait of `cycle` takes `cycle + 1` cycles.
+        constexpr uint64_t max_wait2 = uint64_t(1) << 28;
+        constexpr uint64_t max_wait1 = uint64_t(1) << 12;
+        while (cycles > max_wait2) {
+            m_writer.add_inst(Inst_v0::Wait2(uint32_t(max_wait2 - 1)));
+            cycles -= max_wait2;
+        }
+        if (cycles > max_wait1) {
+            m_writer.add_inst(Inst_v0::Wait2(uint32_t(cycles - 1)));
+        }
+        else if (cycles > 0) {
+            m_writer.add_inst(Inst_v0::Wait1(uint16_t(cycles - 1)));
+        }
+    }
+    void wait_trigger(uint8_t chn, bool trig_raise, uint32_t timeout)
+    {
+        m_writer.add_inst(Seq::Zynq::DMA::Inst_v0::WaitTrig(
+                              chn, trig_raise, uint64_t(timeout) << dma_cycle_shift));
+        // The sequence time restarts from the trigger.
+        m_t = 0;
+    }
+    // Wait until the end of the sequence (measured from the start or the last trigger).
+    void wait_seq_end()
+    {
+        if (m_t < m_seq_len) {
+            wait(m_seq_len - m_t);
+        }
+    }
+
+private:
+    // DDS 0-10 are on bus 0 and 11-21 are on bus 1.
+    static std::pair<uint8_t,uint8_t> dds_bus(uint8_t chn)
+    {
+        assert(chn < NDDS);
+        if (chn >= 11)
+            return {1, uint8_t(chn - 11)};
+        return {0, chn};
+    }
+    static constexpr uint8_t dds_inst_addr(uint8_t addr)
+    {
+        return uint8_t(addr >> 1);
+    }
+    void add_dds_set16(uint8_t chn, uint8_t addr, uint16_t data)
+    {
+        auto [bus_id, dds_id] = dds_bus(chn);
+        m_writer.add_inst(Seq::Zynq::DMA::Inst_v0::DDSSet16(bus_id, dds_id, 1,
+                                                            dds_inst_addr(addr), data));
+    }
+    void add_dds_set32(uint8_t chn, uint8_t addr, uint32_t data)
+    {
+        auto [bus_id, dds_id] = dds_bus(chn);
+        m_writer.add_inst(Seq::Zynq::DMA::Inst_v0::DDSSet32(bus_id, dds_id, 1,
+                                                            dds_inst_addr(addr), data));
+    }
+
+    ControllerDMA &m_ctrl;
+    DMAWriter &m_writer;
+    const std::array<uint32_t,NUM_TTL_BANKS> m_ttlmask;
+    // TTL values of the sequence. Only the bits in the DMA TTL mask are used.
+    uint32_t m_ttl[NUM_TTL_BANKS];
+    // Sequence length in sequence time unit.
+    const uint64_t m_seq_len;
+    // Sequence time since the start or the last trigger.
+    uint64_t m_t{0};
 };
 
 template<typename Pulser>
@@ -944,6 +1297,10 @@ ControllerDMA<Pulser>::ControllerDMA(Pulser &&p, std::vector<DMABuff> &&dma_buff
       m_dma_buffs(std::move(dma_buffs))
 {
     assert(m_dma_buffs.size() >= dma_min_buffs);
+    // Sync our transfer count with the hardware.
+    m_dma_status = m_p.dma_status();
+    m_dma_started = m_dma_status & 0xff;
+    m_p.set_dma_control(1);
 }
 
 template<typename Pulser>
@@ -1084,6 +1441,102 @@ bool ControllerDMA<Pulser>::has_ttl_ovr()
         }
     }
     return false;
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::run_seq(ReqSeq *seq)
+{
+    seq->state.store(SeqStart, std::memory_order_relaxed);
+    backend_event();
+
+    DMAWriter writer(*this, seq->ttl_mask);
+    if (seq->type == SeqType::DMASeq) {
+        // The DMA instructions are sent to the hardware as is.
+        assert(seq->ver == 0);
+        assert(seq->code.size() % 2 == 0);
+        writer.add_code(seq->code);
+    }
+    else {
+        Runner runner(*this, writer, seq->ttl_mask, seq->seq_len_ns);
+        try {
+            auto ver = seq->ver;
+            assert(ver == 1 || ver == 2 || ver == 3);
+            if (unlikely(seq->type == SeqType::CmdList)) {
+                Seq::Zynq::CmdList::ExeState exestate;
+                if (ver > 1)
+                    exestate.min_time = Seq::Zynq::PulseTime::Min2;
+                exestate.run(runner, seq->code.data(), seq->code.size(), ver);
+            }
+            else {
+                Seq::Zynq::ByteCode::ExeState exestate;
+                if (ver > 1)
+                    exestate.min_time = Seq::Zynq::PulseTime::Min2;
+                exestate.run(runner, seq->code.data(), seq->code.size(), ver);
+            }
+        }
+        catch (const std::exception &err) {
+            Log::error("Error while running sequence: %s.\n", err.what());
+        }
+        runner.wait_seq_end();
+        if (seq->type == SeqType::Bytecode) {
+            // This is a hack that is believed to make the NI card happy.
+            runner.clock(9);
+            // 10ms
+            runner.wait(1000000);
+            runner.clock(255);
+        }
+        // End the sequence with a short wait.
+        runner.wait(10);
+    }
+    writer.finish();
+    seq->state.store(SeqFlushed, std::memory_order_relaxed);
+    backend_event();
+    // Wait for the sequence to finish.
+    auto flags = writer.wait_end();
+    seq->state.store(SeqEnd, std::memory_order_relaxed);
+    backend_event();
+    if (flags & DMAUnderflow)
+        Log::warn("DMA underflow.\n");
+    if (flags & DMATrigTimeout)
+        Log::warn("DMA trigger timeout.\n");
+}
+
+template<typename Pulser>
+uint32_t ControllerDMA<Pulser>::read_dma_status()
+{
+    m_dma_status = m_p.dma_status();
+    return m_dma_status;
+}
+
+template<typename Pulser>
+template<typename Cond>
+uint32_t ControllerDMA<Pulser>::wait_dma(Cond &&cond)
+{
+    // Reading the status is slow so check the cached status first.
+    if (cond(m_dma_status))
+        return m_dma_status;
+    while (true) {
+        auto status = read_dma_status();
+        if (cond(status))
+            return status;
+        std::this_thread::yield();
+    }
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::run_dummy_dma_seq()
+{
+    using Seq::Zynq::DMA::Inst_v0::Wait2;
+    static_assert(2 * dma_block_sz % sizeof(Wait2) == 0);
+    static constexpr auto code = [] {
+        std::array<Wait2,2 * dma_block_sz / sizeof(Wait2)> code{};
+        code.fill(Wait2(4999));
+        return std::bit_cast<std::array<uint8_t,2 * dma_block_sz>>(code);
+    }();
+    DMAWriter writer(*this, {});
+    writer.add_code(code);
+    writer.finish();
+    writer.wait_end();
 }
 
 // Create the DMA controller if the DMA mode is enabled and can be used,
