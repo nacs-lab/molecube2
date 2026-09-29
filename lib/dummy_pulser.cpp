@@ -84,6 +84,27 @@ NACS_EXPORT() uint32_t DummyPulser::get_result()
     return res;
 }
 
+NACS_EXPORT() uint16_t DummyPulser::read_dds(int chn, uint8_t addr)
+{
+    assert(dds_exists_internal(chn));
+    // Protecting access to `m_dds`
+    std::unique_lock<std::mutex> lock(m_cmds_lock);
+    forward_time(false, lock);
+    auto &dds = m_dds[chn];
+    switch (addr & ~1) {
+    case 0x2c:
+        return uint16_t(dds.freq);
+    case 0x2e:
+        return uint16_t(dds.freq >> 16);
+    case 0x30:
+        return dds.phase;
+    case 0x32:
+        return dds.amp;
+    default:
+        return 0;
+    }
+}
+
 NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
 {
     if (m_results.size() >= max_result_count)

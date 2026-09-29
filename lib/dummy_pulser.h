@@ -145,6 +145,10 @@ public:
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
         m_ttl_lo[bank].store(low_mask, std::memory_order_release);
     }
+    inline void set_clock(uint8_t div)
+    {
+        m_clock.store(div, std::memory_order_release);
+    }
     // Set the channels in `hi` to high and the ones in `lo` to low
     // in the byte `bytes` of the TTL output.
     inline void set_ttl(int bytes, uint8_t lo, uint8_t hi)
@@ -174,6 +178,17 @@ public:
     inline void set_dma_control(uint32_t ctrl)
     {
         m_dma_control.store(ctrl & 1, std::memory_order_release);
+    }
+    // Read the cached value of the 16 bit DDS register at the byte address `dds_addr`
+    // of DDS `dds_id` on bus 0/1.
+    // Only the frequency, phase and amplitude registers are modeled.
+    inline uint16_t read_dds0(uint8_t dds_id, uint8_t dds_addr)
+    {
+        return read_dds(dds_id, dds_addr);
+    }
+    inline uint16_t read_dds1(uint8_t dds_id, uint8_t dds_addr)
+    {
+        return read_dds(dds_id + 11, dds_addr);
     }
     // Only stores the value since the DMA instructions are not executed.
     inline void set_dma_dds_mask(int chn, uint8_t addr, uint8_t mask)
@@ -332,6 +347,7 @@ private:
         return 0 <= chn && chn < NDDS;
     }
 
+    uint16_t read_dds(int chn, uint8_t addr);
     // Push a result to the result queue. Check if there's overflow
     void add_result(uint32_t v);
     // Add a command to the command queue.
