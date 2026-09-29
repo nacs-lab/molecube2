@@ -991,12 +991,15 @@ void ControllerDMA<Pulser>::reset_dds(int chn)
 template<typename Pulser>
 void ControllerDMA<Pulser>::set_clock(uint8_t val)
 {
+    set_dirty();
+    m_p.set_clock(val);
 }
 
 template<typename Pulser>
 uint8_t ControllerDMA<Pulser>::get_clock()
 {
-    return 0;
+    set_observed();
+    return m_p.cur_clock();
 }
 
 template<typename Pulser>
