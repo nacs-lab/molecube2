@@ -115,6 +115,10 @@ private:
 
     std::vector<int> get_active_dds() override;
     bool has_ttl_ovr() override;
+    bool support_dma() const override
+    {
+        return false;
+    }
 
     bool check_dds(int chn);
     void detect_dds(bool force=false);
@@ -918,6 +922,10 @@ private:
 
     std::vector<int> get_active_dds() override;
     bool has_ttl_ovr() override;
+    bool support_dma() const override
+    {
+        return true;
+    }
 
     void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) override;
     DDSInstTiming get_dds_inst_timing() const override;

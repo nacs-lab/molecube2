@@ -347,6 +347,8 @@ public:
     {
         return {0, 0, 0, 0};
     }
+    // Whether the DMA mode is supported and enabled.
+    virtual bool support_dma() const = 0;
 
     virtual void set_clock(uint8_t val) = 0;
     virtual uint8_t get_clock() = 0;
