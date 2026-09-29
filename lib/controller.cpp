@@ -45,6 +45,40 @@ static_assert(dma_max_buff_sz / dma_block_sz <= 1024);
 // Minimum number of buffers needed to run DMA sequences.
 static constexpr size_t dma_min_buffs = 3;
 
+// Set the DDS write timing on the pulser.
+// A negative value keeps the current value of that timing parameter.
+template<typename Pulser>
+static void set_pulser_dds_timing1(Pulser &p, int adsu, int wrlow, int adhd,
+                                   int fuddl, int fudhd)
+{
+    std::array<int,5> timings{adsu, wrlow, adhd, fuddl, fudhd};
+    bool has_set = false;
+    bool has_default = false;
+    for (auto t: timings) {
+        if (t < 0) {
+            has_default = true;
+            continue;
+        }
+        if (t > 7)
+            throw std::runtime_error("DDS write timing out of bound (max is 7).");
+        has_set = true;
+    }
+    if (!has_set)
+        return;
+    if (auto hw_ver = p.hw_version(); !hw_ver.check_at_least({5, 4}))
+        throw std::runtime_error("DDS write timing requires hardware version 5.4, got " + to_string(hw_ver));
+    if (has_default) {
+        auto def_timings = p.get_dds_timing1();
+        for (int i = 0; i < 5; i++) {
+            if (timings[i] < 0) {
+                timings[i] = (int)def_timings[i];
+            }
+        }
+    }
+    p.set_dds_timing1((uint32_t)timings[0], (uint32_t)timings[1], (uint32_t)timings[2],
+                      (uint32_t)timings[3], (uint32_t)timings[4]);
+}
+
 template<typename Pulser>
 class Controller final : public CtrlIFace {
     Controller(const Controller&) = delete;
@@ -86,7 +120,6 @@ private:
     void detect_dds(bool force=false);
     void dump_dds(int i);
     void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) override;
-    DDSInstTiming get_dds_inst_timing() const override;
 
     // Process a command.
     // Returns the sequence time forwarded and if the command needs a result.
@@ -502,38 +535,7 @@ template<typename Pulser>
 void Controller<Pulser>::set_dds_timing1(int adsu, int wrlow, int adhd,
                                          int fuddl, int fudhd)
 {
-    std::array<int,5> timings{adsu, wrlow, adhd, fuddl, fudhd};
-    bool has_set = false;
-    bool has_default = false;
-    for (auto t: timings) {
-        if (t < 0) {
-            has_default = true;
-            continue;
-        }
-        if (t > 7)
-            throw std::runtime_error("DDS write timing out of bound (max is 7).");
-        has_set = true;
-    }
-    if (!has_set)
-        return;
-    if (auto hw_ver = m_p.hw_version(); !hw_ver.check_at_least({5, 4}))
-        throw std::runtime_error("DDS write timing requires hardware version 5.4, got " + to_string(hw_ver));
-    if (has_default) {
-        auto def_timings = m_p.get_dds_timing1();
-        for (int i = 0; i < 5; i++) {
-            if (timings[i] < 0) {
-                timings[i] = (int)def_timings[i];
-            }
-        }
-    }
-    m_p.set_dds_timing1((uint32_t)timings[0], (uint32_t)timings[1], (uint32_t)timings[2],
-                        (uint32_t)timings[3], (uint32_t)timings[4]);
-}
-
-template<typename Pulser>
-DDSInstTiming Controller<Pulser>::get_dds_inst_timing() const
-{
-    return DDSInstTiming::get(m_p);
+    set_pulser_dds_timing1(m_p, adsu, wrlow, adhd, fuddl, fudhd);
 }
 
 template<typename Pulser>
@@ -1006,12 +1008,13 @@ template<typename Pulser>
 void ControllerDMA<Pulser>::set_dds_timing1(int adsu, int wrlow, int adhd,
                                             int fuddl, int fudhd)
 {
+    set_pulser_dds_timing1(m_p, adsu, wrlow, adhd, fuddl, fudhd);
 }
 
 template<typename Pulser>
 DDSInstTiming ControllerDMA<Pulser>::get_dds_inst_timing() const
 {
-    return {};
+    return DDSInstTiming::get(m_p);
 }
 
 template<typename Pulser>

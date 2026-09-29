@@ -340,7 +340,12 @@ public:
     virtual void get_dds_ovr(ReqOP op, int chn, callback_t cb) = 0;
     virtual void reset_dds(int chn) = 0;
     virtual void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) = 0;
-    virtual DDSInstTiming get_dds_inst_timing() const = 0;
+    // The time that the DDS DMA instructions take.
+    // All 0 if the DMA mode is not supported or not enabled.
+    virtual DDSInstTiming get_dds_inst_timing() const
+    {
+        return {0, 0, 0, 0};
+    }
 
     virtual void set_clock(uint8_t val) = 0;
     virtual uint8_t get_clock() = 0;
