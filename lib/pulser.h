@@ -215,6 +215,8 @@ public:
             write((bank - 1) * 2 + 0x11, low_mask);
         }
     }
+    // Set the channels in `hi` to high and the ones in `lo` to low
+    // in the byte `bytes` of the TTL output.
     inline void set_ttl(int bytes, uint8_t lo, uint8_t hi)
     {
         write(4, (bytes << 16) | (uint32_t(lo) << 8) | hi);

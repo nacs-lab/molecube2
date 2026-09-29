@@ -145,6 +145,19 @@ public:
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
         m_ttl_lo[bank].store(low_mask, std::memory_order_release);
     }
+    // Set the channels in `hi` to high and the ones in `lo` to low
+    // in the byte `bytes` of the TTL output.
+    inline void set_ttl(int bytes, uint8_t lo, uint8_t hi)
+    {
+        assert(bytes >= 0 && bytes < NUM_TTL_BANKS * 4);
+        auto &ttl = m_ttl[bytes / 4];
+        auto shift = (bytes % 4) * 8;
+        auto cur = ttl.load(std::memory_order_relaxed);
+        uint32_t new_ttl;
+        do {
+            new_ttl = (cur | (uint32_t(hi) << shift)) & ~(uint32_t(lo) << shift);
+        } while (!ttl.compare_exchange_weak(cur, new_ttl, std::memory_order_acq_rel));
+    }
     inline void set_dma_ttl_mask(int bank, uint32_t mask)
     {
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
