@@ -194,7 +194,7 @@ void Server::run_startup()
 _NACS_EXPORT Server::Server(const Config &conf)
     : m_conf(conf),
       m_id(get_server_id()),
-      m_ctrl(CtrlIFace::create(conf.dummy)),
+      m_ctrl(CtrlIFace::create(conf.dummy, conf.dma_enable)),
       m_zmqctx(),
       m_zmqsock(m_zmqctx, ZMQ_ROUTER),
       m_zmqpoll{{(void*)m_zmqsock, 0, ZMQ_POLLIN, 0},
