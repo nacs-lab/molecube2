@@ -28,7 +28,6 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -38,22 +37,6 @@
 namespace Molecube {
 
 using namespace NaCs;
-
-struct DDSState {
-    DDSState()
-        : freq(-1),
-          amp(0),
-          amp_enable(0),
-          phase_enable(0),
-          phase(0)
-    {
-    }
-    uint32_t freq; // 31 bits
-    uint16_t amp: 12;
-    uint16_t amp_enable: 1;
-    uint16_t phase_enable: 1;
-    uint16_t phase;
-};
 
 /**
  * This is the class that provides the FIFO for commands and sequences,
@@ -146,7 +129,6 @@ protected:
     struct ReqCmd {
         uint8_t opcode: 4; // ReqOP
         uint8_t has_res: 1;
-        uint8_t is_override: 1; // The value set/get is override
         uint32_t operand: 26; // opcode specific encoding (e.g. channel number)
         // DDSFreq/Phase/Amp: operand is channel number
         // TTL (set only): the last two bits are the value to set (0: low, 1: high),
@@ -155,30 +137,30 @@ protected:
         uint32_t val; // opcode specific encoding of value.
     };
 
-    struct CmdCache {
-        // Update the cache to the new value from the set command
-        void set(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
-        // Try to get the current cached value. If the cached value is not too old,
-        // call the `cb` and return `true`. If not, push the `cb` to the list of cbs.
-        // If the list is empty, return `false` signaling that a new query should be sent.
-        // If the list is not empty, return `true` since a query
-        // should have been queued already.
-        bool get(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
-        bool has_dds_ovr();
+    static constexpr uint8_t NDDS = 22;
 
-    private:
-        struct CacheEntry {
-            uint64_t t = 0;
-            uint32_t val = 0;
-            std::vector<callback_t> cbs{};
-        };
-        static uint32_t cache_key(ReqOP op, uint32_t operand, bool is_override)
+    // Frontend cache and override state of the DDS parameters.
+    // Only `overridden` may be read by the worker thread (during a sequence).
+    struct DDSParamCache {
+        // Whether the parameter is overridden (by the frontend).
+        std::atomic<bool> overridden{false};
+        // Whether `val` is the current value of the parameter.
+        bool cached = false;
+        // The current value, which is also the override value if `overridden`.
+        uint32_t val = 0;
+        // Time when `val` was cached.
+        uint64_t t = 0;
+        void reset()
         {
-            assert(op != TTL);
-            assert(op != Clock || !is_override);
-            return uint32_t(op) << 27 | uint32_t(is_override) << 26 | operand;
+            overridden.store(false, std::memory_order_relaxed);
+            cached = false;
+            val = 0;
+            t = 0;
         }
-        std::map<uint32_t,CacheEntry> m_cache;
+    };
+    struct DDSCache {
+        // freq, amp, phase
+        DDSParamCache params[3];
     };
 
     enum ReqSeqState {
@@ -267,11 +249,42 @@ protected:
      */
     void backend_event();
 
+    /**
+     * Clear the backend event notifications and
+     * run the callbacks for all sequence events.
+     */
+    void run_seq_frontend();
+
     void set_dirty();
     void set_observed();
 
-    void send_cmd(ReqOP op, bool has_res, bool is_override, uint32_t operand, uint32_t val);
-    void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
+    void send_cmd(ReqOP op, bool has_res, uint32_t operand, uint32_t val);
+    // Pop a finished command from the queue (from the frontend).
+    ReqCmd *pop_cmd()
+    {
+        return m_cmd_queue.pop();
+    }
+    // Free a command returned by `pop_cmd()`.
+    void free_cmd(ReqCmd *cmd)
+    {
+        m_cmd_alloc.free(cmd);
+    }
+
+    // Cache entry of the DDS parameter `op` of channel `chn`.
+    DDSParamCache &dds_cache(ReqOP op, int chn)
+    {
+        assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
+        assert(0 <= chn && chn < NDDS);
+        return m_dds_cache[chn].params[op - DDSFreq];
+    }
+    // Whether the DDS parameter `op` of channel `chn` is overridden.
+    // Can be called from the worker thread.
+    bool dds_overridden(ReqOP op, int chn)
+    {
+        return dds_cache(op, chn).overridden.load(std::memory_order_relaxed);
+    }
+
+    DDSCache m_dds_cache[NDDS];
 
     CtrlIFace();
 public:
@@ -288,7 +301,7 @@ public:
      * Clear the backend event notifications and
      * run the callbacks for all events.
      */
-    void run_frontend();
+    virtual void run_frontend() = 0;
 
     template<typename... Args>
     uint64_t run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns,
@@ -319,12 +332,12 @@ public:
     };
     virtual TTLOvr get_ttl_ovr(int bank) = 0;
 
-    void set_dds(ReqOP op, int chn, uint32_t val);
-    void set_dds_ovr(ReqOP op, int chn, uint32_t val);
+    virtual void set_dds(ReqOP op, int chn, uint32_t val) = 0;
+    virtual void set_dds_ovr(ReqOP op, int chn, uint32_t val) = 0;
 
-    void get_dds(ReqOP op, int chn, callback_t cb);
-    void get_dds_ovr(ReqOP op, int chn, callback_t cb);
-    void reset_dds(int chn);
+    virtual void get_dds(ReqOP op, int chn, callback_t cb) = 0;
+    virtual void get_dds_ovr(ReqOP op, int chn, callback_t cb) = 0;
+    virtual void reset_dds(int chn) = 0;
     virtual void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) = 0;
     virtual DDSInstTiming get_dds_inst_timing() const = 0;
 
@@ -352,8 +365,6 @@ private:
                        std::span<const uint8_t> code,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
-    void send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
-
     bool m_quit{false};
 
     // To notify the backend of new requests from the frontend.
@@ -375,8 +386,6 @@ private:
     // Cached allocator for efficient allocations
     SmallAllocator<ReqCmd,32> m_cmd_alloc;
     SmallAllocator<ReqSeq,32> m_seq_alloc;
-
-    CmdCache m_cmd_cache;
 
     // Use an event fd for notification from the backend to the frontend
     // since this can be polled in the main loop.

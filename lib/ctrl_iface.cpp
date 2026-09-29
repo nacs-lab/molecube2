@@ -25,66 +25,6 @@
 
 namespace Molecube {
 
-void CtrlIFace::CmdCache::set(ReqOP op, uint32_t operand, bool is_override, uint32_t val)
-{
-    auto t = getTime();
-    auto update_entry = [&] (auto &entry) {
-        entry.t = t;
-        entry.val = val;
-        for (auto &cb: entry.cbs)
-            cb(val);
-        entry.cbs.clear();
-    };
-    auto key = cache_key(op, operand, is_override);
-    auto &entry = m_cache[key];
-    update_entry(entry);
-    // If this is a normal set command for DDS, we need to update the override value as well.
-    if (!is_override && (op == DDSFreq || op == DDSAmp || op == DDSPhase)) {
-        key = cache_key(op, operand, true);
-        auto it = m_cache.find(key);
-        if (it != m_cache.end() && it->second.val != uint32_t(-1)) {
-            update_entry(it->second);
-        }
-    }
-}
-
-bool CtrlIFace::CmdCache::get(ReqOP op, uint32_t operand, bool is_override, callback_t cb)
-{
-    auto key = cache_key(op, operand, is_override);
-    auto t = getTime();
-    auto &entry = m_cache[key];
-    if (t - entry.t <= 100000000) {
-        // < 0.1s
-        cb(entry.val);
-        return true;
-    }
-    // DDS overrides are only kept in software so no need to ask the backend.
-    if (is_override) {
-        // Initially off (-1) by default.
-        if (entry.t == 0)
-            entry.val = -1;
-        cb(entry.val);
-        return true;
-    }
-    auto was_empty = entry.cbs.empty();
-    entry.cbs.push_back(std::move(cb));
-    return !was_empty;
-}
-
-inline bool CtrlIFace::CmdCache::has_dds_ovr()
-{
-    for (int i = 0; i < 22; i++) {
-        for (auto op: (ReqOP[]){DDSFreq, DDSAmp, DDSPhase}) {
-            auto key = cache_key(op, i, true);
-            auto it = m_cache.find(key);
-            if (it == m_cache.end() || it->second.val == uint32_t(-1))
-                continue;
-            return true;
-        }
-    }
-    return false;
-}
-
 CtrlIFace::CtrlIFace()
     : m_bkend_evt(openEvent(0, EFD_NONBLOCK | EFD_CLOEXEC))
 {
@@ -162,66 +102,15 @@ void CtrlIFace::backend_event()
     writeEvent(m_bkend_evt);
 }
 
-void CtrlIFace::send_cmd(ReqOP op, bool has_res, bool is_override,
-                         uint32_t operand, uint32_t val)
+void CtrlIFace::send_cmd(ReqOP op, bool has_res, uint32_t operand, uint32_t val)
 {
     auto cmd = m_cmd_alloc.alloc(ReqCmd{uint8_t(op & 0xf), uint8_t(has_res),
-                                        uint8_t(is_override),
                                         operand & ((1 << 26) - 1), val});
     {
         std::lock_guard<std::mutex> lk(m_ftend_lck);
         m_cmd_queue.push(cmd);
     }
     m_ftend_evt.notify_all();
-}
-
-void CtrlIFace::send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val)
-{
-    set_dirty();
-    send_cmd(op, false, is_override, operand, val);
-    m_cmd_cache.set(op, operand, is_override, val);
-}
-
-void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb)
-{
-    set_observed();
-    if (m_cmd_cache.get(op, operand, is_override, std::move(cb)))
-        return;
-    send_cmd(op, true, is_override, operand, 0);
-}
-
-NACS_EXPORT() void CtrlIFace::set_dds(ReqOP op, int chn, uint32_t val)
-{
-    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
-    send_set_cmd(op, chn, false, val);
-}
-
-NACS_EXPORT() void CtrlIFace::set_dds_ovr(ReqOP op, int chn, uint32_t val)
-{
-    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
-    send_set_cmd(op, chn, true, val);
-}
-
-NACS_EXPORT() void CtrlIFace::get_dds(ReqOP op, int chn, callback_t cb)
-{
-    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
-    send_get_cmd(op, chn, false, std::move(cb));
-}
-
-NACS_EXPORT() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, callback_t cb)
-{
-    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
-    send_get_cmd(op, chn, true, std::move(cb));
-}
-
-NACS_EXPORT() void CtrlIFace::reset_dds(int chn)
-{
-    set_dirty();
-    send_cmd(DDSReset, false, false, uint32_t(chn), 0);
-    // Clear override
-    m_cmd_cache.set(DDSFreq, chn, true, -1);
-    m_cmd_cache.set(DDSAmp, chn, true, -1);
-    m_cmd_cache.set(DDSPhase, chn, true, -1);
 }
 
 NACS_EXPORT() void CtrlIFace::quit()
@@ -235,7 +124,7 @@ NACS_EXPORT() void CtrlIFace::quit()
     m_ftend_evt.notify_all();
 }
 
-NACS_EXPORT() void CtrlIFace::run_frontend()
+void CtrlIFace::run_seq_frontend()
 {
     readEvent(m_bkend_evt);
     auto run_callbacks = [&] (auto seq) {
@@ -268,12 +157,6 @@ NACS_EXPORT() void CtrlIFace::run_frontend()
     }
     if (curseq)
         run_callbacks(curseq);
-    while (auto cmd = m_cmd_queue.pop()) {
-        if (cmd->has_res)
-            m_cmd_cache.set(ReqOP(cmd->opcode), cmd->operand,
-                            cmd->is_override, cmd->val);
-        m_cmd_alloc.free(cmd);
-    }
 }
 
 void CtrlIFace::set_dirty()
@@ -328,7 +211,14 @@ NACS_EXPORT() std::pair<bool,bool> CtrlIFace::has_pending()
 
 NACS_EXPORT() bool CtrlIFace::has_dds_ovr()
 {
-    return m_cmd_cache.has_dds_ovr();
+    for (auto &cache: m_dds_cache) {
+        for (auto &param: cache.params) {
+            if (param.overridden.load(std::memory_order_relaxed)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 }

@@ -49,12 +49,27 @@ public:
 private:
     class Runner;
 
+    void run_frontend() override;
     void set_ttl(int bank, uint32_t mask, bool val) override;
     void set_ttl_ovr(int bank, uint32_t mask, int val) override;
     uint32_t get_ttl(int bank) override;
     TTLOvr get_ttl_ovr(int bank) override;
+    void set_dds(ReqOP op, int chn, uint32_t val) override;
+    void set_dds_ovr(ReqOP op, int chn, uint32_t val) override;
+    void get_dds(ReqOP op, int chn, callback_t cb) override;
+    void get_dds_ovr(ReqOP op, int chn, callback_t cb) override;
+    void reset_dds(int chn) override;
     void set_clock(uint8_t val) override;
     uint8_t get_clock() override;
+
+    // Pending callbacks for the DDS parameter `op` of channel `chn`
+    // waiting for the result from the backend.
+    std::vector<callback_t> &dds_get_cbs(ReqOP op, int chn)
+    {
+        return m_dds_get_cbs[chn][op - DDSFreq];
+    }
+    // Update the cached value of a DDS parameter and run the pending callbacks.
+    void update_dds_cache(ReqOP op, int chn, uint32_t val);
 
     std::vector<int> get_active_dds() override;
     bool has_ttl_ovr() override;
@@ -79,7 +94,6 @@ private:
     std::pair<uint32_t,bool> process_reqcmd(Runner *runner=nullptr);
 
     void run_seq(ReqSeq *seq);
-
     void worker();
 
     void sync_ttl()
@@ -97,10 +111,7 @@ private:
         }
     }
 
-    static constexpr uint8_t NDDS = 22;
-
     Pulser m_p;
-    DDSState m_dds_ovr[NDDS];
     uint32_t m_ttl[NUM_TTL_BANKS];
     uint16_t m_dds_phase[NDDS] = {0};
     // Reinitialize is a complicated sequence and is rarely needed
@@ -110,6 +121,9 @@ private:
     uint64_t m_dds_check_time = 0;
     ReqCmd *m_cmd_waiting = nullptr;
 
+    std::vector<callback_t> m_dds_get_cbs[NDDS][3];
+
+    // Must be after all the members used by the worker thread.
     std::thread m_worker;
 };
 
@@ -148,7 +162,7 @@ public:
     }
     void dds_freq(uint8_t chn, uint32_t freq)
     {
-        if (unlikely(m_ctrl.m_dds_ovr[chn].freq != uint32_t(-1))) {
+        if (unlikely(m_ctrl.dds_overridden(DDSFreq, chn))) {
             wait(Seq::Zynq::PulseTime::DDSFreq);
             return;
         }
@@ -157,7 +171,7 @@ public:
     }
     void dds_amp(uint8_t chn, uint16_t amp)
     {
-        if (unlikely(m_ctrl.m_dds_ovr[chn].amp_enable)) {
+        if (unlikely(m_ctrl.dds_overridden(DDSAmp, chn))) {
             wait(Seq::Zynq::PulseTime::DDSAmp);
             return;
         }
@@ -166,7 +180,7 @@ public:
     }
     void dds_phase(uint8_t chn, uint16_t phase)
     {
-        if (unlikely(m_ctrl.m_dds_ovr[chn].phase_enable)) {
+        if (unlikely(m_ctrl.dds_overridden(DDSPhase, chn))) {
             wait(Seq::Zynq::PulseTime::DDSPhase);
             return;
         }
@@ -176,7 +190,7 @@ public:
     }
     void dds_detphase(uint8_t chn, uint16_t detphase)
     {
-        if (unlikely(m_ctrl.m_dds_ovr[chn].phase_enable)) {
+        if (unlikely(m_ctrl.dds_overridden(DDSPhase, chn))) {
             wait(Seq::Zynq::PulseTime::DDSPhase);
             return;
         }
@@ -319,17 +333,26 @@ Controller<Pulser>::~Controller()
     m_worker.join();
 }
 
-// TTL channels are get and set in batch so they don't really fit
-// the cache used for other channels.
-// Since the ttl get requests are always handled directly (`get_ttl*`)
-// we'll just skip the cache and callback storage for now.
+template<typename Pulser>
+void Controller<Pulser>::update_dds_cache(ReqOP op, int chn, uint32_t val)
+{
+    auto &cache = dds_cache(op, chn);
+    cache.cached = true;
+    cache.val = val;
+    cache.t = getTime();
+    auto &cbs = dds_get_cbs(op, chn);
+    for (auto &cb: cbs)
+        cb(val);
+    cbs.clear();
+}
+
 template<typename Pulser>
 void Controller<Pulser>::set_ttl(int bank, uint32_t mask, bool val)
 {
     if (!mask)
         return;
     set_dirty();
-    send_cmd(TTL, false, false, uint32_t(val) | uint32_t(bank << 2), mask);
+    send_cmd(TTL, false, uint32_t(val) | uint32_t(bank << 2), mask);
 }
 
 template<typename Pulser>
@@ -374,9 +397,75 @@ auto Controller<Pulser>::get_ttl_ovr(int bank) -> TTLOvr
 }
 
 template<typename Pulser>
+void Controller<Pulser>::set_dds(ReqOP op, int chn, uint32_t val)
+{
+    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
+    set_dirty();
+    send_cmd(op, false, chn, val);
+    // A normal set of an overridden parameter is treated as an override by the backend.
+    update_dds_cache(op, chn, val);
+}
+
+template<typename Pulser>
+void Controller<Pulser>::set_dds_ovr(ReqOP op, int chn, uint32_t val)
+{
+    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
+    set_dirty();
+    auto &cache = dds_cache(op, chn);
+    if (val == uint32_t(-1)) {
+        // Turning off the override doesn't change the value in the hardware.
+        cache.overridden.store(false, std::memory_order_relaxed);
+        return;
+    }
+    send_cmd(op, false, chn, val);
+    cache.overridden.store(true, std::memory_order_relaxed);
+    update_dds_cache(op, chn, val);
+}
+
+template<typename Pulser>
+void Controller<Pulser>::get_dds(ReqOP op, int chn, callback_t cb)
+{
+    set_observed();
+    auto &cache = dds_cache(op, chn);
+    if (cache.cached && getTime() - cache.t <= 100000000) {
+        // < 0.1s
+        cb(cache.val);
+        return;
+    }
+    // Ask the backend for the current value.
+    // Only send the query if there isn't one in flight already.
+    auto &cbs = dds_get_cbs(op, chn);
+    auto was_empty = cbs.empty();
+    cbs.push_back(std::move(cb));
+    if (was_empty) {
+        send_cmd(op, true, chn, 0);
+    }
+}
+
+template<typename Pulser>
+void Controller<Pulser>::get_dds_ovr(ReqOP op, int chn, callback_t cb)
+{
+    // DDS overrides are only kept in software so no need to ask the backend.
+    set_observed();
+    auto &cache = dds_cache(op, chn);
+    cb(cache.overridden.load(std::memory_order_relaxed) ? cache.val : uint32_t(-1));
+}
+
+template<typename Pulser>
+void Controller<Pulser>::reset_dds(int chn)
+{
+    set_dirty();
+    send_cmd(DDSReset, false, uint32_t(chn), 0);
+    // Clear override and the cached values that are reset.
+    for (auto &param: m_dds_cache[chn].params)
+        param.reset();
+}
+
+template<typename Pulser>
 void Controller<Pulser>::set_clock(uint8_t val)
 {
-    send_set_cmd(Clock, 0, false, val);
+    set_dirty();
+    send_cmd(Clock, false, 0, val);
 }
 
 template<typename Pulser>
@@ -384,6 +473,21 @@ uint8_t Controller<Pulser>::get_clock()
 {
     set_observed();
     return m_p.cur_clock();
+}
+
+template<typename Pulser>
+void Controller<Pulser>::run_frontend()
+{
+    run_seq_frontend();
+    while (auto cmd = pop_cmd()) {
+        if (cmd->has_res) {
+            // Only the DDS parameters are queried from the backend.
+            auto op = ReqOP(cmd->opcode);
+            assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
+            update_dds_cache(op, cmd->operand, cmd->val);
+        }
+        free_cmd(cmd);
+    }
 }
 
 template<typename Pulser>
@@ -428,11 +532,8 @@ template<typename Pulser>
 bool Controller<Pulser>::check_dds(int chn)
 {
     assert(!m_cmd_waiting);
+    // The overrides are cleared by the frontend (`reset_dds`).
     if (m_dds_pending_reset[chn]) {
-        auto &ovr = m_dds_ovr[chn];
-        ovr.phase_enable = 0;
-        ovr.amp_enable = 0;
-        ovr.freq = -1;
         m_dds_phase[chn] = 0;
     }
     auto res = m_p.check_dds(chn, m_dds_pending_reset[chn]);
@@ -522,7 +623,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
     switch (cmd->opcode) {
     case TTL: {
         // Should have been caught by set_ttl_ovr/get_ttl*.
-        assert(!cmd->has_res && !cmd->is_override);
+        assert(!cmd->has_res);
         auto type = cmd->operand & 3;
         auto bank = cmd->operand >> 2;
         if (type) {
@@ -536,108 +637,33 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         m_p.template ttl<checked>(m_ttl[bank], Seq::Zynq::PulseTime::Min, bank);
         return {Seq::Zynq::PulseTime::Min, false};
     }
+    // The overrides are handled by the frontend so both the normal and the override
+    // set commands only need to write the value to the DDS.
     case DDSFreq: {
-        bool is_override = cmd->is_override;
-        bool has_res = cmd->has_res;
         int chn = cmd->operand;
-        uint32_t val = cmd->val;
-        assert(chn < 22);
-        auto &ovr = m_dds_ovr[chn];
-        // If override is on, treat all set command as override command.
-        if (!is_override && ovr.freq != uint32_t(-1) && !has_res)
-            is_override = true;
-        if (is_override) {
-            // Should be handled by the cache in ctrl_iface.
-            assert(!has_res);
-            if (val == ovr.freq)
-                return {0, false};
-            ovr.freq = val;
-            if (val == uint32_t(-1)) {
-                return {0, false};
-            }
-            else {
-                m_p.template dds_set_freq<checked>(chn, val);
-                return {Seq::Zynq::PulseTime::DDSFreq, false};
-            }
-        }
-        if (!has_res) {
-            m_p.template dds_set_freq<checked>(chn, val);
+        assert(chn < NDDS);
+        if (!cmd->has_res) {
+            m_p.template dds_set_freq<checked>(chn, cmd->val);
             return {Seq::Zynq::PulseTime::DDSFreq, false};
         }
         m_p.template dds_get_freq<checked>(chn);
         return {Seq::Zynq::PulseTime::DDSFreq, true};
     }
     case DDSAmp: {
-        bool is_override = cmd->is_override;
-        bool has_res = cmd->has_res;
         int chn = cmd->operand;
-        uint32_t val = cmd->val;
-        uint16_t val16 = uint16_t(val);
-        assert(chn < 22);
-        auto &ovr = m_dds_ovr[chn];
-        // If override is on, treat all set command as override command.
-        if (!is_override && ovr.amp_enable && !has_res)
-            is_override = true;
-        if (is_override) {
-            // Should be handled by the cache in ctrl_iface.
-            assert(!has_res);
-            // val16 == ovr.amp does not imply the override is on
-            // so we need to check that separately.
-            if (val16 == ovr.amp && ovr.amp_enable) {
-                return {0, false};
-            }
-            else if (val == uint32_t(-1)) {
-                if (ovr.amp_enable)
-                    ovr.amp_enable = false;
-                return {0, false};
-            }
-            else {
-                ovr.amp = uint16_t(val16 & ((1 << 12) - 1));
-                ovr.amp_enable = true;
-                m_p.template dds_set_amp<checked>(chn, val16);
-                return {Seq::Zynq::PulseTime::DDSAmp, false};
-            }
-        }
-        if (!has_res) {
-            m_p.template dds_set_amp<checked>(chn, val16);
+        assert(chn < NDDS);
+        if (!cmd->has_res) {
+            m_p.template dds_set_amp<checked>(chn, uint16_t(cmd->val));
             return {Seq::Zynq::PulseTime::DDSAmp, false};
         }
         m_p.template dds_get_amp<checked>(chn);
         return {Seq::Zynq::PulseTime::DDSAmp, true};
     }
     case DDSPhase: {
-        bool is_override = cmd->is_override;
-        bool has_res = cmd->has_res;
         int chn = cmd->operand;
-        uint32_t val = cmd->val;
-        uint16_t val16 = uint16_t(val);
-        assert(chn < 22);
-        auto &ovr = m_dds_ovr[chn];
-        // If override is on, treat all set command as override command.
-        if (!is_override && ovr.phase_enable && !has_res)
-            is_override = true;
-        if (is_override) {
-            // Should be handled by the cache in ctrl_iface.
-            assert(!has_res);
-            // val16 == ovr.phase does not imply the override is on
-            // so we need to check that separately.
-            if (val16 == ovr.phase && ovr.phase_enable) {
-                return {0, false};
-            }
-            else if (val == uint32_t(-1)) {
-                if (ovr.phase_enable)
-                    ovr.phase_enable = false;
-                return {0, false};
-            }
-            else {
-                ovr.phase = val16;
-                ovr.phase_enable = true;
-                m_dds_phase[chn] = val16;
-                m_p.template dds_set_phase<checked>(chn, val16);
-                return {Seq::Zynq::PulseTime::DDSPhase, false};
-            }
-        }
-        if (!has_res) {
+        assert(chn < NDDS);
+        if (!cmd->has_res) {
+            auto val16 = uint16_t(cmd->val);
             m_dds_phase[chn] = val16;
             m_p.template dds_set_phase<checked>(chn, val16);
             return {Seq::Zynq::PulseTime::DDSPhase, false};
@@ -646,14 +672,14 @@ std::pair<uint32_t,bool> Controller<Pulser>::run_cmd(const ReqCmd *cmd, Runner *
         return {Seq::Zynq::PulseTime::DDSPhase, true};
     }
     case DDSReset: {
-        assert(!cmd->is_override && !cmd->has_res && cmd->val == 0);
+        assert(!cmd->has_res && cmd->val == 0);
         int chn = cmd->operand;
         assert(chn < 22);
         m_dds_pending_reset[chn] = true;
         return {0, false};
     }
     case Clock:
-        assert(!cmd->is_override && !cmd->has_res && cmd->operand == 0);
+        assert(!cmd->has_res && cmd->operand == 0);
         m_p.template clock<checked>(uint8_t(cmd->val));
         return {Seq::Zynq::PulseTime::Clock, false};
     default:
