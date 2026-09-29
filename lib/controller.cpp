@@ -37,6 +37,14 @@
 namespace {
 using namespace Molecube;
 
+// The DMA reads the instructions in blocks of 16 x 64bits.
+static constexpr size_t dma_block_sz = 16 * 8;
+// Each buffer is read with a single DMA command, which can read at most 1024 blocks.
+static constexpr size_t dma_max_buff_sz = 64 * 1024;
+static_assert(dma_max_buff_sz / dma_block_sz <= 1024);
+// Minimum number of buffers needed to run DMA sequences.
+static constexpr size_t dma_min_buffs = 3;
+
 template<typename Pulser>
 class Controller final : public CtrlIFace {
     Controller(const Controller&) = delete;
@@ -846,18 +854,217 @@ void Controller<Pulser>::worker()
     }
 }
 
+struct DMABuff {
+    uint8_t *virt;
+    uintptr_t phy;
+    size_t size;
+};
+
+template<typename Pulser>
+static void free_dma_buffs(std::vector<DMABuff> &buffs)
+{
+    for (auto &buff: buffs)
+        Pulser::free_buffer(buff.virt, buff.size);
+    buffs.clear();
+}
+
+// Allocate as many DMA buffers as possible, starting from the largest size.
+// Returns an empty list if there are not enough buffers to run DMA sequences.
+template<typename Pulser>
+static std::vector<DMABuff> alloc_dma_buffs()
+{
+    std::vector<DMABuff> buffs;
+    for (size_t size = dma_max_buff_sz; size >= 4096;) {
+        auto buff = Pulser::alloc_buffer(size);
+        if (!buff) {
+            size /= 2;
+            continue;
+        }
+        auto phy = Pulser::buffer_addr(buff);
+        // The DMA address must be page aligned and cannot cross a 1MB boundary.
+        assert((phy & 0xfff) == 0 && (phy >> 20) == ((phy + size - 1) >> 20));
+        buffs.push_back({(uint8_t*)buff, phy, size});
+    }
+    if (buffs.size() < dma_min_buffs)
+        free_dma_buffs<Pulser>(buffs);
+    return buffs;
+}
+
+template<typename Pulser>
+class ControllerDMA final : public CtrlIFace {
+    ControllerDMA(const ControllerDMA&) = delete;
+    void operator=(const ControllerDMA&) = delete;
+
+public:
+    // Takes the ownership of the DMA buffers allocated with `alloc_dma_buffs`.
+    ControllerDMA(Pulser &&p, std::vector<DMABuff> &&dma_buffs);
+    ~ControllerDMA();
+
+private:
+    void run_frontend() override;
+    void set_ttl(int bank, uint32_t mask, bool val) override;
+    void set_ttl_ovr(int bank, uint32_t mask, int val) override;
+    uint32_t get_ttl(int bank) override;
+    TTLOvr get_ttl_ovr(int bank) override;
+    void set_dds(ReqOP op, int chn, uint32_t val) override;
+    void set_dds_ovr(ReqOP op, int chn, uint32_t val) override;
+    void get_dds(ReqOP op, int chn, callback_t cb) override;
+    void get_dds_ovr(ReqOP op, int chn, callback_t cb) override;
+    void reset_dds(int chn) override;
+    void set_clock(uint8_t val) override;
+    uint8_t get_clock() override;
+
+    std::vector<int> get_active_dds() override;
+    bool has_ttl_ovr() override;
+
+    void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) override;
+    DDSInstTiming get_dds_inst_timing() const override;
+
+    Pulser m_p;
+    std::vector<DMABuff> m_dma_buffs;
+};
+
+template<typename Pulser>
+ControllerDMA<Pulser>::ControllerDMA(Pulser &&p, std::vector<DMABuff> &&dma_buffs)
+    : m_p(std::move(p)),
+      m_dma_buffs(std::move(dma_buffs))
+{
+    assert(m_dma_buffs.size() >= dma_min_buffs);
+}
+
+template<typename Pulser>
+ControllerDMA<Pulser>::~ControllerDMA()
+{
+    quit();
+    free_dma_buffs<Pulser>(m_dma_buffs);
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::set_ttl(int bank, uint32_t mask, bool val)
+{
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::set_ttl_ovr(int bank, uint32_t mask, int val)
+{
+}
+
+template<typename Pulser>
+uint32_t ControllerDMA<Pulser>::get_ttl(int bank)
+{
+    return 0;
+}
+
+template<typename Pulser>
+auto ControllerDMA<Pulser>::get_ttl_ovr(int bank) -> TTLOvr
+{
+    return {0, 0};
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::set_dds(ReqOP op, int chn, uint32_t val)
+{
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::set_dds_ovr(ReqOP op, int chn, uint32_t val)
+{
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::get_dds(ReqOP op, int chn, callback_t cb)
+{
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::get_dds_ovr(ReqOP op, int chn, callback_t cb)
+{
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::reset_dds(int chn)
+{
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::set_clock(uint8_t val)
+{
+}
+
+template<typename Pulser>
+uint8_t ControllerDMA<Pulser>::get_clock()
+{
+    return 0;
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::run_frontend()
+{
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::set_dds_timing1(int adsu, int wrlow, int adhd,
+                                            int fuddl, int fudhd)
+{
+}
+
+template<typename Pulser>
+DDSInstTiming ControllerDMA<Pulser>::get_dds_inst_timing() const
+{
+    return {};
+}
+
+template<typename Pulser>
+std::vector<int> ControllerDMA<Pulser>::get_active_dds()
+{
+    return {};
+}
+
+template<typename Pulser>
+bool ControllerDMA<Pulser>::has_ttl_ovr()
+{
+    return false;
+}
+
+// Create the DMA controller if the DMA mode is enabled and can be used,
+// otherwise create the normal controller.
+// Throws if the DMA mode is required but cannot be used.
+template<typename Pulser>
+static std::unique_ptr<CtrlIFace> create_controller(Pulser &&p,
+                                                    Config::DMAEnable dma_enable)
+{
+    if (!p.support_dma()) {
+        if (dma_enable == Config::DMAEnable::Required)
+            throw std::runtime_error("DMA mode required but not supported.\n");
+        return std::unique_ptr<CtrlIFace>(new Controller<Pulser>(std::move(p)));
+    }
+    if (dma_enable != Config::DMAEnable::Disabled) {
+        auto buffs = alloc_dma_buffs<Pulser>();
+        if (!buffs.empty())
+            return std::unique_ptr<CtrlIFace>(new ControllerDMA<Pulser>(std::move(p),
+                                                                        std::move(buffs)));
+        if (dma_enable == Config::DMAEnable::Required) {
+            throw std::runtime_error("DMA mode required but failed to allocate DMA buffers.\n");
+        }
+    }
+    // Make sure the DMA mode is disabled in the hardware if we are not using it.
+    p.set_dma_control(0);
+    return std::unique_ptr<CtrlIFace>(new Controller<Pulser>(std::move(p)));
+}
+
 } // anonymous namespace
 
 namespace Molecube {
 
-NACS_EXPORT() std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy)
+NACS_EXPORT() std::unique_ptr<CtrlIFace> CtrlIFace::create(bool dummy,
+                                                           Config::DMAEnable dma_enable)
 {
     if (!dummy) {
         if (auto addr = Molecube::Pulser::address())
-            return std::unique_ptr<CtrlIFace>(new Controller<Pulser>(Pulser(addr)));
+            return create_controller(Pulser(addr), dma_enable);
         throw std::runtime_error("Failed to create real pulser, use dummy pulser instead.\n");
     }
-    return std::unique_ptr<CtrlIFace>(new Controller<DummyPulser>(DummyPulser()));
+    return create_controller(DummyPulser(), dma_enable);
 }
 
 }

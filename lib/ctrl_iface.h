@@ -20,6 +20,7 @@
 #define LIBMOLECUBE_CTRL_IFACE_H
 
 #include "pulser_common.h"
+#include "config.h"
 
 #include <nacs-utils/container.h>
 #include <nacs-utils/mem.h>
@@ -357,7 +358,8 @@ public:
     std::pair<bool,bool> has_pending();
 
     // Defined in `controller.cpp`
-    static std::unique_ptr<CtrlIFace> create(bool dummy=false);
+    static std::unique_ptr<CtrlIFace> create(bool dummy=false,
+                                             Config::DMAEnable dma_enable=Config::DMAEnable::Disabled);
 
 private:
     uint64_t _run_code(bool is_cmd, uint32_t ver, uint64_t seq_len_ns,
