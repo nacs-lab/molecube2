@@ -66,6 +66,16 @@ class Pulser {
     {
         return (read(2) & Bits::NumRes) >> 4;
     }
+    // Request for the DMA DDS write disabler register (0x54) selecting
+    // the register pair containing the byte address `addr` of DDS `chn`.
+    static inline uint32_t dma_dds_mask_req(int chn, uint8_t addr)
+    {
+        assert(chn >= 0 && chn < 22);
+        assert(addr < 0x80);
+        uint32_t bus_id = chn >= 11;
+        uint32_t dds_id = bus_id ? chn - 11 : chn;
+        return bus_id | (dds_id << 1) | (uint32_t(addr >> 2) << 5);
+    }
 
     // Internal pulses
     template<bool checked>
@@ -252,6 +262,19 @@ public:
     inline void set_dma_control(uint32_t ctrl)
     {
         write(0x59, ctrl);
+    }
+    // DMA DDS write disabler.
+    // DMA writes to a disabled 16 bit DDS register are redirected to a no-op register.
+    // The registers are configured in pairs: bit 0 of `mask` is for the register
+    // at byte address `addr & ~3` of DDS `chn` and bit 1 is for the one at `(addr & ~3) + 2`.
+    inline void set_dma_dds_mask(int chn, uint8_t addr, uint8_t mask)
+    {
+        write(0x54, dma_dds_mask_req(chn, addr) | (1 << 10) | (uint32_t(mask & 3) << 11));
+    }
+    inline uint8_t get_dma_dds_mask(int chn, uint8_t addr)
+    {
+        write(0x54, dma_dds_mask_req(chn, addr));
+        return uint8_t(read(0x54) & 3);
     }
 
     // Pulses

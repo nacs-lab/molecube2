@@ -251,7 +251,8 @@ DummyPulser::DummyPulser(DummyPulser &&o)
       m_hold(o.m_hold),
       m_force_release(o.m_force_release),
       m_dds(o.m_dds),
-      m_release_time(o.m_release_time)
+      m_release_time(o.m_release_time),
+      m_dma_dds_mask(o.m_dma_dds_mask)
 {
     for (int i = 0; i < NUM_TTL_BANKS; i++) {
         m_ttl_hi[i].store(o.m_ttl_hi[i].load(std::memory_order_relaxed),

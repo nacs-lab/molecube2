@@ -162,6 +162,17 @@ public:
     {
         m_dma_control.store(ctrl & 1, std::memory_order_release);
     }
+    // Only stores the value since the DMA instructions are not executed.
+    inline void set_dma_dds_mask(int chn, uint8_t addr, uint8_t mask)
+    {
+        assert(chn >= 0 && chn < NDDS && addr < 0x80);
+        m_dma_dds_mask[chn * 32 + addr / 4] = uint8_t(mask & 3);
+    }
+    inline uint8_t get_dma_dds_mask(int chn, uint8_t addr) const
+    {
+        assert(chn >= 0 && chn < NDDS && addr < 0x80);
+        return m_dma_dds_mask[chn * 32 + addr / 4];
+    }
     void release_hold();
     void set_hold();
     void toggle_init();
@@ -366,6 +377,9 @@ private:
     uint8_t m_dds_adhd{7};
     uint8_t m_dds_fuddl{7};
     uint8_t m_dds_fudhd{7};
+
+    // DMA DDS write disable bits for each pair of 16 bit registers.
+    std::array<uint8_t,NDDS * 32> m_dma_dds_mask{};
 };
 
 }
