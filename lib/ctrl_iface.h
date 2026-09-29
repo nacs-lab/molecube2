@@ -270,6 +270,11 @@ protected:
      */
     void backend_event();
 
+    void set_dirty();
+    void set_observed();
+
+    void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
+
     /**
      * Try to concurrently set/get values without sending a command in the queue.
      * The backend should implement this for commands
@@ -346,8 +351,8 @@ public:
     virtual void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) = 0;
     virtual DDSInstTiming get_dds_inst_timing() const = 0;
 
-    void set_clock(uint8_t val);
-    void get_clock(callback_t cb);
+    virtual void set_clock(uint8_t val) = 0;
+    virtual uint8_t get_clock() = 0;
 
     virtual bool has_ttl_ovr() = 0;
     bool has_dds_ovr();
@@ -370,11 +375,7 @@ private:
                        std::span<const uint8_t> code,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
-    void set_dirty();
-    void set_observed();
-
     void send_cmd(const ReqCmd &cmd);
-    void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
     void send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
 
     void send_ttl_set_cmd(uint32_t operand, bool is_override, uint32_t val);

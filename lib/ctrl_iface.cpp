@@ -282,16 +282,6 @@ NACS_EXPORT() void CtrlIFace::reset_dds(int chn)
     m_cmd_cache.set(DDSPhase, chn, true, -1);
 }
 
-NACS_EXPORT() void CtrlIFace::set_clock(uint8_t val)
-{
-    send_set_cmd(Clock, 0, false, val);
-}
-
-NACS_EXPORT() void CtrlIFace::get_clock(callback_t cb)
-{
-    send_get_cmd(Clock, 0, false, std::move(cb));
-}
-
 NACS_EXPORT() void CtrlIFace::quit()
 {
     {
@@ -344,7 +334,7 @@ NACS_EXPORT() void CtrlIFace::run_frontend()
     }
 }
 
-inline void CtrlIFace::set_dirty()
+void CtrlIFace::set_dirty()
 {
     // If no one has looked at our state, we don't need to invalidate their cache.
     // Also, if the last one who looked at the state ID still think there's a sequence running
@@ -354,7 +344,7 @@ inline void CtrlIFace::set_dirty()
     }
 }
 
-inline void CtrlIFace::set_observed()
+void CtrlIFace::set_observed()
 {
     m_observed = true;
 }

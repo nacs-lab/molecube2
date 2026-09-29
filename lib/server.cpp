@@ -801,9 +801,7 @@ void Server::process_zmq()
         send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
     }
     else if (ZMQ::match(msg, "get_clock")) {
-        m_ctrl->get_clock([addr{std::move(addr)}, this] (uint32_t v) mutable {
-            send_reply(addr, ZMQ::bits_msg(uint8_t(v)));
-        });
+        send_reply(addr, ZMQ::bits_msg(m_ctrl->get_clock()));
     }
     else if (ZMQ::match(msg, "set_ttl_names")) {
         Log::info("Setting TTL names.\n");

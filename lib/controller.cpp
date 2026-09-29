@@ -49,6 +49,9 @@ public:
 private:
     class Runner;
 
+    void set_clock(uint8_t val) override;
+    uint8_t get_clock() override;
+
     bool concurrent_set(ReqOP op, uint32_t operand, bool is_override,
                         uint32_t val) override;
     bool concurrent_get(ReqOP op, uint32_t operand, bool is_override,
@@ -317,6 +320,19 @@ Controller<Pulser>::~Controller()
 }
 
 template<typename Pulser>
+void Controller<Pulser>::set_clock(uint8_t val)
+{
+    send_set_cmd(Clock, 0, false, val);
+}
+
+template<typename Pulser>
+uint8_t Controller<Pulser>::get_clock()
+{
+    set_observed();
+    return m_p.cur_clock();
+}
+
+template<typename Pulser>
 bool Controller<Pulser>::concurrent_set(ReqOP op, uint32_t operand, bool is_override,
                                         uint32_t val)
 {
@@ -349,10 +365,6 @@ template<typename Pulser>
 bool Controller<Pulser>::concurrent_get(ReqOP op, uint32_t operand, bool is_override,
                                         uint32_t &val)
 {
-    if (op == Clock) {
-        val = m_p.cur_clock();
-        return true;
-    }
     if (op != TTL)
         return false;
     auto type = operand & 3;
