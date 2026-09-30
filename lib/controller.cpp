@@ -409,8 +409,7 @@ template<typename Pulser>
 void Controller<Pulser>::update_dds_cache(ReqOP op, int chn, uint32_t val)
 {
     auto &cache = dds_cache(op, chn);
-    cache.cached = true;
-    cache.val = val;
+    cache.val.store(val, std::memory_order_relaxed);
     cache.t = getTime();
     auto &cbs = dds_get_cbs(op, chn);
     for (auto &cb: cbs)
@@ -499,9 +498,10 @@ void Controller<Pulser>::get_dds(ReqOP op, int chn, callback_t cb)
 {
     set_observed();
     auto &cache = dds_cache(op, chn);
-    if (cache.cached && getTime() - cache.t <= 100000000) {
+    auto val = cache.val.load(std::memory_order_relaxed);
+    if (val != cache.invalid && getTime() - cache.t <= 100000000) {
         // < 0.1s
-        cb(cache.val);
+        cb(val);
         return;
     }
     // Ask the backend for the current value.
@@ -520,7 +520,8 @@ void Controller<Pulser>::get_dds_ovr(ReqOP op, int chn, callback_t cb)
     // DDS overrides are only kept in software so no need to ask the backend.
     set_observed();
     auto &cache = dds_cache(op, chn);
-    cb(cache.overridden.load(std::memory_order_relaxed) ? cache.val : uint32_t(-1));
+    cb(cache.overridden.load(std::memory_order_relaxed) ?
+       cache.val.load(std::memory_order_relaxed) : uint32_t(-1));
 }
 
 template<typename Pulser>
@@ -954,6 +955,10 @@ private:
     void set_clock(uint8_t val) override;
     uint8_t get_clock() override;
 
+    // Read the DDS parameter `op` of channel `chn` from the DDS register cache
+    // in the hardware.
+    uint32_t read_dds_param(ReqOP op, int chn);
+
     std::vector<int> get_active_dds() override;
     bool has_ttl_ovr() override;
     bool support_dma() const override
@@ -982,7 +987,9 @@ private:
 
 
     Pulser m_p;
-    uint16_t m_dds_phase[NDDS] = {0};
+    // Protecting the DDS register reads (`read_dds_param`), which take
+    // a write and a read, from the frontend and the sequence worker.
+    std::mutex m_dds_read_lock;
     std::vector<DMABuff> m_dma_buffs;
     // Number of DMA transfers started (modulo 2^32).
     uint32_t m_dma_started = 0;
@@ -1191,13 +1198,13 @@ public:
     void dds_phase(uint8_t chn, uint16_t phase)
     {
         if (likely(!m_ctrl.dds_overridden(DDSPhase, chn)))
-            m_ctrl.m_dds_phase[chn] = phase;
+            m_dds_phase[chn] = phase;
         add_dds_set16(chn, 0x30, phase);
         wait(Seq::Zynq::PulseTime::DDSPhase);
     }
     void dds_detphase(uint8_t chn, uint16_t detphase)
     {
-        dds_phase(chn, uint16_t(m_ctrl.m_dds_phase[chn] + detphase));
+        dds_phase(chn, uint16_t(m_dds_phase[chn] + detphase));
     }
     void dac(uint8_t chn, uint16_t V)
     {
@@ -1246,6 +1253,18 @@ public:
         // The sequence time restarts from the trigger.
         m_t = 0;
     }
+    // Initialize the DDS phases used by `dds_detphase` from the cache,
+    // or from the hardware if the phase is not cached.
+    void init_dds_phase()
+    {
+        for (int chn = 0; chn < NDDS; chn++) {
+            auto &cache = m_ctrl.dds_cache(DDSPhase, chn);
+            auto val = cache.val.load(std::memory_order_relaxed);
+            if (val == cache.invalid)
+                val = m_ctrl.read_dds_param(DDSPhase, chn);
+            m_dds_phase[chn] = uint16_t(val);
+        }
+    }
     // Wait until the end of the sequence (measured from the start or the last trigger).
     void wait_seq_end()
     {
@@ -1285,6 +1304,9 @@ private:
     const std::array<uint32_t,NUM_TTL_BANKS> m_ttlmask;
     // TTL values of the sequence. Only the bits in the DMA TTL mask are used.
     uint32_t m_ttl[NUM_TTL_BANKS];
+    // DDS phases of the sequence for `dds_detphase`.
+    // Only initialized (`init_dds_phase`) for command lists.
+    uint16_t m_dds_phase[NDDS];
     // Sequence length in sequence time unit.
     const uint64_t m_seq_len;
     // Sequence time since the start or the last trigger.
@@ -1380,6 +1402,24 @@ void ControllerDMA<Pulser>::set_dds_ovr(ReqOP op, int chn, uint32_t val)
 }
 
 template<typename Pulser>
+uint32_t ControllerDMA<Pulser>::read_dds_param(ReqOP op, int chn)
+{
+    assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
+    assert(0 <= chn && chn < NDDS);
+    std::lock_guard<std::mutex> lk(m_dds_read_lock);
+    auto read = [&] (uint8_t addr) -> uint32_t {
+        if (chn >= 11)
+            return m_p.read_dds1(uint8_t(chn - 11), addr);
+        return m_p.read_dds0(uint8_t(chn), addr);
+    };
+    if (op == DDSFreq)
+        return read(0x2c) | (read(0x2e) << 16);
+    if (op == DDSAmp)
+        return read(0x32);
+    return read(0x30);
+}
+
+template<typename Pulser>
 void ControllerDMA<Pulser>::get_dds(ReqOP op, int chn, callback_t cb)
 {
 }
@@ -1462,6 +1502,7 @@ void ControllerDMA<Pulser>::run_seq(ReqSeq *seq)
             auto ver = seq->ver;
             assert(ver == 1 || ver == 2 || ver == 3);
             if (unlikely(seq->type == SeqType::CmdList)) {
+                runner.init_dds_phase();
                 Seq::Zynq::CmdList::ExeState exestate;
                 if (ver > 1)
                     exestate.min_time = Seq::Zynq::PulseTime::Min2;

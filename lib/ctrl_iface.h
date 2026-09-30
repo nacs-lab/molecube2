@@ -149,21 +149,24 @@ protected:
     static constexpr uint8_t NDDS = 22;
 
     // Frontend cache and override state of the DDS parameters.
-    // Only `overridden` may be read by the worker thread (during a sequence).
+    // Only written by the frontend. All but `t` may be read by the worker threads.
     struct DDSParamCache {
+        // Marks `val` as not cached. The amplitude and the phase are at most 16 bits
+        // and the frequency is 31 bits so this is never a normal value.
+        // A frequency of `-1` (which is still valid) is simply not cached
+        // but it is still returned when read from the hardware.
+        static constexpr uint32_t invalid = uint32_t(-1);
         // Whether the parameter is overridden (by the frontend).
         std::atomic<bool> overridden{false};
-        // Whether `val` is the current value of the parameter.
-        bool cached = false;
-        // The current value, which is also the override value if `overridden`.
-        uint32_t val = 0;
+        // The current value (`invalid` if not cached),
+        // which is also the override value if `overridden`.
+        std::atomic<uint32_t> val{invalid};
         // Time when `val` was cached.
         uint64_t t = 0;
         void reset()
         {
             overridden.store(false, std::memory_order_relaxed);
-            cached = false;
-            val = 0;
+            val.store(invalid, std::memory_order_relaxed);
             t = 0;
         }
     };
