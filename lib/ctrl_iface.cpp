@@ -25,6 +25,27 @@
 
 namespace Molecube {
 
+namespace {
+
+// Wait until `quit` or `pred()` is true, for at most `maxt` nanoseconds
+// if `maxt >= 0`. Return false if `quit` is true.
+template<typename Pred>
+static bool wait_event(std::mutex &lock, std::condition_variable &evt, const bool &quit,
+                       int64_t maxt, Pred &&pred)
+{
+    std::unique_lock<std::mutex> lk(lock);
+    auto cond = [&] { return quit || pred(); };
+    if (maxt < 0) {
+        evt.wait(lk, cond);
+    }
+    else {
+        evt.wait_for(lk, std::chrono::nanoseconds(maxt), cond);
+    }
+    return !quit;
+}
+
+}
+
 CtrlIFace::CtrlIFace()
     : m_bkend_evt(openEvent(0, EFD_NONBLOCK | EFD_CLOEXEC))
 {
@@ -32,17 +53,23 @@ CtrlIFace::CtrlIFace()
 
 bool CtrlIFace::wait(int64_t maxt)
 {
-    std::unique_lock<std::mutex> lk(m_ftend_lck);
-    auto pred = [&] {
-        return m_quit || m_seq_queue.get_filter() || m_cmd_queue.get_filter();
-    };
-    if (maxt < 0) {
-        m_ftend_evt.wait(lk, pred);
-    }
-    else {
-        m_ftend_evt.wait_for(lk, std::chrono::nanoseconds(maxt), pred);
-    }
-    return !m_quit;
+    return wait_event(m_ftend_lck, m_ftend_evt, m_quit, maxt, [&] {
+        return m_seq_queue.get_filter() || m_cmd_queue.get_filter();
+    });
+}
+
+bool CtrlIFace::wait_seq(int64_t maxt)
+{
+    return wait_event(m_ftend_lck, m_ftend_evt, m_quit, maxt, [&] {
+        return m_seq_queue.get_filter() != nullptr;
+    });
+}
+
+bool CtrlIFace::wait_cmd(int64_t maxt)
+{
+    return wait_event(m_ftend_lck, m_ftend_evt, m_quit, maxt, [&] {
+        return m_cmd_queue.get_filter() != nullptr;
+    });
 }
 
 auto CtrlIFace::get_seq() -> ReqSeq*

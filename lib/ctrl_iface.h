@@ -228,6 +228,9 @@ protected:
      * Return false if the backend should exit.
      */
     bool wait(int64_t maxt=-1);
+    // Same as `wait` but only wait for a new sequence or a new command respectively.
+    bool wait_seq(int64_t maxt=-1);
+    bool wait_cmd(int64_t maxt=-1);
 
     /**
      * Try popping a command from the queue.

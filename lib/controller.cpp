@@ -985,16 +985,24 @@ private:
         return (m_dma_started - status) & 0xff;
     }
 
+    // Run the sequences.
+    void seq_worker();
 
     Pulser m_p;
     // Protecting the DDS register reads (`read_dds_param`), which take
     // a write and a read, from the frontend and the sequence worker.
     std::mutex m_dds_read_lock;
+    // Whether a sequence is running, in which case the DDS values may change
+    // and the software cache cannot be used.
+    std::atomic<bool> m_seq_running{false};
     std::vector<DMABuff> m_dma_buffs;
     // Number of DMA transfers started (modulo 2^32).
     uint32_t m_dma_started = 0;
     // Last value read from the DMA status register.
     uint32_t m_dma_status = 0;
+
+    // Must be after all the members used by the worker threads.
+    std::thread m_seq_worker;
 };
 
 // Write (version 0) DMA instructions directly into the DMA buffers.
@@ -1316,7 +1324,8 @@ private:
 template<typename Pulser>
 ControllerDMA<Pulser>::ControllerDMA(Pulser &&p, std::vector<DMABuff> &&dma_buffs)
     : m_p(std::move(p)),
-      m_dma_buffs(std::move(dma_buffs))
+      m_dma_buffs(std::move(dma_buffs)),
+      m_seq_worker(&ControllerDMA<Pulser>::seq_worker, this)
 {
     assert(m_dma_buffs.size() >= dma_min_buffs);
     // Sync our transfer count with the hardware.
@@ -1329,6 +1338,7 @@ template<typename Pulser>
 ControllerDMA<Pulser>::~ControllerDMA()
 {
     quit();
+    m_seq_worker.join();
     free_dma_buffs<Pulser>(m_dma_buffs);
 }
 
@@ -1486,6 +1496,7 @@ bool ControllerDMA<Pulser>::has_ttl_ovr()
 template<typename Pulser>
 void ControllerDMA<Pulser>::run_seq(ReqSeq *seq)
 {
+    m_seq_running.store(true, std::memory_order_relaxed);
     seq->state.store(SeqStart, std::memory_order_relaxed);
     backend_event();
 
@@ -1536,6 +1547,16 @@ void ControllerDMA<Pulser>::run_seq(ReqSeq *seq)
     auto flags = writer.wait_end();
     seq->state.store(SeqEnd, std::memory_order_relaxed);
     backend_event();
+    // The DDS values may have been changed by the sequence.
+    // The override values are kept since they are also the override state.
+    for (auto &cache: m_dds_cache) {
+        for (auto &param: cache.params) {
+            if (!param.overridden.load(std::memory_order_relaxed)) {
+                param.val.store(param.invalid, std::memory_order_relaxed);
+            }
+        }
+    }
+    m_seq_running.store(false, std::memory_order_relaxed);
     if (flags & DMAUnderflow)
         Log::warn("DMA underflow.\n");
     if (flags & DMATrigTimeout)
@@ -1578,6 +1599,23 @@ void ControllerDMA<Pulser>::run_dummy_dma_seq()
     writer.add_code(code);
     writer.finish();
     writer.wait_end();
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::seq_worker()
+{
+    while (wait_seq()) {
+        auto seq = get_seq();
+        if (!seq)
+            continue;
+        if (seq->cancel.load(std::memory_order_relaxed)) {
+            seq->state.store(SeqCancel, std::memory_order_relaxed);
+        }
+        else {
+            run_seq(seq);
+        }
+        finish_seq();
+    }
 }
 
 // Create the DMA controller if the DMA mode is enabled and can be used,
