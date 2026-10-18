@@ -368,8 +368,6 @@ private:
                        std::span<const uint8_t> code,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
-    void send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
-
     bool m_quit{false};
 
     // To notify the backend of new requests from the frontend.

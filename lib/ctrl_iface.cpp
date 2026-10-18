@@ -175,14 +175,6 @@ void CtrlIFace::send_cmd(ReqOP op, bool has_res, bool is_override,
     m_ftend_evt.notify_all();
 }
 
-void CtrlIFace::send_get_cmd(ReqOP op, uint32_t operand, bool is_override, callback_t cb)
-{
-    set_observed();
-    if (m_cmd_cache.get(op, operand, is_override, std::move(cb)))
-        return;
-    send_cmd(op, true, is_override, operand, 0);
-}
-
 NACS_EXPORT() void CtrlIFace::set_dds(ReqOP op, int chn, uint32_t val)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
@@ -202,13 +194,19 @@ NACS_EXPORT() void CtrlIFace::set_dds_ovr(ReqOP op, int chn, uint32_t val)
 NACS_EXPORT() void CtrlIFace::get_dds(ReqOP op, int chn, callback_t cb)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
-    send_get_cmd(op, chn, false, std::move(cb));
+    set_observed();
+    if (m_cmd_cache.get(op, chn, false, std::move(cb)))
+        return;
+    send_cmd(op, true, false, chn, 0);
 }
 
 NACS_EXPORT() void CtrlIFace::get_dds_ovr(ReqOP op, int chn, callback_t cb)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
-    send_get_cmd(op, chn, true, std::move(cb));
+    set_observed();
+    if (m_cmd_cache.get(op, chn, true, std::move(cb)))
+        return;
+    send_cmd(op, true, true, chn, 0);
 }
 
 NACS_EXPORT() void CtrlIFace::reset_dds(int chn)
