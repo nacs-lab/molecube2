@@ -88,18 +88,23 @@ NACS_EXPORT() void Pulser::init_dds(int chn, bool dma)
 {
     using namespace std::literals;
 
-    dds_reset<false>(chn);
-
-    // calibrate internal timing.  required at power-up
-    dds_set_2bytes<false>(chn, 0x0e, 0x0105);
-    if (dma) {
-        // Make sure the calibration has started before waiting for it to finish.
+    // In the DMA mode, wait for the commands to leave the command queue.
+    auto wait_cmd_empty = [&] {
+        if (!dma)
+            return;
         // Sleep before checking since the command may not have reached
         // the command queue checked by `cmd_empty` yet.
         do {
             std::this_thread::sleep_for(1ms);
         } while (!(dma_status() & 0x800)); // cmd_empty
-    }
+    };
+
+    dds_reset<false>(chn);
+
+    // calibrate internal timing.  required at power-up
+    dds_set_2bytes<false>(chn, 0x0e, 0x0105);
+    // Make sure the calibration has started before waiting for it to finish.
+    wait_cmd_empty();
     std::this_thread::sleep_for(1ms);
     // finish cal. disble sync_out
     dds_set_2bytes<false>(chn, 0x0e, 0x0405);
@@ -131,6 +136,12 @@ NACS_EXPORT() void Pulser::init_dds(int chn, bool dma)
     // that marks the channel as initialized.
     for (unsigned addr = 0x10;addr <= 0x68;addr += 4)
         dds_set_4bytes<false>(chn, addr, addr == 0x64 ? magic_bytes : 0);
+
+    // The commands above (27 since the last wait) fit in the 32-entry DDS command queue
+    // since there are less than 32 4-byte registers on the DDS.
+    // Still wait for the queue to be cleared before returning to keep the margin
+    // for the commands that follow.
+    wait_cmd_empty();
 }
 
 NACS_EXPORT() bool Pulser::dds_exists(int chn)
