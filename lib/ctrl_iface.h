@@ -29,7 +29,6 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -39,22 +38,6 @@
 namespace Molecube {
 
 using namespace NaCs;
-
-struct DDSState {
-    DDSState()
-        : freq(-1),
-          amp(0),
-          amp_enable(0),
-          phase_enable(0),
-          phase(0)
-    {
-    }
-    uint32_t freq; // 31 bits
-    uint16_t amp: 12;
-    uint16_t amp_enable: 1;
-    uint16_t phase_enable: 1;
-    uint16_t phase;
-};
 
 /**
  * This is the class that provides the FIFO for commands and sequences,
@@ -154,7 +137,6 @@ protected:
     struct ReqCmd {
         uint8_t opcode: 4; // ReqOP
         uint8_t has_res: 1;
-        uint8_t is_override: 1; // The value set/get is override
         uint32_t operand: 26; // opcode specific encoding (e.g. channel number)
         // DDSFreq/Phase/Amp: operand is channel number
         // TTL (set only, not used by the DMA controller):
@@ -164,31 +146,7 @@ protected:
         uint32_t val; // opcode specific encoding of value.
     };
 
-    struct CmdCache {
-        // Update the cache to the new value from the set command
-        void set(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
-        // Try to get the current cached value. If the cached value is not too old,
-        // call the `cb` and return `true`. If not, push the `cb` to the list of cbs.
-        // If the list is empty, return `false` signaling that a new query should be sent.
-        // If the list is not empty, return `true` since a query
-        // should have been queued already.
-        bool get(ReqOP op, uint32_t operand, bool is_override, callback_t cb);
-        bool has_dds_ovr();
-
-    private:
-        struct CacheEntry {
-            uint64_t t = 0;
-            uint32_t val = 0;
-            std::vector<callback_t> cbs{};
-        };
-        static uint32_t cache_key(ReqOP op, uint32_t operand, bool is_override)
-        {
-            assert(op != TTL);
-            assert(op != Clock || !is_override);
-            return uint32_t(op) << 27 | uint32_t(is_override) << 26 | operand;
-        }
-        std::map<uint32_t,CacheEntry> m_cache;
-    };
+    static constexpr uint8_t NDDS = 22;
 
     enum ReqSeqState {
         SeqCancel = -1,
@@ -276,10 +234,26 @@ protected:
      */
     void backend_event();
 
+    /**
+     * Clear the backend event notifications and
+     * run the callbacks for all sequence events.
+     */
+    void run_seq_frontend();
+
     void set_dirty();
     void set_observed();
 
-    void send_cmd(ReqOP op, bool has_res, bool is_override, uint32_t operand, uint32_t val);
+    void send_cmd(ReqOP op, bool has_res, uint32_t operand, uint32_t val);
+    // Pop a finished command from the queue (from the frontend).
+    ReqCmd *pop_cmd()
+    {
+        return m_cmd_queue.pop();
+    }
+    // Free a command returned by `pop_cmd()`.
+    void free_cmd(ReqCmd *cmd)
+    {
+        m_cmd_alloc.free(cmd);
+    }
 
     CtrlIFace();
 public:
@@ -296,7 +270,7 @@ public:
      * Clear the backend event notifications and
      * run the callbacks for all events.
      */
-    void run_frontend();
+    virtual void run_frontend() = 0;
 
     template<typename... Args>
     uint64_t run_code(SeqType type, uint32_t ver, uint64_t seq_len_ns,
@@ -327,12 +301,12 @@ public:
     };
     virtual TTLOvr get_ttl_ovr(int bank) = 0;
 
-    void set_dds(ReqOP op, int chn, uint32_t val);
-    void set_dds_ovr(ReqOP op, int chn, uint32_t val);
+    virtual void set_dds(ReqOP op, int chn, uint32_t val) = 0;
+    virtual void set_dds_ovr(ReqOP op, int chn, uint32_t val) = 0;
 
-    void get_dds(ReqOP op, int chn, callback_t cb);
-    void get_dds_ovr(ReqOP op, int chn, callback_t cb);
-    void reset_dds(int chn);
+    virtual void get_dds(ReqOP op, int chn, callback_t cb) = 0;
+    virtual void get_dds_ovr(ReqOP op, int chn, callback_t cb) = 0;
+    virtual void reset_dds(int chn) = 0;
     virtual void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) = 0;
     // The time that the DDS DMA instructions take.
     // All 0 if the DMA mode is not supported or not enabled.
@@ -347,7 +321,7 @@ public:
     virtual uint8_t get_clock() = 0;
 
     virtual bool has_ttl_ovr() = 0;
-    bool has_dds_ovr();
+    virtual bool has_dds_ovr() = 0;
 
     void quit();
     uint64_t get_state_id();
@@ -389,8 +363,6 @@ private:
     // Cached allocator for efficient allocations
     SmallAllocator<ReqCmd,32> m_cmd_alloc;
     SmallAllocator<ReqSeq,32> m_seq_alloc;
-
-    CmdCache m_cmd_cache;
 
     // Use an event fd for notification from the backend to the frontend
     // since this can be polled in the main loop.
