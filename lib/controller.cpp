@@ -448,7 +448,8 @@ auto Controller<Pulser>::get_ttl_ovr(int bank) -> TTLOvr
 template<typename Pulser>
 void Controller<Pulser>::set_clock(uint8_t val)
 {
-    send_set_cmd(Clock, 0, false, val);
+    set_dirty();
+    send_cmd(Clock, false, false, 0, val);
 }
 
 template<typename Pulser>
