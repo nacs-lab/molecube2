@@ -1049,7 +1049,6 @@ private:
 
     Pulser m_p;
     DDSParamCache m_dds_cache[NDDS][3];
-    uint16_t m_dds_phase[NDDS] = {0};
     std::vector<DMABuff> m_dma_buffs;
     // Number of DMA transfers started (modulo 2^32).
     uint32_t m_dma_started = 0;
@@ -1258,13 +1257,13 @@ public:
     void dds_phase(uint8_t chn, uint16_t phase)
     {
         if (likely(!m_ctrl.dds_overridden(DDSPhase, chn)))
-            m_ctrl.m_dds_phase[chn] = phase;
+            m_dds_phase[chn] = phase;
         add_dds_set16(chn, 0x30, phase);
         wait(Seq::Zynq::PulseTime::DDSPhase);
     }
     void dds_detphase(uint8_t chn, uint16_t detphase)
     {
-        dds_phase(chn, uint16_t(m_ctrl.m_dds_phase[chn] + detphase));
+        dds_phase(chn, uint16_t(m_dds_phase[chn] + detphase));
     }
     void dac(uint8_t chn, uint16_t V)
     {
@@ -1313,6 +1312,13 @@ public:
         // The sequence time restarts from the trigger.
         m_t = 0;
     }
+    // Initialize the DDS phases used by `dds_detphase` from the hardware.
+    void init_dds_phase()
+    {
+        for (int chn = 0; chn < NDDS; chn++) {
+            m_dds_phase[chn] = uint16_t(m_ctrl.read_dds_param(DDSPhase, chn));
+        }
+    }
     // Wait until the end of the sequence (measured from the start or the last trigger).
     void wait_seq_end()
     {
@@ -1352,6 +1358,9 @@ private:
     const std::array<uint32_t,NUM_TTL_BANKS> m_ttlmask;
     // TTL values of the sequence. Only the bits in the DMA TTL mask are used.
     uint32_t m_ttl[NUM_TTL_BANKS];
+    // DDS phases of the sequence for `dds_detphase`.
+    // Only initialized (`init_dds_phase`) for command lists.
+    uint16_t m_dds_phase[NDDS];
     // Sequence length in sequence time unit.
     const uint64_t m_seq_len;
     // Sequence time since the start or the last trigger.
@@ -1612,6 +1621,7 @@ void ControllerDMA<Pulser>::run_seq(ReqSeq *seq)
             auto ver = seq->ver;
             assert(ver == 1 || ver == 2 || ver == 3);
             if (unlikely(seq->type == SeqType::CmdList)) {
+                runner.init_dds_phase();
                 Seq::Zynq::CmdList::ExeState exestate;
                 if (ver > 1)
                     exestate.min_time = Seq::Zynq::PulseTime::Min2;
