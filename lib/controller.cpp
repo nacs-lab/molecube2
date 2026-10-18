@@ -1049,6 +1049,10 @@ private:
 
     Pulser m_p;
     DDSParamCache m_dds_cache[NDDS][3];
+    // Protecting the DDS register reads (`read_dds_param`), which take
+    // a write and a read, from the frontend and the sequence worker.
+    // One for each DDS bus.
+    std::mutex m_dds_read_lock[2];
     std::vector<DMABuff> m_dma_buffs;
     // Number of DMA transfers started (modulo 2^32).
     uint32_t m_dma_started = 0;
@@ -1480,8 +1484,10 @@ uint32_t ControllerDMA<Pulser>::read_dds_param(ReqOP op, int chn)
 {
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     assert(0 <= chn && chn < NDDS);
+    bool bus1 = chn >= 11;
+    std::lock_guard<std::mutex> lk(m_dds_read_lock[bus1]);
     auto read = [&] (uint8_t addr) -> uint32_t {
-        if (chn >= 11)
+        if (bus1)
             return m_p.read_dds1(uint8_t(chn - 11), addr);
         return m_p.read_dds0(uint8_t(chn), addr);
     };
