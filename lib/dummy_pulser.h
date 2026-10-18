@@ -127,7 +127,12 @@ public:
     inline uint32_t dma_status() const
     {
         // The DMA is never busy since the instructions aren't executed.
-        return m_dma_count.load(std::memory_order_acquire) & 0xff;
+        uint32_t status = m_dma_count.load(std::memory_order_acquire) & 0xff;
+        // The commands are run without the DMA so the command queue is empty
+        // (cmd_empty) once all the commands are finished.
+        if (is_finished())
+            status |= 0x800;
+        return status;
     }
     inline uint32_t dma_control() const
     {
@@ -282,6 +287,13 @@ public:
     inline void dds_get_freq(int i)
     {
         assert(i < NDDS);
+        add_cmd(OP::DDSGetFreq, checked, i);
+    }
+    template<bool checked>
+    inline void dds_get_4bytes(int i, uint32_t addr)
+    {
+        assert(i < NDDS);
+        // FIXME: DUMMY implementation for now.
         add_cmd(OP::DDSGetFreq, checked, i);
     }
     template<bool checked>
