@@ -1081,6 +1081,9 @@ private:
         return true;
     }
 
+    bool check_dds(int chn);
+    void detect_dds(bool force=false);
+    void dump_dds(int i);
     void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) override;
     DDSInstTiming get_dds_inst_timing() const override;
 
@@ -1112,6 +1115,11 @@ private:
     // a write and a read, from the frontend and the sequence worker.
     // One for each DDS bus.
     std::mutex m_dds_read_lock[2];
+    // Reinitialize is a complicated sequence and is rarely needed
+    // so only do that after the sequence finishes.
+    bool m_dds_pending_reset[NDDS] = {false};
+    std::atomic<bool> m_dds_exist[NDDS] = {};
+    uint64_t m_dds_check_time = 0;
     std::vector<DMABuff> m_dma_buffs;
     // Number of DMA transfers started (modulo 2^32).
     uint32_t m_dma_started = 0;
@@ -1653,9 +1661,73 @@ DDSInstTiming ControllerDMA<Pulser>::get_dds_inst_timing() const
 }
 
 template<typename Pulser>
+bool ControllerDMA<Pulser>::check_dds(int chn)
+{
+    auto res = m_p.check_dds(chn, m_dds_pending_reset[chn]);
+    m_dds_pending_reset[chn] = false;
+    return res;
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::dump_dds(int i)
+{
+    string_ostream stm;
+    m_p.dump_dds(stm, i);
+    auto str = stm.get_buf();
+    char *start = &str[0];
+    while (*start) {
+        char *p = strchrnul(start, '\n');
+        auto end = !*p;
+        *p = 0;
+        Log::info("%s\n", start);
+        if (end)
+            break;
+        start = p + 1;
+    }
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::detect_dds(bool force)
+{
+    const auto t = getCoarseTime();
+    auto has_pending_reset = [&] () {
+        for (auto v: m_dds_pending_reset) {
+            if (v) {
+                return true;
+            }
+        }
+        return false;
+    };
+    if (!force && t < m_dds_check_time + 1000000000 && !has_pending_reset())
+        return;
+    for (int i = 0; i < NDDS; i++) {
+        if (!m_p.dds_exists(i)) {
+            m_dds_exist[i].store(false, std::memory_order_relaxed);
+            m_dds_pending_reset[i] = false;
+            continue;
+        }
+        m_dds_exist[i].store(true, std::memory_order_relaxed);
+        if (force)
+            m_dds_pending_reset[i] = true;
+        if (check_dds(i) && force)
+            Log::info("DDS %d initialized\n", i);
+        if (force) {
+            dump_dds(i);
+        }
+    }
+    m_dds_check_time = t;
+}
+
+template<typename Pulser>
 std::vector<int> ControllerDMA<Pulser>::get_active_dds()
 {
-    return {};
+    std::vector<int> res;
+    for (int i = 0; i < NDDS; i++) {
+        if (m_dds_exist[i].load(std::memory_order_relaxed)) {
+            res.push_back(i);
+        }
+    }
+    return res;
 }
 
 template<typename Pulser>
