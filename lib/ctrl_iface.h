@@ -280,7 +280,6 @@ protected:
     void set_observed();
 
     void send_cmd(ReqOP op, bool has_res, bool is_override, uint32_t operand, uint32_t val);
-    void send_set_cmd(ReqOP op, uint32_t operand, bool is_override, uint32_t val);
 
     CtrlIFace();
 public:
