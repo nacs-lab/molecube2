@@ -1086,10 +1086,18 @@ private:
     }
 
     bool check_dds(int chn);
-    void detect_dds(bool force=false);
+    void refresh_dds(bool force=false);
     void dump_dds(int i);
     void set_dds_timing1(int adsu, int wrlow, int adhd, int fuddl, int fudhd) override;
     DDSInstTiming get_dds_inst_timing() const override;
+
+    // Process a command.
+    void run_cmd(const ReqCmd *cmd);
+    // Process request commands.
+    // Assumes that the seq worker is already running some sequences
+    // and will be processing commands.
+    // Will wait until the hardware finishes processing commands before returning.
+    void process_reqcmds();
 
     void run_seq(ReqSeq *seq);
     // Run two DMA blocks of 5000-cycle waits (Wait2(4999)).
@@ -1107,11 +1115,17 @@ private:
         return (m_dma_started - status) & 0xff;
     }
 
-    // Wait for a new sequence or a new command respectively,
-    // for at most `maxt` nanoseconds if `maxt >= 0`.
+    // Wait for a new sequence (or dummy sequence for command processing)
+    // or a new command respectively, for at most `maxt` nanoseconds if `maxt >= 0`.
     // Return false if the backend should exit.
+    // When quitting, `wait_seq` waits for the command worker to finish
+    // (or to need the dummy sequence) instead.
     bool wait_seq(int64_t maxt=-1);
     bool wait_cmd(int64_t maxt=-1);
+    // Run the sequences.
+    void seq_worker();
+    // Process the commands and other maintenance tasks.
+    void cmd_worker();
 
     Pulser m_p;
     DDSParamCache m_dds_cache[NDDS][3];
@@ -1124,6 +1138,14 @@ private:
     bool m_dds_pending_reset[NDDS] = {false};
     std::atomic<bool> m_dds_exist[NDDS] = {};
     uint64_t m_dds_check_time = 0;
+    // Whether the command worker is running commands in the hardware
+    // and needs the sequence worker to run the dummy sequence.
+    // Only written by the command worker.
+    std::atomic<bool> m_cmds_running{false};
+    // Set by the command worker when it exits. The sequence worker must keep
+    // running (the dummy sequences) until then since the command worker may still
+    // need to run commands after the controller started quitting.
+    std::atomic<bool> m_cmd_worker_done{false};
     std::vector<DMABuff> m_dma_buffs;
     // Number of DMA transfers started (modulo 2^32).
     uint32_t m_dma_started = 0;
@@ -1135,6 +1157,10 @@ private:
     std::condition_variable m_seq_evt;
     std::mutex m_cmd_lck;
     std::condition_variable m_cmd_evt;
+
+    // Started at the end of the constructor.
+    std::thread m_seq_worker;
+    std::thread m_cmd_worker;
 };
 
 // Write (version 0) DMA instructions directly into the DMA buffers.
@@ -1466,12 +1492,17 @@ ControllerDMA<Pulser>::ControllerDMA(Pulser &&p, std::vector<DMABuff> &&dma_buff
     m_dma_status = m_p.dma_status();
     m_dma_started = m_dma_status & 0xff;
     m_p.set_dma_control(1);
+    // Start the workers after the hardware is initialized.
+    m_seq_worker = std::thread(&ControllerDMA<Pulser>::seq_worker, this);
+    m_cmd_worker = std::thread(&ControllerDMA<Pulser>::cmd_worker, this);
 }
 
 template<typename Pulser>
 ControllerDMA<Pulser>::~ControllerDMA()
 {
     quit();
+    m_seq_worker.join();
+    m_cmd_worker.join();
     free_dma_buffs<Pulser>(m_dma_buffs);
 }
 
@@ -1718,7 +1749,7 @@ void ControllerDMA<Pulser>::dump_dds(int i)
 }
 
 template<typename Pulser>
-void ControllerDMA<Pulser>::detect_dds(bool force)
+void ControllerDMA<Pulser>::refresh_dds(bool force)
 {
     const auto t = getCoarseTime();
     auto has_pending_reset = [&] () {
@@ -1745,6 +1776,11 @@ void ControllerDMA<Pulser>::detect_dds(bool force)
         if (force) {
             dump_dds(i);
         }
+        // Issue read command to refresh hardware cache and we can ignore the results
+        m_p.template dds_get_4bytes<false>(i, 0x2c);
+        m_p.template dds_get_4bytes<false>(i, 0x30);
+        (void)m_p.get_result();
+        (void)m_p.get_result();
     }
     m_dds_check_time = t;
 }
@@ -1783,6 +1819,80 @@ bool ControllerDMA<Pulser>::has_dds_ovr()
         }
     }
     return false;
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::run_cmd(const ReqCmd *cmd)
+{
+    // The overrides are handled by the frontend so both the normal and the override
+    // set commands only need to write the value to the DDS.
+    // Only set commands are sent to the backend.
+    switch (cmd->opcode) {
+    case DDSFreq: {
+        int chn = cmd->operand;
+        assert(chn < NDDS);
+        m_p.template dds_set_freq<false>(chn, cmd->val);
+        break;
+    }
+    case DDSAmp: {
+        int chn = cmd->operand;
+        assert(chn < NDDS);
+        m_p.template dds_set_amp<false>(chn, uint16_t(cmd->val));
+        break;
+    }
+    case DDSPhase: {
+        int chn = cmd->operand;
+        assert(chn < NDDS);
+        m_p.template dds_set_phase<false>(chn, uint16_t(cmd->val));
+        break;
+    }
+    case DDSReset: {
+        assert(cmd->val == 0);
+        int chn = cmd->operand;
+        assert(chn < NDDS);
+        m_dds_pending_reset[chn] = true;
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::process_reqcmds()
+{
+    using namespace std::literals;
+    // Whether a command was sent since the last check of the command queue.
+    bool processed = false;
+    while (true) {
+        auto cmd = get_cmd();
+        if (!cmd && processed) {
+            // Make sure the last command has reached the command queue checked by
+            // `cmd_empty` before reading the status.
+            // The write takes much less time than this to reach the queue.
+            std::this_thread::sleep_for(1us);
+            processed = false;
+        }
+        auto dma_status = m_p.dma_status();
+        if (!cmd) {
+            if (!(dma_status & 0x800)) {
+                // command queue not empty yet
+                std::this_thread::sleep_for(2ms);
+                continue;
+            }
+            break;
+        }
+        while (dma_status & 0x1000) {
+            // command queue full
+            std::this_thread::sleep_for(2ms);
+            dma_status = m_p.dma_status();
+        }
+        run_cmd(cmd);
+        finish_cmd();
+        // The time is not very important, notify the frontend.
+        backend_event();
+        processed = true;
+    }
 }
 
 template<typename Pulser>
@@ -1886,7 +1996,11 @@ template<typename Pulser>
 bool ControllerDMA<Pulser>::wait_seq(int64_t maxt)
 {
     wait_event(m_seq_lck, m_seq_evt, maxt, [&] {
-        return quitting() || get_seq();
+        if (m_cmds_running.load(std::memory_order_relaxed))
+            return true;
+        if (quitting())
+            return m_cmd_worker_done.load(std::memory_order_relaxed);
+        return get_seq() != nullptr;
     });
     return !quitting();
 }
@@ -1898,6 +2012,59 @@ bool ControllerDMA<Pulser>::wait_cmd(int64_t maxt)
         return quitting() || get_cmd();
     });
     return !quitting();
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::seq_worker()
+{
+    while (true) {
+        bool running = wait_seq();
+        auto seq = running ? get_seq() : nullptr;
+        if (!seq) {
+            // Keep running the dummy sequence while the command worker needs it,
+            // even when quitting, so that the command worker can finish.
+            if (m_cmds_running.load(std::memory_order_relaxed)) {
+                run_dummy_dma_seq();
+            }
+            else if (!running && m_cmd_worker_done.load(std::memory_order_relaxed)) {
+                break;
+            }
+            continue;
+        }
+        if (seq->cancel.load(std::memory_order_relaxed)) {
+            seq->state.store(SeqCancel, std::memory_order_relaxed);
+        }
+        else {
+            run_seq(seq);
+        }
+        finish_seq();
+    }
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::cmd_worker()
+{
+    m_cmds_running.store(true, std::memory_order_relaxed);
+    notify_event(m_seq_lck, m_seq_evt);
+    refresh_dds(true);
+    while (true) {
+        m_cmds_running.store(false, std::memory_order_relaxed);
+        if (!wait_cmd(500000000)) // Wake up every 500ms
+            break;
+        m_cmds_running.store(true, std::memory_order_relaxed);
+        notify_event(m_seq_lck, m_seq_evt);
+        // Clear results (shouldn't be needed
+        // but in case the hardware was put in an unknown state)
+        uint32_t tmp;
+        while (m_p.try_get_result(tmp)) {
+        }
+        process_reqcmds();
+        // We need to run refresh_dds after process_reqcmds to handle DDS reset
+        refresh_dds();
+    }
+    // `m_cmds_running` is cleared before waiting so the sequence worker can exit now.
+    m_cmd_worker_done.store(true, std::memory_order_relaxed);
+    notify_event(m_seq_lck, m_seq_evt);
 }
 
 // Create the DMA controller if the DMA mode is enabled and can be used,
