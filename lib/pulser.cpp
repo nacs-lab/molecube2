@@ -84,7 +84,7 @@ NACS_EXPORT() uint32_t Pulser::get_result()
     return res;
 }
 
-NACS_EXPORT() void Pulser::init_dds(int chn)
+NACS_EXPORT() void Pulser::init_dds(int chn, bool dma)
 {
     using namespace std::literals;
 
@@ -92,6 +92,14 @@ NACS_EXPORT() void Pulser::init_dds(int chn)
 
     // calibrate internal timing.  required at power-up
     dds_set_2bytes<false>(chn, 0x0e, 0x0105);
+    if (dma) {
+        // Make sure the calibration has started before waiting for it to finish.
+        // Sleep before checking since the command may not have reached
+        // the command queue checked by `cmd_empty` yet.
+        do {
+            std::this_thread::sleep_for(1ms);
+        } while (!(dma_status() & 0x800)); // cmd_empty
+    }
     std::this_thread::sleep_for(1ms);
     // finish cal. disble sync_out
     dds_set_2bytes<false>(chn, 0x0e, 0x0405);
@@ -151,7 +159,7 @@ NACS_EXPORT() void Pulser::dump_dds(std::ostream &stm, int chn)
     stm << "*******************************" << std::endl;
 }
 
-NACS_EXPORT() bool Pulser::check_dds(int chn, bool force)
+NACS_EXPORT() bool Pulser::check_dds(int chn, bool force, bool dma)
 {
     if (!force) {
         // Check if magic bytes have been set (profile 7, FTW) which is
@@ -162,7 +170,7 @@ NACS_EXPORT() bool Pulser::check_dds(int chn, bool force)
             return false;
         }
     }
-    init_dds(chn);
+    init_dds(chn, dma);
     return true;
 }
 

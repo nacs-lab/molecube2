@@ -1663,7 +1663,7 @@ DDSInstTiming ControllerDMA<Pulser>::get_dds_inst_timing() const
 template<typename Pulser>
 bool ControllerDMA<Pulser>::check_dds(int chn)
 {
-    auto res = m_p.check_dds(chn, m_dds_pending_reset[chn]);
+    auto res = m_p.check_dds(chn, m_dds_pending_reset[chn], true);
     m_dds_pending_reset[chn] = false;
     return res;
 }

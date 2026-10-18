@@ -411,11 +411,14 @@ public:
 
     // Initialize a dds channel. Including initializing the right mode,
     // clearing unused registers and setting the magic bytes which we'll check later.
-    void init_dds(int chn);
+    // `dma` should be `true` in the DMA mode, in which case the commands only run
+    // when a DMA sequence is running (which must be arranged by the caller).
+    void init_dds(int chn, bool dma=false);
     // Check if the DDS is in good shape.
     // If the magic bytes isn't set or if `force` is `true`,
     // (re)initialize the DDS channel. Returns whether a initialization is done.
-    bool check_dds(int chn, bool force);
+    // See `init_dds` for `dma`.
+    bool check_dds(int chn, bool force, bool dma=false);
     // Check if the DDS exists
     // (by flip/flopping a register and see if the DDS responses correctly)
     bool dds_exists(int chn);

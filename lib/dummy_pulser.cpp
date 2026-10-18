@@ -32,7 +32,7 @@ NACS_EXPORT() DummyPulser::DummyPulser()
 {
 }
 
-NACS_EXPORT() void DummyPulser::init_dds(int chn)
+NACS_EXPORT() void DummyPulser::init_dds(int chn, bool)
 {
     if (!dds_exists_internal(chn))
         return;
@@ -40,14 +40,14 @@ NACS_EXPORT() void DummyPulser::init_dds(int chn)
     m_dds[chn].init = true;
 }
 
-NACS_EXPORT() bool DummyPulser::check_dds(int chn, bool force)
+NACS_EXPORT() bool DummyPulser::check_dds(int chn, bool force, bool dma)
 {
     if (!force) {
         if (dds_exists_internal(chn) && m_dds[chn].init) {
             return false;
         }
     }
-    init_dds(chn);
+    init_dds(chn, dma);
     return true;
 }
 
