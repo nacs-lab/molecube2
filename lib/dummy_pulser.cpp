@@ -32,18 +32,33 @@ NACS_EXPORT() DummyPulser::DummyPulser()
 {
 }
 
+// The DDS functions below send the same commands as the ones in `Pulser`.
+
 NACS_EXPORT() void DummyPulser::init_dds(int chn, bool)
 {
     if (!dds_exists_internal(chn))
         return;
     dds_reset<false>(chn);
-    m_dds[chn].init = true;
+    // Calibration
+    dds_set_2bytes<false>(chn, 0x0e, 0x0105);
+    dds_set_2bytes<false>(chn, 0x0e, 0x0405);
+    // Disable SYNC_CLK output
+    dds_set_2bytes<false>(chn, 0x04, 0x0100);
+    // Disable ramp, disable programmable modulus, enable profile mode
+    dds_set_2bytes<false>(chn, 0x06, 0x0080);
+    // Enable amplitude control (OSK)
+    dds_set_2bytes<false>(chn, 0x0, 0x0308);
+    // Zero-out all other memory, except the magic bytes.
+    for (unsigned addr = 0x10;addr <= 0x68;addr += 4) {
+        dds_set_4bytes<false>(chn, addr, addr == 0x64 ? magic_bytes : 0);
+    }
 }
 
 NACS_EXPORT() bool DummyPulser::check_dds(int chn, bool force, bool dma)
 {
     if (!force) {
-        if (dds_exists_internal(chn) && m_dds[chn].init) {
+        dds_get_4bytes<false>(chn, 0x64);
+        if (get_result() == magic_bytes) {
             return false;
         }
     }
@@ -53,13 +68,28 @@ NACS_EXPORT() bool DummyPulser::check_dds(int chn, bool force, bool dma)
 
 NACS_EXPORT() bool DummyPulser::dds_exists(int chn)
 {
-    return dds_exists_internal(chn);
+    if (!dds_exists_internal(chn))
+        return false;
+    dds_set_2bytes<false>(chn, 0x68, 0);
+    dds_get_2bytes<false>(chn, 0x68);
+    dds_set_2bytes<false>(chn, 0x68, 1);
+    dds_get_2bytes<false>(chn, 0x68);
+    auto res0 = get_result();
+    auto res1 = get_result();
+    return res0 == 0 && res1 == 1;
 }
 
 NACS_EXPORT() void DummyPulser::dump_dds(std::ostream &stm, int chn)
 {
     stm << "*******************************" << std::endl;
-    stm << "Dummy DDS board: " << chn << std::endl;
+    for (unsigned addr = 0; addr + 3 <= 0x7f; addr += 4) {
+        dds_get_4bytes<false>(chn, addr);
+        if (uint32_t u = get_result()) {
+            stm << "Dummy DDS board = " << std::dec << chn << ", addr = 0x"
+                << std::hex << addr + 3 << "..." << addr
+                << " = 0x" << u << std::dec << std::endl;
+        }
+    }
     stm << "*******************************" << std::endl;
 }
 
@@ -90,19 +120,7 @@ NACS_EXPORT() uint16_t DummyPulser::read_dds(int chn, uint8_t addr)
     // Protecting access to `m_dds`
     std::unique_lock<std::mutex> lock(m_cmds_lock);
     forward_time(false, lock);
-    auto &dds = m_dds[chn];
-    switch (addr & ~1) {
-    case 0x2c:
-        return uint16_t(dds.freq);
-    case 0x2e:
-        return uint16_t(dds.freq >> 16);
-    case 0x30:
-        return dds.phase;
-    case 0x32:
-        return dds.amp;
-    default:
-        return 0;
-    }
+    return m_dds_cache[chn][(addr & 0x7f) >> 1];
 }
 
 NACS_INTERNAL void DummyPulser::add_result(uint32_t v)
@@ -226,32 +244,29 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
     case OP::ClearErr:
         m_timing_ok.store(true, std::memory_order_release);
         return Seq::Zynq::PulseTime::Clear;
-    case OP::DDSSetFreq:
-        m_dds[cmd.v1].freq = cmd.v2;
-        return Seq::Zynq::PulseTime::DDSFreq;
-    case OP::DDSSetAmp:
-        m_dds[cmd.v1].amp = uint16_t(cmd.v2);
+    case OP::DDSSet2:
+        write_dds_reg(cmd.v1, uint16_t(cmd.v2));
         return Seq::Zynq::PulseTime::DDSAmp;
-    case OP::DDSSetPhase:
-        m_dds[cmd.v1].phase = uint16_t(cmd.v2);
-        return Seq::Zynq::PulseTime::DDSPhase;
+    case OP::DDSSet4:
+        write_dds_reg(cmd.v1, uint16_t(cmd.v2));
+        write_dds_reg(cmd.v1 + (2 << 8), uint16_t(cmd.v2 >> 16));
+        return Seq::Zynq::PulseTime::DDSFreq;
     case OP::DDSReset:
-        m_dds[cmd.v1].amp = 0;
-        m_dds[cmd.v1].phase = 0;
-        m_dds[cmd.v1].freq = 0;
+        // Only the registers of the DDS are reset, not the cache in the hardware.
+        m_dds[cmd.v1 & 0xff].fill(0);
         return Seq::Zynq::PulseTime::DDSReset;
     case OP::LoopBack:
         add_result(cmd.v1);
         return Seq::Zynq::PulseTime::LoopBack;
-    case OP::DDSGetFreq:
-        add_result(m_dds[cmd.v1].freq);
-        return Seq::Zynq::PulseTime::DDSFreq;
-    case OP::DDSGetAmp:
-        add_result(m_dds[cmd.v1].amp);
+    case OP::DDSGet2:
+        add_result(read_dds_reg(cmd.v1));
         return Seq::Zynq::PulseTime::DDSAmp;
-    case OP::DDSGetPhase:
-        add_result(m_dds[cmd.v1].phase);
-        return Seq::Zynq::PulseTime::DDSPhase;
+    case OP::DDSGet4: {
+        uint32_t lo = read_dds_reg(cmd.v1);
+        uint32_t hi = read_dds_reg(cmd.v1 + (2 << 8));
+        add_result(lo | (hi << 16));
+        return Seq::Zynq::PulseTime::DDSFreq;
+    }
     default:
         throw std::runtime_error("Invalid command.");
     }
@@ -272,6 +287,7 @@ DummyPulser::DummyPulser(DummyPulser &&o)
       m_hold(o.m_hold),
       m_force_release(o.m_force_release),
       m_dds(o.m_dds),
+      m_dds_cache(o.m_dds_cache),
       m_release_time(o.m_release_time),
       m_dma_dds_mask(o.m_dma_dds_mask)
 {

@@ -49,26 +49,23 @@ class DummyPulser {
     using time_point_t = decltype(std::chrono::steady_clock::now());
     DummyPulser(const DummyPulser&) = delete;
     void operator=(const DummyPulser&) = delete;
-    struct DDS {
-        bool init{false};
-        uint16_t amp{0};
-        uint16_t phase{0};
-        uint32_t freq{0};
-    };
+    // The 16 bit registers of a DDS (byte address 0 to 0x7f).
+    // All registers are treated as normal memory (read returns the last value written).
+    using DDSRegs = std::array<uint16_t,64>;
     enum class OP : uint8_t {
         TTL,
         Clock,
         DAC,
         Wait,
         ClearErr,
-        DDSSetFreq,
-        DDSSetAmp,
-        DDSSetPhase,
+        // For all the DDS register read/write commands,
+        // `v1` is the DDS channel number with the byte address in bits 8 and up.
+        DDSSet2,
+        DDSSet4,
         DDSReset,
         LoopBack,
-        DDSGetFreq,
-        DDSGetAmp,
-        DDSGetPhase,
+        DDSGet2,
+        DDSGet4,
     };
     struct Cmd {
         OP op;
@@ -186,7 +183,8 @@ public:
     }
     // Read the cached value of the 16 bit DDS register at the byte address `dds_addr`
     // of DDS `dds_id` on bus 0/1.
-    // Only the frequency, phase and amplitude registers are modeled.
+    // The cache is updated with the register value on each DDS register read/write
+    // command but not on a DDS reset, the same as the hardware.
     inline uint16_t read_dds0(uint8_t dds_id, uint8_t dds_addr)
     {
         return read_dds(dds_id, dds_addr);
@@ -239,23 +237,42 @@ public:
     {
         add_cmd(OP::ClearErr, false);
     }
+    // set bytes addr + 1 ... addr
+    template<bool checked>
+    inline void dds_set_2bytes(int i, uint32_t addr, uint32_t data)
+    {
+        add_cmd(OP::DDSSet2, checked, dds_reg_arg(i, addr), data & 0xffff);
+    }
+    // set bytes addr + 3 ... addr
+    template<bool checked>
+    inline void dds_set_4bytes(int i, uint32_t addr, uint32_t data)
+    {
+        add_cmd(OP::DDSSet4, checked, dds_reg_arg(i, addr), data);
+    }
+    template<bool checked>
+    inline void dds_get_2bytes(int i, uint32_t addr)
+    {
+        add_cmd(OP::DDSGet2, checked, dds_reg_arg(i, addr));
+    }
+    template<bool checked>
+    inline void dds_get_4bytes(int i, uint32_t addr)
+    {
+        add_cmd(OP::DDSGet4, checked, dds_reg_arg(i, addr));
+    }
     template<bool checked>
     inline void dds_set_freq(int i, uint32_t ftw)
     {
-        assert(i < NDDS);
-        add_cmd(OP::DDSSetFreq, checked, i, ftw);
+        dds_set_4bytes<checked>(i, 0x2c, ftw);
     }
     template<bool checked>
     inline void dds_set_amp(int i, uint16_t amp)
     {
-        assert(i < NDDS);
-        add_cmd(OP::DDSSetAmp, checked, i, amp);
+        dds_set_2bytes<checked>(i, 0x32, amp);
     }
     template<bool checked>
     inline void dds_set_phase(int i, uint16_t phase)
     {
-        assert(i < NDDS);
-        add_cmd(OP::DDSSetPhase, checked, i, phase);
+        dds_set_2bytes<checked>(i, 0x30, phase);
     }
     template<bool checked>
     inline void dds_reset(int i)
@@ -274,27 +291,17 @@ public:
     template<bool checked>
     inline void dds_get_phase(int i)
     {
-        assert(i < NDDS);
-        add_cmd(OP::DDSGetPhase, checked, i);
+        dds_get_2bytes<checked>(i, 0x30);
     }
     template<bool checked>
     inline void dds_get_amp(int i)
     {
-        assert(i < NDDS);
-        add_cmd(OP::DDSGetAmp, checked, i);
+        dds_get_2bytes<checked>(i, 0x32);
     }
     template<bool checked>
     inline void dds_get_freq(int i)
     {
-        assert(i < NDDS);
-        add_cmd(OP::DDSGetFreq, checked, i);
-    }
-    template<bool checked>
-    inline void dds_get_4bytes(int i, uint32_t addr)
-    {
-        assert(i < NDDS);
-        // FIXME: DUMMY implementation for now.
-        add_cmd(OP::DDSGetFreq, checked, i);
+        dds_get_4bytes<checked>(i, 0x2c);
     }
     template<bool checked>
     inline void wait_trigger(uint8_t, bool, uint32_t timeout)
@@ -359,6 +366,14 @@ private:
     {
         return 0 <= chn && chn < NDDS;
     }
+    // Encode the DDS channel and the byte address for the DDS register commands.
+    static uint32_t dds_reg_arg(int chn, uint32_t addr)
+    {
+        assert(0 <= chn && chn < NDDS);
+        // The 16 bit registers are aligned.
+        assert(addr % 2 == 0);
+        return uint32_t(chn) | ((addr & 0x7f) << 8);
+    }
 
     uint16_t read_dds(int chn, uint8_t addr);
     // Push a result to the result queue. Check if there's overflow
@@ -380,12 +395,31 @@ private:
     // Run the command (apply the side-effects) and return the time
     // it takes to execute the command in FPGA time step (10ns per step).
     uint32_t run_cmd(const Cmd &cmd);
+    // Write/read the 16 bit DDS register for `arg` (see `dds_reg_arg`)
+    // and update the cache in the hardware.
+    void write_dds_reg(uint32_t arg, uint16_t val)
+    {
+        auto chn = arg & 0xff;
+        auto idx = ((arg >> 8) & 0x7f) >> 1;
+        m_dds[chn][idx] = val;
+        m_dds_cache[chn][idx] = val;
+    }
+    uint16_t read_dds_reg(uint32_t arg)
+    {
+        auto chn = arg & 0xff;
+        auto idx = ((arg >> 8) & 0x7f) >> 1;
+        auto val = m_dds[chn][idx];
+        m_dds_cache[chn][idx] = val;
+        return val;
+    }
     // Run the commands that should be executed before the specified time.
     // Return if any command is run
     bool run_past_cmds(time_point_t t);
 
     static constexpr int NDDS = 22;
     static constexpr uint32_t max_result_count = 4097;
+    // Same as `Pulser`.
+    static constexpr uint32_t magic_bytes = 0xf00f0000;
 
     std::array<std::atomic<uint32_t>,NUM_TTL_BANKS> m_ttl_hi{0};
     std::array<std::atomic<uint32_t>,NUM_TTL_BANKS> m_ttl_lo{0};
@@ -410,7 +444,10 @@ private:
     bool m_hold{false};
     bool m_force_release{false};
 
-    std::array<DDS,NDDS> m_dds;
+    // The registers of the DDS's.
+    std::array<DDSRegs,NDDS> m_dds{};
+    // The cache of the DDS registers in the hardware read by `read_dds0/1`.
+    std::array<DDSRegs,NDDS> m_dds_cache{};
 
     time_point_t m_release_time{std::chrono::steady_clock::now()};
 
