@@ -27,10 +27,8 @@
 #include <nacs-utils/utils.h>
 
 #include <atomic>
-#include <condition_variable>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <span>
 #include <type_traits>
 #include <vector>
@@ -195,12 +193,12 @@ protected:
      */
 
     /**
-     * Wait for a new request when there's no sequence running.
-     * Wait for at most `maxt` nanoseconds. If `maxt < 0`, do not time out.
-     *
-     * Return false if the backend should exit.
+     * Whether the backend should exit.
      */
-    bool wait(int64_t maxt=-1);
+    bool quitting() const
+    {
+        return m_quit.load(std::memory_order_relaxed);
+    }
 
     /**
      * Try popping a command from the queue.
@@ -244,6 +242,21 @@ protected:
     void set_observed();
 
     void send_cmd(ReqOP op, bool has_res, uint32_t operand, uint32_t val);
+
+    // Flags for `notify_backend`.
+    enum NotifyFlags : uint8_t {
+        // New command
+        NotifyCmd = 1 << 0,
+        // New sequence
+        NotifySeq = 1 << 1,
+    };
+    /**
+     * Notify the backend of new requests from the frontend (`NotifyFlags`).
+     * Called after the requests are pushed to the queue.
+     * All flags are set when quitting.
+     */
+    virtual void notify_backend(unsigned flags) = 0;
+
     // Pop a finished command from the queue (from the frontend).
     ReqCmd *pop_cmd()
     {
@@ -342,11 +355,7 @@ private:
                        std::span<const uint8_t> code,
                        std::unique_ptr<ReqSeqNotify> notify, AnyPtr storage);
 
-    bool m_quit{false};
-
-    // To notify the backend of new requests from the frontend.
-    std::mutex m_ftend_lck;
-    std::condition_variable m_ftend_evt;
+    std::atomic<bool> m_quit{false};
 
     // Sequence ID counter
     uint64_t m_seq_cnt = 0;

@@ -21,28 +21,11 @@
 #include <nacs-utils/fd_utils.h>
 #include <nacs-utils/timer.h>
 
-#include <chrono>
-
 namespace Molecube {
 
 CtrlIFace::CtrlIFace()
     : m_bkend_evt(openEvent(0, EFD_NONBLOCK | EFD_CLOEXEC))
 {
-}
-
-bool CtrlIFace::wait(int64_t maxt)
-{
-    std::unique_lock<std::mutex> lk(m_ftend_lck);
-    auto pred = [&] {
-        return m_quit || m_seq_queue.get_filter() || m_cmd_queue.get_filter();
-    };
-    if (maxt < 0) {
-        m_ftend_evt.wait(lk, pred);
-    }
-    else {
-        m_ftend_evt.wait_for(lk, std::chrono::nanoseconds(maxt), pred);
-    }
-    return !m_quit;
 }
 
 auto CtrlIFace::get_seq() -> ReqSeq*
@@ -77,11 +60,8 @@ NACS_EXPORT() uint64_t CtrlIFace::_run_code(SeqType type, uint32_t ver, uint64_t
     notify->set_id(id);
     auto seq = m_seq_alloc.alloc(id, seq_len_ns, code, ttl_mask, ver, type,
                                  std::move(notify), std::move(storage));
-    {
-        std::lock_guard<std::mutex> lk(m_ftend_lck);
-        m_seq_queue.push(seq);
-    }
-    m_ftend_evt.notify_all();
+    m_seq_queue.push(seq);
+    notify_backend(NotifySeq);
     return id;
 }
 
@@ -106,22 +86,14 @@ void CtrlIFace::send_cmd(ReqOP op, bool has_res, uint32_t operand, uint32_t val)
 {
     auto cmd = m_cmd_alloc.alloc(ReqCmd{uint8_t(op & 0xf), uint8_t(has_res),
                                         operand & ((1 << 26) - 1), val});
-    {
-        std::lock_guard<std::mutex> lk(m_ftend_lck);
-        m_cmd_queue.push(cmd);
-    }
-    m_ftend_evt.notify_all();
+    m_cmd_queue.push(cmd);
+    notify_backend(NotifyCmd);
 }
 
 NACS_EXPORT() void CtrlIFace::quit()
 {
-    {
-        // The lock here is overkill. However, the wait already needs a lock and we
-        // don't care about the performance here so just use the lock here...
-        std::lock_guard<std::mutex> lk(m_ftend_lck);
-        m_quit = true;
-    }
-    m_ftend_evt.notify_all();
+    m_quit.store(true, std::memory_order_relaxed);
+    notify_backend(NotifyCmd | NotifySeq);
 }
 
 void CtrlIFace::run_seq_frontend()

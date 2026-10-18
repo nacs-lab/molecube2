@@ -34,7 +34,9 @@
 #include <atomic>
 #include <bit>
 #include <chrono>
+#include <condition_variable>
 #include <iostream>
+#include <mutex>
 #include <span>
 #include <thread>
 #include <tuple>
@@ -106,6 +108,32 @@ static void set_pulser_dds_timing1(Pulser &p, int adsu, int wrlow, int adhd,
                       (uint32_t)timings[3], (uint32_t)timings[4]);
 }
 
+// Wait on `evt` until `pred()` is true, for at most `maxt` nanoseconds if `maxt >= 0`.
+template<typename Pred>
+static void wait_event(std::mutex &lock, std::condition_variable &evt, int64_t maxt,
+                       Pred &&pred)
+{
+    std::unique_lock<std::mutex> lk(lock);
+    if (maxt < 0) {
+        evt.wait(lk, pred);
+    }
+    else {
+        evt.wait_for(lk, std::chrono::nanoseconds(maxt), pred);
+    }
+}
+
+// Wake up the thread waiting on `evt` (with `wait_event`) after its condition changed.
+static void notify_event(std::mutex &lock, std::condition_variable &evt)
+{
+    // The condition is not changed under the lock. Take the lock so that
+    // the waiting thread either sees the change when checking the condition
+    // or is already waiting for the notification.
+    {
+        std::lock_guard<std::mutex> lk(lock);
+    }
+    evt.notify_all();
+}
+
 // Frontend cache and override state of a DDS parameter.
 // Only written by the frontend. Only `overridden` may be read by the worker threads.
 struct DDSParamCache {
@@ -137,6 +165,7 @@ private:
     class Runner;
 
     void run_frontend() override;
+    void notify_backend(unsigned flags) override;
     void set_ttl(int bank, uint32_t mask, bool val) override;
     void set_ttl_ovr(int bank, uint32_t mask, int val) override;
     uint32_t get_ttl(int bank) override;
@@ -198,6 +227,9 @@ private:
     std::pair<uint32_t,bool> process_reqcmd(Runner *runner=nullptr);
 
     void run_seq(ReqSeq *seq);
+    // Wait for a new request, for at most `maxt` nanoseconds if `maxt >= 0`.
+    // Return false if the backend should exit.
+    bool wait(int64_t maxt=-1);
     void worker();
 
     void sync_ttl()
@@ -227,6 +259,10 @@ private:
 
     DDSParamCache m_dds_cache[NDDS][3];
     std::vector<callback_t> m_dds_get_cbs[NDDS][3];
+
+    // To notify the worker of new requests from the frontend.
+    std::mutex m_ftend_lck;
+    std::condition_variable m_ftend_evt;
 
     // Must be after all the members used by the worker thread.
     std::thread m_worker;
@@ -595,6 +631,13 @@ void Controller<Pulser>::run_frontend()
 }
 
 template<typename Pulser>
+void Controller<Pulser>::notify_backend(unsigned flags)
+{
+    // The commands and the sequences are processed by the same worker.
+    notify_event(m_ftend_lck, m_ftend_evt);
+}
+
+template<typename Pulser>
 void Controller<Pulser>::set_dds_timing1(int adsu, int wrlow, int adhd,
                                          int fuddl, int fudhd)
 {
@@ -910,6 +953,15 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
 }
 
 template<typename Pulser>
+bool Controller<Pulser>::wait(int64_t maxt)
+{
+    wait_event(m_ftend_lck, m_ftend_evt, maxt, [&] {
+        return quitting() || get_seq() || get_cmd();
+    });
+    return !quitting();
+}
+
+template<typename Pulser>
 void Controller<Pulser>::worker()
 {
     while (wait(500000000)) { // Wake up every 500ms
@@ -987,6 +1039,7 @@ private:
     class Runner;
 
     void run_frontend() override;
+    void notify_backend(unsigned flags) override;
     void set_ttl(int bank, uint32_t mask, bool val) override;
     void set_ttl_ovr(int bank, uint32_t mask, int val) override;
     uint32_t get_ttl(int bank) override;
@@ -1047,6 +1100,12 @@ private:
         return (m_dma_started - status) & 0xff;
     }
 
+    // Wait for a new sequence or a new command respectively,
+    // for at most `maxt` nanoseconds if `maxt >= 0`.
+    // Return false if the backend should exit.
+    bool wait_seq(int64_t maxt=-1);
+    bool wait_cmd(int64_t maxt=-1);
+
     Pulser m_p;
     DDSParamCache m_dds_cache[NDDS][3];
     // Protecting the DDS register reads (`read_dds_param`), which take
@@ -1058,6 +1117,12 @@ private:
     uint32_t m_dma_started = 0;
     // Last value read from the DMA status register.
     uint32_t m_dma_status = 0;
+
+    // To notify the sequence and the command workers of new requests from the frontend.
+    std::mutex m_seq_lck;
+    std::condition_variable m_seq_evt;
+    std::mutex m_cmd_lck;
+    std::condition_variable m_cmd_evt;
 };
 
 // Write (version 0) DMA instructions directly into the DMA buffers.
@@ -1566,6 +1631,15 @@ void ControllerDMA<Pulser>::run_frontend()
 }
 
 template<typename Pulser>
+void ControllerDMA<Pulser>::notify_backend(unsigned flags)
+{
+    if (flags & NotifySeq)
+        notify_event(m_seq_lck, m_seq_evt);
+    if (flags & NotifyCmd)
+        notify_event(m_cmd_lck, m_cmd_evt);
+}
+
+template<typename Pulser>
 void ControllerDMA<Pulser>::set_dds_timing1(int adsu, int wrlow, int adhd,
                                             int fuddl, int fudhd)
 {
@@ -1703,6 +1777,24 @@ void ControllerDMA<Pulser>::run_dummy_dma_seq()
     writer.add_code(code);
     writer.finish();
     writer.wait_end();
+}
+
+template<typename Pulser>
+bool ControllerDMA<Pulser>::wait_seq(int64_t maxt)
+{
+    wait_event(m_seq_lck, m_seq_evt, maxt, [&] {
+        return quitting() || get_seq();
+    });
+    return !quitting();
+}
+
+template<typename Pulser>
+bool ControllerDMA<Pulser>::wait_cmd(int64_t maxt)
+{
+    wait_event(m_cmd_lck, m_cmd_evt, maxt, [&] {
+        return quitting() || get_cmd();
+    });
+    return !quitting();
 }
 
 // Create the DMA controller if the DMA mode is enabled and can be used,
