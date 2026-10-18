@@ -1450,6 +1450,14 @@ ControllerDMA<Pulser>::ControllerDMA(Pulser &&p, std::vector<DMABuff> &&dma_buff
       m_dma_buffs(std::move(dma_buffs))
 {
     assert(m_dma_buffs.size() >= dma_min_buffs);
+    m_p.clear_error();
+    // Clear all DDS overrides for the DMA to match our initial override state.
+    // The DMA DDS write disable bits are configured per pair of 16 bit registers.
+    for (int chn = 0; chn < NDDS; chn++) {
+        for (int addr = 0; addr < 0x80; addr += 4) {
+            m_p.set_dma_dds_mask(chn, uint8_t(addr), 0);
+        }
+    }
     // Sync our transfer count with the hardware.
     m_dma_status = m_p.dma_status();
     m_dma_started = m_dma_status & 0xff;
