@@ -18,11 +18,16 @@
 
 #include "dummy_pulser.h"
 
+#include <nacs-seq/zynq/dma.h>
 #include <nacs-seq/zynq/pulse_time.h>
+#include <nacs-utils/log.h>
+#include <nacs-utils/mem.h>
 #include <nacs-utils/number.h>
 
+#include <algorithm>
 #include <atomic>
 #include <bit>
+#include <cstring>
 #include <stdexcept>
 #include <thread>
 
@@ -95,7 +100,9 @@ NACS_EXPORT() void DummyPulser::dump_dds(std::ostream &stm, int chn)
 
 NACS_EXPORT() bool DummyPulser::try_get_result(uint32_t &res)
 {
-    forward_time();
+    // The results may be added by the DMA from other threads.
+    std::unique_lock<std::mutex> lock(m_cmds_lock);
+    forward_all(lock);
     if (m_results.empty())
         return false;
     res = m_results.front();
@@ -105,21 +112,32 @@ NACS_EXPORT() bool DummyPulser::try_get_result(uint32_t &res)
 
 NACS_EXPORT() uint32_t DummyPulser::get_result()
 {
-    uint32_t res;
-    while (!try_get_result(res)) {
-        if (m_cmds.empty())
-            throw std::underflow_error("No result queued.");
+    while (true) {
+        {
+            // The results and the commands must be checked together
+            // since the commands may be run by other threads in the DMA mode.
+            std::unique_lock<std::mutex> lock(m_cmds_lock);
+            forward_all(lock);
+            if (!m_results.empty()) {
+                auto res = m_results.front();
+                m_results.pop();
+                return res;
+            }
+            // In the DMA mode, this waits for the commands to be run by the DMA.
+            if (m_cmds.empty() && m_dma_cmds.empty()) {
+                throw std::underflow_error("No result queued.");
+            }
+        }
         std::this_thread::yield();
     }
-    return res;
 }
 
 NACS_EXPORT() uint16_t DummyPulser::read_dds(int chn, uint8_t addr)
 {
     assert(dds_exists_internal(chn));
-    // Protecting access to `m_dds`
+    // Protecting access to `m_dds_cache`
     std::unique_lock<std::mutex> lock(m_cmds_lock);
-    forward_time(false, lock);
+    forward_all(lock);
     return m_dds_cache[chn][(addr & 0x7f) >> 1];
 }
 
@@ -134,6 +152,34 @@ NACS_EXPORT() void DummyPulser::add_cmd(OP op, bool timing, uint32_t v1, uint32_
 {
     Cmd cmd{op, timing, std::chrono::steady_clock::now(), v1, v2};
     std::unique_lock<std::mutex> lock(m_cmds_lock);
+    if (m_dma_control.load(std::memory_order_relaxed) & 1) {
+        // In the DMA mode, only the DDS and DAC commands are dispatched
+        // (to be run in the long DMA waits).
+        switch (op) {
+        case OP::DAC:
+        case OP::DDSSet2:
+        case OP::DDSSet4:
+        case OP::DDSReset:
+        case OP::DDSGet2:
+        case OP::DDSGet4:
+            break;
+        default:
+            Log::warn("Dummy pulser: command %d ignored in the DMA mode.\n", int(op));
+            return;
+        }
+        // Process the DMA up to when the command is sent so that the command
+        // doesn't miss the long wait that it should run in.
+        forward_dma(cmd.t);
+        // The hardware stalls the bus until there's space in the queue.
+        while (m_dma_cmds.size() >= dma_cmd_queue_size) {
+            lock.unlock();
+            std::this_thread::yield();
+            lock.lock();
+            forward_all(lock);
+        }
+        m_dma_cmds.push(cmd);
+        return;
+    }
     while (m_cmds.size() >= 4096) {
         if (!m_force_release) {
             m_force_release = true;
@@ -194,6 +240,269 @@ NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::m
         if (run_past_cmds(cur_t))
             block = false;
     } while (block);
+}
+
+NACS_EXPORT() void DummyPulser::forward_all(std::unique_lock<std::mutex> &lock)
+{
+    forward_time(false, lock);
+    forward_dma(std::chrono::steady_clock::now());
+}
+
+NACS_EXPORT() uint32_t DummyPulser::dma_status() const
+{
+    auto self = const_cast<DummyPulser*>(this);
+    std::unique_lock<std::mutex> lock(m_cmds_lock);
+    self->forward_all(lock);
+    uint32_t status = m_dma_count.load(std::memory_order_relaxed) & 0xff;
+    if (m_dma_running)
+        status |= 0x100;
+    if (m_dma_underflow)
+        status |= 0x200;
+    if (m_dma_trig_timeout)
+        status |= 0x400;
+    if (m_dma_cmds.empty())
+        status |= 0x800; // cmd_empty
+    if (m_dma_cmds.size() >= dma_cmd_queue_size)
+        status |= 0x1000; // cmd_full
+    return status;
+}
+
+NACS_EXPORT() void DummyPulser::set_dma_control(uint32_t ctrl)
+{
+    std::unique_lock<std::mutex> lock(m_cmds_lock);
+    forward_all(lock);
+    m_dma_control.store(ctrl & 1, std::memory_order_release);
+}
+
+NACS_EXPORT() void DummyPulser::start_dma(uintptr_t addr, uint16_t blocks, bool first)
+{
+    auto t = std::chrono::steady_clock::now();
+    std::unique_lock<std::mutex> lock(m_cmds_lock);
+    // Process the DMA only up to when the transfer is started.
+    forward_time(false, lock);
+    forward_dma(t);
+    if (!(m_dma_control.load(std::memory_order_relaxed) & 1)) {
+        Log::warn("Dummy pulser: DMA transfer ignored without enabling the DMA mode.\n");
+        return;
+    }
+    // Each block is 16 x 64 bits
+    size_t sz = (size_t(blocks & 0x3ff) + 1) * 128;
+    std::vector<uint8_t> data(sz);
+    memcpy(data.data(), (const void*)addr, sz);
+    m_dma_transfers.push_back(DMATransfer{t, first, std::move(data)});
+    forward_dma(t);
+}
+
+NACS_INTERNAL void DummyPulser::read_dma_transfer()
+{
+    auto &transfer = m_dma_transfers.front();
+    if (transfer.first) {
+        // The status of the previous sequence is cleared by the first transfer.
+        m_dma_underflow_armed = false;
+        m_dma_underflow = false;
+        m_dma_trig_timeout = false;
+    }
+    // Drop the instructions that are already executed.
+    m_dma_insts.erase(m_dma_insts.begin(), m_dma_insts.begin() + m_dma_insts_pos);
+    m_dma_insts_pos = 0;
+    m_dma_insts.insert(m_dma_insts.end(), transfer.data.begin(), transfer.data.end());
+    m_dma_transfers.pop_front();
+    m_dma_count.fetch_add(1, std::memory_order_acq_rel);
+}
+
+NACS_INTERNAL bool DummyPulser::next_dma_group(time_point_t t, DMAGroup &group)
+{
+    using namespace Seq::Zynq::DMA;
+    group = DMAGroup{};
+    auto pos = m_dma_insts_pos;
+    // Set the TTL channels `[bit, bit + width)` to `val`.
+    auto set_ttl = [&] (unsigned bit, unsigned width, uint32_t val) {
+        auto bank = bit / 32;
+        if (bank >= NUM_TTL_BANKS)
+            return;
+        auto shift = bit % 32;
+        auto mask = uint32_t(((uint64_t(1) << width) - 1) << shift);
+        group.ttl_mask[bank] |= mask;
+        group.ttl_val[bank] |= (val << shift) & mask;
+    };
+    auto set_dds = [&] (unsigned bus_id, unsigned dds_id, unsigned idx, uint16_t val) {
+        auto chn = bus_id ? dds_id + 11 : dds_id;
+        if (dds_id >= 11) {
+            Log::warn("Dummy pulser: invalid DDS %d on bus %d in DMA.\n",
+                      int(dds_id), int(bus_id));
+            return;
+        }
+        group.dds.push_back({uint8_t(chn), uint8_t(idx & 0x3f), val});
+    };
+    while (true) {
+        auto avail = m_dma_insts.size() - pos;
+        size_t len = avail ? (size_t(m_dma_insts[pos] & 3) + 1) * 2 : 2;
+        if (avail < len) {
+            // Not enough instructions, read more if there's any.
+            if (m_dma_transfers.empty() || m_dma_transfers.front().t > t)
+                return false;
+            pos -= m_dma_insts_pos;
+            read_dma_transfer();
+            continue;
+        }
+        auto ptr = &m_dma_insts[pos];
+        pos += len;
+        auto op = (ptr[0] >> 2) & 3;
+        bool done = false;
+        auto invalid = [&] {
+            Log::warn("Dummy pulser: invalid DMA instruction (length %d, opcode %d).\n",
+                      int(len), op);
+        };
+        switch (len) {
+        case 2:
+            if (op == OpCode::WAIT1) {
+                group.cycle = Mem::load_unalign<Inst_v0::Wait1>(ptr).cycle;
+                done = true;
+            }
+            else if (op == OpCode::TTL_SET4) {
+                auto inst = Mem::load_unalign<Inst_v0::TTLSet4>(ptr);
+                set_ttl(inst.bank4_1 * 4, 4, inst.val1);
+            }
+            else if (op == OpCode::CLOCKOUT) {
+                group.clock_en = true;
+                group.clock_period = Mem::load_unalign<Inst_v0::ClockOut>(ptr).period;
+            }
+            else {
+                invalid();
+            }
+            break;
+        case 4:
+            if (op == OpCode::WAIT2) {
+                group.cycle = Mem::load_unalign<Inst_v0::Wait2>(ptr).cycle;
+                done = true;
+            }
+            else if (op == OpCode::TTL_SET16) {
+                auto inst = Mem::load_unalign<Inst_v0::TTLSet16>(ptr);
+                set_ttl(inst.bank8_1 * 8, 8, inst.val1);
+                set_ttl(inst.bank8_2 * 8, 8, inst.val2);
+            }
+            else if (op == OpCode::DDS_SET16) {
+                auto inst = Mem::load_unalign<Inst_v0::DDSSet16>(ptr);
+                set_dds(inst.bus_id, inst.dds_id, inst.addr, inst.data);
+            }
+            else {
+                invalid();
+            }
+            break;
+        case 6:
+            if (op == OpCode::WAIT_TRIG) {
+                group.is_trig = true;
+                group.cycle = Mem::load_unalign<Inst_v0::WaitTrig>(ptr).cycle;
+                done = true;
+            }
+            else if (op == OpCode::TTL_SET32) {
+                auto inst = Mem::load_unalign<Inst_v0::TTLSet32>(ptr);
+                set_ttl(inst.bank16_1 * 16, 16, inst.val1);
+                set_ttl(inst.bank16_2 * 16, 16, inst.val2);
+            }
+            else if (op == OpCode::DDS_SET32) {
+                auto inst = Mem::load_unalign<Inst_v0::DDSSet32>(ptr);
+                // The second register is always the odd one of the pair.
+                set_dds(inst.bus_id, inst.dds_id, inst.addr, uint16_t(inst.data));
+                set_dds(inst.bus_id, inst.dds_id, inst.addr | 1, uint16_t(inst.data >> 16));
+            }
+            // DAC has no effect.
+            break;
+        default:
+            invalid();
+        }
+        if (done) {
+            m_dma_insts_pos = pos;
+            return true;
+        }
+    }
+}
+
+NACS_INTERNAL void DummyPulser::run_dma_group(const DMAGroup &group, time_point_t t)
+{
+    for (int bank = 0; bank < NUM_TTL_BANKS; bank++) {
+        auto mask = group.ttl_mask[bank] & m_dma_ttl_mask[bank].load(std::memory_order_relaxed);
+        if (!mask)
+            continue;
+        // The value outside of the mask is ignored.
+        auto &ttl = m_ttl[bank];
+        auto cur = ttl.load(std::memory_order_relaxed);
+        while (!ttl.compare_exchange_weak(cur, (cur & ~mask) | (group.ttl_val[bank] & mask),
+                                          std::memory_order_acq_rel)) {
+        }
+    }
+    if (group.clock_en) {
+        // The period in DMA cycles is `(div << 1) | 1` and 0x1ff is off.
+        auto period = group.clock_period;
+        m_clock.store(period >= 0x1ff ? 255 : uint8_t(period >> 1),
+                      std::memory_order_release);
+    }
+    for (auto &dds: group.dds) {
+        // The writes to the disabled registers are dropped.
+        auto mask = m_dma_dds_mask[dds.chn * 32 + dds.idx / 2];
+        if ((mask >> (dds.idx & 1)) & 1)
+            continue;
+        write_dds_word(dds.chn, dds.idx, dds.val);
+    }
+    // A wait takes one more cycle than its length.
+    auto len = group.cycle + 1;
+    if (group.is_trig) {
+        // There's no trigger input.
+        m_dma_trig_timeout = true;
+        m_dma_cmd_end = m_dma_cmd_t;
+    }
+    else if (group.cycle > dma_long_wait) {
+        // The commands can run until there are `dma_long_wait` cycles left.
+        m_dma_cmd_t = std::max(m_dma_cmd_t, t + dma_cycle);
+        m_dma_cmd_end = t + dma_cycle * (len - dma_long_wait);
+    }
+    else {
+        m_dma_cmd_end = m_dma_cmd_t;
+    }
+    m_dma_fetch_t = t + dma_cycle * len;
+}
+
+NACS_INTERNAL void DummyPulser::forward_dma(time_point_t now)
+{
+    while (true) {
+        // Run the DMA mode commands in the current long wait.
+        while (!m_dma_cmds.empty()) {
+            auto &cmd = m_dma_cmds.front();
+            auto t = std::max(m_dma_cmd_t, cmd.t);
+            if (t >= m_dma_cmd_end || t > now)
+                break;
+            auto steps = run_cmd(cmd);
+            m_dma_cmd_t = t + std::chrono::nanoseconds(steps * 10);
+            m_dma_cmds.pop();
+        }
+        DMAGroup group;
+        if (m_dma_running) {
+            if (m_dma_fetch_t > now)
+                return;
+            if (!next_dma_group(m_dma_fetch_t, group)) {
+                // Ran out of instructions.
+                m_dma_running = false;
+                m_dma_underflow_armed = true;
+                m_dma_cmd_end = m_dma_cmd_t;
+                continue;
+            }
+        }
+        else {
+            // Start when there's a group of instructions to run.
+            if (m_dma_transfers.empty())
+                return;
+            auto t = m_dma_transfers.front().t;
+            if (t > now)
+                return;
+            if (!next_dma_group(t, group))
+                continue;
+            m_dma_running = true;
+            if (m_dma_underflow_armed)
+                m_dma_underflow = true;
+            m_dma_fetch_t = t;
+        }
+        run_dma_group(group, m_dma_fetch_t);
+    }
 }
 
 NACS_INTERNAL bool DummyPulser::run_past_cmds(time_point_t cur_t)
@@ -289,7 +598,18 @@ DummyPulser::DummyPulser(DummyPulser &&o)
       m_dds(o.m_dds),
       m_dds_cache(o.m_dds_cache),
       m_release_time(o.m_release_time),
-      m_dma_dds_mask(o.m_dma_dds_mask)
+      m_dma_dds_mask(o.m_dma_dds_mask),
+      m_dma_transfers(std::move(o.m_dma_transfers)),
+      m_dma_insts(std::move(o.m_dma_insts)),
+      m_dma_insts_pos(o.m_dma_insts_pos),
+      m_dma_running(o.m_dma_running),
+      m_dma_fetch_t(o.m_dma_fetch_t),
+      m_dma_underflow_armed(o.m_dma_underflow_armed),
+      m_dma_underflow(o.m_dma_underflow),
+      m_dma_trig_timeout(o.m_dma_trig_timeout),
+      m_dma_cmds(std::move(o.m_dma_cmds)),
+      m_dma_cmd_t(o.m_dma_cmd_t),
+      m_dma_cmd_end(o.m_dma_cmd_end)
 {
     for (int i = 0; i < NUM_TTL_BANKS; i++) {
         m_ttl_hi[i].store(o.m_ttl_hi[i].load(std::memory_order_relaxed),

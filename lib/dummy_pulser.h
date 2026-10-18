@@ -28,9 +28,11 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <mutex>
 #include <ostream>
 #include <queue>
+#include <vector>
 
 namespace Molecube {
 
@@ -43,7 +45,12 @@ using namespace NaCs;
  * To simplify the implementation, functions that require access to the command or result
  * fifo's (include all DDS functions) are assumed to be called only from a single thread.
  * Hold/release/init/timing functions should also only be called from this thread.
- * Other functions (current ttl, clock) can be called from any threads.
+ * Other functions (current ttl, clock, DMA) can be called from any threads.
+ *
+ * The DMA control bit selects the mode of the command queue.
+ * In the DMA mode, only the DDS and DAC commands are accepted (others are dropped)
+ * and they are only run during the long waits of the DMA sequences, as the hardware.
+ * The DMA sequences are executed (in real time) only in the DMA mode.
  */
 class DummyPulser {
     using time_point_t = decltype(std::chrono::steady_clock::now());
@@ -102,12 +109,12 @@ public:
     inline uint32_t cur_ttl(int bank) const
     {
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
-        const_cast<DummyPulser*>(this)->forward_time();
+        const_cast<DummyPulser*>(this)->forward_all();
         return m_ttl[bank].load(std::memory_order_acquire);
     }
     inline uint8_t cur_clock() const
     {
-        const_cast<DummyPulser*>(this)->forward_time();
+        const_cast<DummyPulser*>(this)->forward_all();
         return m_clock.load(std::memory_order_acquire);
     }
     inline uint32_t ttl_in(int bank) const
@@ -121,16 +128,8 @@ public:
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
         return m_dma_ttl_mask[bank].load(std::memory_order_acquire);
     }
-    inline uint32_t dma_status() const
-    {
-        // The DMA is never busy since the instructions aren't executed.
-        uint32_t status = m_dma_count.load(std::memory_order_acquire) & 0xff;
-        // The commands are run without the DMA so the command queue is empty
-        // (cmd_empty) once all the commands are finished.
-        if (is_finished())
-            status |= 0x800;
-        return status;
-    }
+    // Same bits as `DMAStatus` in the hardware.
+    uint32_t dma_status() const;
     inline uint32_t dma_control() const
     {
         return m_dma_control.load(std::memory_order_acquire);
@@ -169,18 +168,13 @@ public:
         assert(bank >= 0 && bank < NUM_TTL_BANKS);
         m_dma_ttl_mask[bank].store(mask, std::memory_order_release);
     }
-    // Only keeps track of the number of DMA requests.
-    // The instructions are not executed.
-    inline void start_dma(uintptr_t, uint16_t, bool)
-    {
-        m_dma_count.fetch_add(1, std::memory_order_acq_rel);
-    }
-    // Only stores the value. It has no effect otherwise.
-    // Only the lowest bit is used.
-    inline void set_dma_control(uint32_t ctrl)
-    {
-        m_dma_control.store(ctrl & 1, std::memory_order_release);
-    }
+    // Start a DMA transfer of `blocks + 1` blocks (128 bytes each)
+    // of instructions at `addr` (from `buffer_addr`).
+    // The instructions are copied when this is called.
+    // Ignored (with a warning) if the DMA mode is not enabled.
+    void start_dma(uintptr_t addr, uint16_t blocks, bool first);
+    // Only the lowest bit (DMA mode enable) is used.
+    void set_dma_control(uint32_t ctrl);
     // Read the cached value of the 16 bit DDS register at the byte address `dds_addr`
     // of DDS `dds_id` on bus 0/1.
     // The cache is updated with the register value on each DDS register read/write
@@ -193,15 +187,16 @@ public:
     {
         return read_dds(dds_id + 11, dds_addr);
     }
-    // Only stores the value since the DMA instructions are not executed.
     inline void set_dma_dds_mask(int chn, uint8_t addr, uint8_t mask)
     {
         assert(chn >= 0 && chn < NDDS && addr < 0x80);
+        std::lock_guard<std::mutex> lock(m_cmds_lock);
         m_dma_dds_mask[chn * 32 + addr / 4] = uint8_t(mask & 3);
     }
     inline uint8_t get_dma_dds_mask(int chn, uint8_t addr) const
     {
         assert(chn >= 0 && chn < NDDS && addr < 0x80);
+        std::lock_guard<std::mutex> lock(m_cmds_lock);
         return m_dma_dds_mask[chn * 32 + addr / 4];
     }
     void release_hold();
@@ -399,8 +394,10 @@ private:
     // and update the cache in the hardware.
     void write_dds_reg(uint32_t arg, uint16_t val)
     {
-        auto chn = arg & 0xff;
-        auto idx = ((arg >> 8) & 0x7f) >> 1;
+        write_dds_word(arg & 0xff, ((arg >> 8) & 0x7f) >> 1, val);
+    }
+    void write_dds_word(unsigned chn, unsigned idx, uint16_t val)
+    {
         m_dds[chn][idx] = val;
         m_dds_cache[chn][idx] = val;
     }
@@ -416,8 +413,59 @@ private:
     // Return if any command is run
     bool run_past_cmds(time_point_t t);
 
+    // Handle everything (the commands and the DMA sequence) that should have
+    // happened by now.
+    void forward_all()
+    {
+        std::unique_lock<std::mutex> lock(m_cmds_lock);
+        forward_all(lock);
+    }
+    void forward_all(std::unique_lock<std::mutex> &lock);
+
+    // DMA
+    // A DMA transfer that hasn't been read by the DMA yet.
+    struct DMATransfer {
+        // Time when the transfer is started.
+        time_point_t t;
+        bool first;
+        std::vector<uint8_t> data;
+    };
+    // The output actions of the DMA instructions before a wait and the wait.
+    struct DMAGroup {
+        // TTL values and the channels set.
+        std::array<uint32_t,NUM_TTL_BANKS> ttl_val{};
+        std::array<uint32_t,NUM_TTL_BANKS> ttl_mask{};
+        bool clock_en{false};
+        uint16_t clock_period{0};
+        // DDS channel, 16 bit register index and value
+        struct DDSWrite {
+            uint8_t chn;
+            uint8_t idx;
+            uint16_t val;
+        };
+        std::vector<DDSWrite> dds;
+        bool is_trig{false};
+        uint64_t cycle{0};
+    };
+    // Run the DMA sequence (and the commands in the DMA mode) until `t`.
+    void forward_dma(time_point_t t);
+    // Parse the next group of DMA instructions with the transfers started by `t`.
+    // Returns false if there are not enough instructions for a group.
+    bool next_dma_group(time_point_t t, DMAGroup &group);
+    // Read the next transfer into `m_dma_insts`.
+    void read_dma_transfer();
+    // Apply the output actions of `group` at `t` and start the wait.
+    void run_dma_group(const DMAGroup &group, time_point_t t);
+
     static constexpr int NDDS = 22;
     static constexpr uint32_t max_result_count = 4097;
+    // The DMA runs at 200MHz.
+    static constexpr std::chrono::nanoseconds dma_cycle{5};
+    // The commands only run in a DMA wait while there are more than this many cycles left.
+    static constexpr uint64_t dma_long_wait = 128;
+    // Number of commands in the DMA mode queue to report it as full.
+    // (The hardware has a 32 entry queue for each of the DDS buses and some buffer before it)
+    static constexpr size_t dma_cmd_queue_size = 32;
     // Same as `Pulser`.
     static constexpr uint32_t magic_bytes = 0xf00f0000;
 
@@ -435,7 +483,7 @@ private:
     // Debug registers
     std::atomic<uint32_t> m_loopback_reg{0};
 
-    std::mutex m_cmds_lock;
+    mutable std::mutex m_cmds_lock;
 
     // This isn't a very efficient implementation of fifo but we don't really care.
     // It has the same semantic as the hardware one and that's more important.
@@ -459,6 +507,25 @@ private:
 
     // DMA DDS write disable bits for each pair of 16 bit registers.
     std::array<uint8_t,NDDS * 32> m_dma_dds_mask{};
+
+    // The DMA state. All of these are protected by `m_cmds_lock`.
+    // The transfers started but not read yet.
+    std::deque<DMATransfer> m_dma_transfers;
+    // The instructions read but not executed yet (starting from `m_dma_insts_pos`).
+    std::vector<uint8_t> m_dma_insts;
+    size_t m_dma_insts_pos{0};
+    // Whether the DMA is running the instructions, and when the next group starts.
+    bool m_dma_running{false};
+    time_point_t m_dma_fetch_t{};
+    // The DMA status flags.
+    bool m_dma_underflow_armed{false};
+    bool m_dma_underflow{false};
+    bool m_dma_trig_timeout{false};
+    // The commands in the DMA mode, run in the long DMA waits.
+    std::queue<Cmd> m_dma_cmds;
+    // Time when the next DMA mode command may start and the end of the current long wait.
+    time_point_t m_dma_cmd_t{};
+    time_point_t m_dma_cmd_end{};
 };
 
 }
