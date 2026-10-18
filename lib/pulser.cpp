@@ -119,11 +119,10 @@ NACS_EXPORT() void Pulser::init_dds(int chn)
     // enable amplitude control (OSK)
     dds_set_2bytes<false>(chn, 0x0, 0x0308);
 
-    // zero-out all other memory
-    for (unsigned addr = 0x10;addr <= 0x6a;addr += 2)
-        dds_set_2bytes<false>(chn, addr, 0x0);
-
-    dds_set_4bytes<false>(chn, 0x64, magic_bytes);
+    // zero-out all other memory, except the magic bytes (profile 7, FTW)
+    // that marks the channel as initialized.
+    for (unsigned addr = 0x10;addr <= 0x68;addr += 4)
+        dds_set_4bytes<false>(chn, addr, addr == 0x64 ? magic_bytes : 0);
 }
 
 NACS_EXPORT() bool Pulser::dds_exists(int chn)
