@@ -1065,6 +1065,10 @@ private:
     {
         return dds_cache(op, chn).overridden.load(std::memory_order_relaxed);
     }
+    // Set the DMA DDS write disable bits of the DDS parameter `op` of channel `chn`
+    // for the override state `ovr` so that the overridden value is not changed by
+    // the DMA sequences.
+    void update_dma_dds_mask(ReqOP op, int chn, bool ovr);
     // Read the DDS parameter `op` of channel `chn` from the DDS register cache
     // in the hardware.
     uint32_t read_dds_param(ReqOP op, int chn);
@@ -1549,7 +1553,9 @@ void ControllerDMA<Pulser>::set_dds_ovr(ReqOP op, int chn, uint32_t val)
     assert(op == DDSFreq || op == DDSAmp || op == DDSPhase);
     set_dirty();
     auto &cache = dds_cache(op, chn);
-    if (val == uint32_t(-1)) {
+    auto ovr = val != uint32_t(-1);
+    update_dma_dds_mask(op, chn, ovr);
+    if (!ovr) {
         // Turning off the override doesn't change the value in the hardware.
         cache.overridden.store(false, std::memory_order_relaxed);
         return;
@@ -1558,6 +1564,21 @@ void ControllerDMA<Pulser>::set_dds_ovr(ReqOP op, int chn, uint32_t val)
     cache.overridden.store(true, std::memory_order_relaxed);
     cache.val = val;
     cache.t = getTime();
+}
+
+template<typename Pulser>
+void ControllerDMA<Pulser>::update_dma_dds_mask(ReqOP op, int chn, bool ovr)
+{
+    if (op == DDSFreq) {
+        // The frequency uses both registers at 0x2c and 0x2e.
+        m_p.set_dma_dds_mask(chn, 0x2c, ovr ? 3 : 0);
+        return;
+    }
+    // The phase (0x30) and the amplitude (0x32) share the same pair of registers
+    // so the other one needs to keep its current override state.
+    bool phase_ovr = op == DDSPhase ? ovr : dds_overridden(DDSPhase, chn);
+    bool amp_ovr = op == DDSAmp ? ovr : dds_overridden(DDSAmp, chn);
+    m_p.set_dma_dds_mask(chn, 0x30, uint8_t((phase_ovr ? 1 : 0) | (amp_ovr ? 2 : 0)));
 }
 
 template<typename Pulser>
@@ -1619,6 +1640,8 @@ void ControllerDMA<Pulser>::reset_dds(int chn)
     // Clear override and the values that are reset.
     for (auto &param: m_dds_cache[chn])
         param.reset();
+    m_p.set_dma_dds_mask(chn, 0x2c, 0);
+    m_p.set_dma_dds_mask(chn, 0x30, 0);
 }
 
 template<typename Pulser>
