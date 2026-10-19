@@ -75,6 +75,18 @@ inline void Server::send_reply(std::vector<zmq::message_t> &addr, zmq::message_t
     ZMQ::send(m_zmqsock, msg);
 }
 
+void Server::send_wait_reply(std::vector<zmq::message_t> &addr, uint8_t what,
+                             bool cancelled, uint32_t flags)
+{
+    if (what == 0) {
+        send_reply(addr, ZMQ::bits_msg<uint8_t>(cancelled));
+        return;
+    }
+    ZMQ::send_addr(m_zmqsock, addr, m_empty);
+    ZMQ::send_more(m_zmqsock, ZMQ::bits_msg<uint8_t>(cancelled));
+    ZMQ::send(m_zmqsock, ZMQ::bits_msg<uint32_t>(flags));
+}
+
 inline bool Server::recv_more(zmq::message_t &msg)
 {
     return ZMQ::recv_more(m_zmqsock, msg);
@@ -375,7 +387,7 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
             for (auto &wait: status->wait) {
                 if (wait.what == 0 && status->flushed)
                     continue;
-                server.send_reply(wait.addr, ZMQ::bits_msg<uint8_t>(cancel));
+                server.send_wait_reply(wait.addr, wait.what, cancel, flags);
             }
             auto idx = status - &server.m_seq_status[0];
             server.m_seq_status.erase(server.m_seq_status.begin() + idx);
@@ -639,12 +651,12 @@ void Server::process_zmq()
         if (auto finished = find_finished_seq(id)) {
             // A cancelled sequence is never flushed
             // so the result is the same for both waits.
-            send_reply(addr, ZMQ::bits_msg<uint8_t>(finished->cancelled));
+            send_wait_reply(addr, what, finished->cancelled, finished->flags);
             goto out;
         }
         // Treat all other sequences that are not running as finished.
         if (m_seq_status.empty() || m_seq_status[0].id > id) {
-            send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
+            send_wait_reply(addr, what, false, CtrlIFace::SeqRunSuccess);
             goto out;
         }
         for (auto &status: m_seq_status) {

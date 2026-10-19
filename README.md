@@ -53,7 +53,13 @@ zmq protocol.
 
         i.e. all commands has finished execution.
 
-    Return 1 byte. `0` for success, `1` for cancellation.
+    Return 1 byte (`0` for success, `1` for cancellation) in the first message.
+    
+    If the wait is for the sequence finish, a second 4 bytes message is returned for the finish status flags. The flag can be `0` signalling success or can be a or of one ore more of the following values.
+
+    * `1`: Underflow
+    * `2`: Trigger timedout
+
     If a sequence is already cancelled before the request is recieved, `0` could be returned.
 
 * `cancel_seq`

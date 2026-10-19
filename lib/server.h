@@ -67,6 +67,10 @@ private:
     {
         send_reply(addr, msg);
     }
+    // Reply to a `wait_seq` request for `what` (0 for flushed and 1 for finished).
+    // The reply for finished also includes the `SeqRunFlags` in a 4 bytes message.
+    void send_wait_reply(std::vector<zmq::message_t> &addr, uint8_t what,
+                         bool cancelled, uint32_t flags);
     bool recv_more(zmq::message_t &msg);
     void process_zmq();
     // Read the sequence id from the message.
