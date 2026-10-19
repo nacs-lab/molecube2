@@ -220,6 +220,7 @@ NACS_EXPORT() void DummyPulser::toggle_init()
     m_force_release = false;
     m_timing_ok.store(true, std::memory_order_release);
     m_timing_check.store(false, std::memory_order_release);
+    m_trig_timeout.store(false, std::memory_order_release);
 }
 
 NACS_EXPORT() void DummyPulser::forward_time(bool block, std::unique_lock<std::mutex> &locker)
@@ -550,8 +551,12 @@ NACS_INTERNAL uint32_t DummyPulser::run_cmd(const Cmd &cmd)
         return Seq::Zynq::PulseTime::DAC;
     case OP::Wait:
         return cmd.v1;
+    case OP::WaitTrig:
+        m_trig_timeout.store(true, std::memory_order_release);
+        return cmd.v1;
     case OP::ClearErr:
         m_timing_ok.store(true, std::memory_order_release);
+        m_trig_timeout.store(false, std::memory_order_release);
         return Seq::Zynq::PulseTime::Clear;
     case OP::DDSSet2:
         write_dds_reg(cmd.v1, uint16_t(cmd.v2));
@@ -591,6 +596,7 @@ DummyPulser::DummyPulser(DummyPulser &&o)
       m_cmds_empty(o.m_cmds_empty.load(std::memory_order_relaxed)),
       m_timing_ok(o.m_timing_ok.load(std::memory_order_relaxed)),
       m_timing_check(o.m_timing_check.load(std::memory_order_relaxed)),
+      m_trig_timeout(o.m_trig_timeout.load(std::memory_order_relaxed)),
       m_results(std::move(o.m_results)),
       m_cmds(std::move(o.m_cmds)),
       m_hold(o.m_hold),

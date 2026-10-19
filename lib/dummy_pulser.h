@@ -64,6 +64,8 @@ class DummyPulser {
         Clock,
         DAC,
         Wait,
+        // Always times out since there's no trigger input.
+        WaitTrig,
         ClearErr,
         // For all the DDS register read/write commands,
         // `v1` is the DDS channel number with the byte address in bits 8 and up.
@@ -105,6 +107,12 @@ public:
     {
         const_cast<DummyPulser*>(this)->forward_time();
         return m_cmds_empty.load(std::memory_order_acquire);
+    }
+    // Whether a trigger wait timed out since the last `clear_error` or `toggle_init`.
+    inline bool trigger_timeout() const
+    {
+        const_cast<DummyPulser*>(this)->forward_time();
+        return m_trig_timeout.load(std::memory_order_acquire);
     }
     inline uint32_t cur_ttl(int bank) const
     {
@@ -301,7 +309,8 @@ public:
     template<bool checked>
     inline void wait_trigger(uint8_t, bool, uint32_t timeout)
     {
-        wait<checked>(timeout);
+        assert(timeout <= max_wait_t);
+        add_cmd(OP::WaitTrig, checked, timeout);
     }
 
     // Debug registers
@@ -479,6 +488,7 @@ private:
     std::atomic<bool> m_cmds_empty{true};
     std::atomic<bool> m_timing_ok{true};
     std::atomic<bool> m_timing_check{false};
+    std::atomic<bool> m_trig_timeout{false};
 
     // Debug registers
     std::atomic<uint32_t> m_loopback_reg{0};

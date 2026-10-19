@@ -42,6 +42,7 @@ class Pulser {
         enum {
             // Register 2
             TimeOK = 0x1,
+            TrigTimeout = 0x2,
             Finished = 0x4,
             NumRes = 0x1f0,
             // Register 3
@@ -162,6 +163,11 @@ public:
     inline bool is_finished() const
     {
         return read(2) & Bits::Finished;
+    }
+    // Whether a trigger wait timed out since the last `clear_error` or `toggle_init`.
+    inline bool trigger_timeout() const
+    {
+        return read(2) & Bits::TrigTimeout;
     }
     inline uint32_t cur_ttl(int bank) const
     {
