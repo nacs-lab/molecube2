@@ -344,7 +344,7 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
                 }
             }
         }
-        void end(uint64_t _id) override
+        void end(uint64_t _id, CtrlIFace::SeqRunFlags) override
         {
             (void)_id;
             assert(id == _id);

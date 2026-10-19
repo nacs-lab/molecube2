@@ -100,14 +100,15 @@ void CtrlIFace::run_seq_frontend()
 {
     readEvent(m_bkend_evt);
     auto run_callbacks = [&] (auto seq) {
-        auto state = seq->state.load(std::memory_order_relaxed);
+        // Acquire to see the result (`flags`) of the sequence.
+        auto state = seq->state.load(std::memory_order_acquire);
         auto pstate = seq->processed_state;
         if (state >= SeqStart && pstate < SeqStart)
             seq->notify->start(seq->id);
         if (state >= SeqFlushed && pstate < SeqFlushed)
             seq->notify->flushed(seq->id);
         if (state >= SeqEnd && pstate < SeqEnd)
-            seq->notify->end(seq->id);
+            seq->notify->end(seq->id, seq->flags);
         if (state == SeqCancel && pstate != SeqCancel)
             seq->notify->cancel(seq->id);
         if (pstate != state) {

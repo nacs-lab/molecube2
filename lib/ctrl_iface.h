@@ -54,6 +54,12 @@ using namespace NaCs;
  */
 class CtrlIFace {
 public:
+    // Error flags from running a sequence.
+    enum SeqRunFlags : uint8_t {
+        SeqRunSuccess = 0,
+        SeqRunUnderflow = 1 << 0,
+        SeqRunTrigTimeout = 1 << 1,
+    };
     class ReqSeqNotify {
         // All the virtual functions are called with the request id.
     public:
@@ -65,8 +71,8 @@ public:
         // After all the commands are sent
         virtual void flushed(uint64_t)
         {}
-        // After the sequence finished
-        virtual void end(uint64_t)
+        // After the sequence finished, with the error flags (`SeqRunFlags`)
+        virtual void end(uint64_t, SeqRunFlags)
         {}
         // After the sequence is cancelled
         virtual void cancel(uint64_t)
@@ -170,6 +176,9 @@ protected:
         // This is set by the backend to signal change of state.
         // Only `SeqEnd` event is guaranteed to have a accompanied event fd notification.
         std::atomic<ReqSeqState> state{SeqInit};
+        // The error flags from running the sequence.
+        // Set by the backend before setting the state to `SeqEnd` (with release order).
+        SeqRunFlags flags{SeqRunSuccess};
         ReqSeq(uint64_t id, uint64_t seq_len_ns, std::span<const uint8_t> code,
                const std::array<uint32_t,NUM_TTL_BANKS> &ttl_mask, uint32_t ver, SeqType type,
                std::unique_ptr<ReqSeqNotify> _notify, AnyPtr storage)

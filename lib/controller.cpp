@@ -68,12 +68,6 @@ static constexpr size_t dma_min_buffs = 3;
 // This is `CLOCK_SHIFT` in the FPGA config and cannot be read from the hardware.
 static constexpr unsigned dma_cycle_shift = 1;
 
-// Error flags from running a DMA sequence.
-enum DMAFlags : uint8_t {
-    DMAUnderflow = 1 << 0,
-    DMATrigTimeout = 1 << 1,
-};
-
 // Set the DDS write timing on the pulser.
 // A negative value keeps the current value of that timing parameter.
 template<typename Pulser>
@@ -926,7 +920,13 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
             std::this_thread::yield();
         }
     }
-    seq->state.store(SeqEnd, std::memory_order_relaxed);
+    uint8_t flags = SeqRunSuccess;
+    if (!m_p.timing_ok())
+        flags |= SeqRunUnderflow;
+    if (m_p.trigger_timeout())
+        flags |= SeqRunTrigTimeout;
+    seq->flags = SeqRunFlags(flags);
+    seq->state.store(SeqEnd, std::memory_order_release);
     backend_event();
     runner.enable_process_cmd();
     if (seq->type == SeqType::Bytecode) {
@@ -934,9 +934,9 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
         runner.template wait<false>(1000000);
         runner.template clock<false>(255);
     }
-    if (!m_p.timing_ok())
+    if (flags & SeqRunUnderflow)
         Log::warn("Timing failures.\n");
-    if (m_p.trigger_timeout())
+    if (flags & SeqRunTrigTimeout)
         Log::warn("Trigger timeout.\n");
     m_p.clear_error();
 
@@ -1262,8 +1262,8 @@ public:
         }
     }
     // Wait for the sequence to finish after `finish()`.
-    // Returns the error flags (`DMAFlags`) from the sequence.
-    uint8_t wait_end()
+    // Returns the error flags from the sequence.
+    SeqRunFlags wait_end()
     {
         // Wait for all the transfers to finish and for the instructions to finish.
         auto status = m_ctrl.wait_dma([&] (uint32_t status) {
@@ -1271,12 +1271,12 @@ public:
         });
         for (int bank = 0; bank < int(m_nmasks); bank++)
             m_ctrl.m_p.set_dma_ttl_mask(bank, 0);
-        uint8_t flags = 0;
+        uint8_t flags = SeqRunSuccess;
         if (status & 0x200)
-            flags |= DMAUnderflow;
+            flags |= SeqRunUnderflow;
         if (status & 0x400)
-            flags |= DMATrigTimeout;
-        return flags;
+            flags |= SeqRunTrigTimeout;
+        return SeqRunFlags(flags);
     }
 
 private:
@@ -1948,11 +1948,12 @@ void ControllerDMA<Pulser>::run_seq(ReqSeq *seq)
     backend_event();
     // Wait for the sequence to finish.
     auto flags = writer.wait_end();
-    seq->state.store(SeqEnd, std::memory_order_relaxed);
+    seq->flags = flags;
+    seq->state.store(SeqEnd, std::memory_order_release);
     backend_event();
-    if (flags & DMAUnderflow)
+    if (flags & SeqRunUnderflow)
         Log::warn("DMA underflow.\n");
-    if (flags & DMATrigTimeout)
+    if (flags & SeqRunTrigTimeout)
         Log::warn("DMA trigger timeout.\n");
 }
 
