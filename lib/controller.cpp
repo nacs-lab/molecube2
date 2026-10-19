@@ -936,6 +936,8 @@ void Controller<Pulser>::run_seq(ReqSeq *seq)
     }
     if (!m_p.timing_ok())
         Log::warn("Timing failures.\n");
+    if (m_p.trigger_timeout())
+        Log::warn("Trigger timeout.\n");
     m_p.clear_error();
 
     if (!m_cmd_waiting) {
