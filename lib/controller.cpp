@@ -826,7 +826,7 @@ std::pair<bool,bool> Controller<Pulser>::try_get_result()
         m_cmd_waiting = nullptr;
         finish_cmd();
         if (!checked) {
-            // The time is not very important, notify the frontend.
+            // the performance is not very important, notify the frontend.
             backend_event();
         }
         return {true, true};
@@ -855,7 +855,7 @@ std::pair<uint32_t,bool> Controller<Pulser>::process_reqcmd(Runner *runner)
         else {
             finish_cmd();
             if (!checked) {
-                // The time is not very important, notify the frontend.
+                // the performance is not very important, notify the frontend.
                 backend_event();
             }
         }
@@ -1889,7 +1889,7 @@ void ControllerDMA<Pulser>::process_reqcmds()
         }
         run_cmd(cmd);
         finish_cmd();
-        // The time is not very important, notify the frontend.
+        // the performance is not very important, notify the frontend.
         backend_event();
         processed = true;
     }
