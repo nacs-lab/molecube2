@@ -344,12 +344,12 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
                 }
             }
         }
-        void end(uint64_t _id, CtrlIFace::SeqRunFlags) override
+        void end(uint64_t _id, CtrlIFace::SeqRunFlags flags) override
         {
             (void)_id;
             assert(id == _id);
             Log::info("Finish time: %.1f ms\n", (double)timer.elapsed() / 1000000.0);
-            finalize(false);
+            finalize(false, flags);
         }
         void cancel(uint64_t _id) override
         {
@@ -366,11 +366,12 @@ bool Server::process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd)
         {
             finalize(true);
         }
-        void finalize(bool cancel)
+        void finalize(bool cancel, CtrlIFace::SeqRunFlags flags=CtrlIFace::SeqRunSuccess)
         {
             auto status = server.find_seqstatus(id);
             if (!status)
                 return;
+            server.record_finished_seq(id, cancel, flags);
             for (auto &wait: status->wait) {
                 if (wait.what == 0 && status->flushed)
                     continue;
@@ -440,6 +441,26 @@ auto Server::find_seqstatus(uint64_t id) -> SeqStatus*
         }
     }
     return nullptr;
+}
+
+void Server::record_finished_seq(uint64_t id, bool cancelled, CtrlIFace::SeqRunFlags flags)
+{
+    assert(id > m_last_finished_seq);
+    // Clear the entries for the sequences that are not recorded (e.g. the startup sequence)
+    // so that they are reported as finished normally.
+    auto first = std::max(m_last_finished_seq + 1,
+                          id > finished_seq_count ? id - finished_seq_count + 1 : 1);
+    for (auto i = first; i < id; i++)
+        m_finished_seqs[i % finished_seq_count] = FinishedSeq{};
+    m_finished_seqs[id % finished_seq_count] = FinishedSeq{cancelled, uint8_t(flags & 0x7f)};
+    m_last_finished_seq = id;
+}
+
+auto Server::find_finished_seq(uint64_t id) const -> const FinishedSeq*
+{
+    if (id > m_last_finished_seq || m_last_finished_seq - id >= finished_seq_count)
+        return nullptr;
+    return &m_finished_seqs[id % finished_seq_count];
 }
 
 bool Server::process_set_names(zmq::message_t &msg, NamesConfig &names)
@@ -615,6 +636,13 @@ void Server::process_zmq()
         if (what != 0 && what != 1)
             goto err;
         Log::info("Waiting for sequence %llu\n", (unsigned long long)id);
+        if (auto finished = find_finished_seq(id)) {
+            // A cancelled sequence is never flushed
+            // so the result is the same for both waits.
+            send_reply(addr, ZMQ::bits_msg<uint8_t>(finished->cancelled));
+            goto out;
+        }
+        // Treat all other sequences that are not running as finished.
         if (m_seq_status.empty() || m_seq_status[0].id > id) {
             send_reply(addr, ZMQ::bits_msg<uint8_t>(0));
             goto out;

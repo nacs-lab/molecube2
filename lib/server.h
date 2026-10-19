@@ -24,6 +24,7 @@
 
 #include <nacs-utils/zmq_utils.h>
 
+#include <array>
 #include <atomic>
 
 namespace Molecube {
@@ -51,6 +52,15 @@ private:
         std::vector<Wait> wait{};
         bool flushed{false};
     };
+    // Status of a finished sequence.
+    struct FinishedSeq {
+        uint8_t cancelled: 1;
+        // `CtrlIFace::SeqRunFlags`
+        uint8_t flags: 7;
+    };
+    static_assert(sizeof(FinishedSeq) == 1);
+    // Number of the last finished sequences to keep the status for.
+    static constexpr size_t finished_seq_count = 1024;
 
     void send_reply(std::vector<zmq::message_t> &addr, zmq::message_t &msg);
     void send_reply(std::vector<zmq::message_t> &addr, zmq::message_t &&msg)
@@ -66,6 +76,12 @@ private:
     bool process_set_dds(zmq::message_t &msg, bool is_ovr);
     bool process_run_seq(std::vector<zmq::message_t> &addr, bool is_cmd);
     SeqStatus *find_seqstatus(uint64_t id);
+    // Record the status of a finished (or cancelled) sequence.
+    // The sequences must be finished in the order of their ids.
+    void record_finished_seq(uint64_t id, bool cancelled, CtrlIFace::SeqRunFlags flags);
+    // The status of the finished sequence `id`,
+    // `nullptr` if the sequence is not finished or the status is no longer available.
+    const FinishedSeq *find_finished_seq(uint64_t id) const;
     bool process_set_names(zmq::message_t &msg, NamesConfig &names);
     void process_get_names(std::vector<zmq::message_t> &addr, NamesConfig &names);
     void ensure_runtime_dir();
@@ -84,6 +100,11 @@ private:
     zmq::message_t m_empty{0};
     volatile std::atomic_bool m_running{false};
     std::vector<SeqStatus> m_seq_status{};
+    // Ring buffer of the status of the last `finished_seq_count` finished sequences,
+    // indexed by the sequence id.
+    std::array<FinishedSeq,finished_seq_count> m_finished_seqs{};
+    // Id of the last finished sequence recorded in `m_finished_seqs` (0 for none).
+    uint64_t m_last_finished_seq = 0;
     uint64_t m_name_id = 0;
     NamesConfig m_ttl_names;
     NamesConfig m_dds_names;
