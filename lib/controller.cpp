@@ -1987,10 +1987,10 @@ void ControllerDMA<Pulser>::run_dummy_dma_seq()
     static constexpr auto code = [] {
         std::array<Wait2,2 * dma_block_sz / sizeof(Wait2)> code{};
         code.fill(Wait2(4999));
-        return std::bit_cast<std::array<uint8_t,2 * dma_block_sz>>(code);
+        return code;
     }();
     DMAWriter writer(*this, {});
-    writer.add_code(code);
+    writer.add_code(std::span((uint8_t*)code.data(), sizeof(code)));
     writer.finish();
     writer.wait_end();
 }
