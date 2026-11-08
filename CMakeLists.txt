@@ -9,6 +9,8 @@ set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}"
 include(CMakeCMacros)
 include(GNUInstallDirs)
 
+option(ENABLE_TESTING "Enable building and running testing" On)
+
 set(SYSTEMD_SERVICE_DIR "${CMAKE_INSTALL_LIBDIR}/systemd/system"
   CACHE PATH "Systemd service file install dir")
 set(SYSTEMD_SYSUSERS_DIR "${CMAKE_INSTALL_LIBDIR}/sysusers.d"
@@ -49,4 +51,7 @@ cmake_c_add_flags(CMAKE_MODULE_LINKER_FLAGS ${LINKER_FLAGS})
 add_subdirectory(lib)
 add_subdirectory(server)
 add_subdirectory(data)
-add_subdirectory(test)
+if(ENABLE_TESTING)
+  enable_testing()
+  add_subdirectory(test)
+endif()
